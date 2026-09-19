@@ -1,0 +1,225 @@
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, describe, expect, it } from 'vitest'
+import {
+  acknowledgeConnectorTrust,
+  connectorSetupState,
+  detectWorkBuddyInstalled,
+  inspectWorkBuddyConnection,
+  isWorkBuddyConnectorRegistered,
+  prepareWorkBuddyConnector,
+  runtimeDataDirectory,
+  validateConnectorInstallation,
+  writeOperationalLog
+} from '../src/main/deployment'
+
+const directories: string[] = []
+
+afterEach(() => {
+  while (directories.length > 0) rmSync(directories.pop()!, { recursive: true, force: true })
+})
+
+function fixture(): { root: string; payload: string; data: string } {
+  const root = mkdtempSync(join(tmpdir(), 'privateradar-deployment-'))
+  directories.push(root)
+  const payload = join(root, 'payload')
+  const data = join(root, 'AppData', 'PrivateRadar')
+  mkdirSync(join(payload, 'dist'), { recursive: true })
+  mkdirSync(join(payload, 'skills', 'ingest-chat'), { recursive: true })
+  writeFileSync(join(payload, 'connector-meta.json'), '{"source":"privateradar-workbuddy"}\n')
+  writeFileSync(join(payload, 'icon.svg'), '<svg/>\n')
+  writeFileSync(join(payload, 'dist', 'server.mjs'), 'export {}\n')
+  writeFileSync(join(payload, 'skills', 'ingest-chat', 'SKILL.md'), '# PrivateRadar\n')
+  return { root, payload, data }
+}
+
+describe('Windows 安装与 WorkBuddy 连接组件', () => {
+  it('正式运行使用 Electron userData，只有测试显式传入时才隔离', () => {
+    const electronUserData = 'C:\\Users\\tester\\AppData\\Roaming\\PrivateRadar'
+    const isolated = 'C:\\qa\\private-radar'
+    expect(runtimeDataDirectory(electronUserData, '')).toBe(electronUserData)
+    expect(runtimeDataDirectory(electronUserData, isolated)).toBe(isolated)
+  })
+
+  it('在固定用户数据目录生成自包含连接组件', () => {
+    const { root, payload, data } = fixture()
+    const userHome = join(root, 'user')
+    const result = prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.1', new Date(), userHome)
+    const config = JSON.parse(readFileSync(join(result.connectorPath, 'mcp.json'), 'utf8'))
+    const server = config.mcpServers['privateradar-workbuddy']
+    expect(result).toMatchObject({ prepared: true, requiresTrust: true, trustReason: 'first_install' })
+    expect(result).toMatchObject({ registered: true, registrationChanged: true })
+    expect(result.registrationPath).toBe(join(userHome, '.workbuddy', 'mcp.json'))
+    expect(server.command).toBe('node')
+    expect(server.runtime).toEqual({ type: 'node', version: '24' })
+    expect(server.cwd).toBe(result.connectorPath)
+    expect(server.args[0]).toBe(join(result.connectorPath, 'dist', 'server.mjs'))
+    expect(server.args).toContain(join(data, 'private-radar.db'))
+    expect(JSON.stringify(config)).not.toContain('Documents\\Codex')
+  })
+
+  it('会话投影移除 cwd 后仍使用绝对 MCP 服务入口', () => {
+    const { root, payload, data } = fixture()
+    const result = prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.3', new Date(), join(root, 'user'))
+    const config = JSON.parse(readFileSync(result.registrationPath, 'utf8'))
+    const projected = { ...config.mcpServers['privateradar-workbuddy'] }
+    delete projected.cwd
+    delete projected.runtime
+
+    expect(projected.command).toBe('node')
+    expect(projected.args[0]).toBe(join(result.connectorPath, 'dist', 'server.mjs'))
+    expect(projected.args[0]).not.toBe('dist/server.mjs')
+  })
+
+  it('普通应用升级不改变连接配置也不重新要求信任', () => {
+    const { root, payload, data } = fixture()
+    const userHome = join(root, 'user')
+    const first = prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.1', new Date(), userHome)
+    const firstConfig = readFileSync(join(first.connectorPath, 'mcp.json'), 'utf8')
+    acknowledgeConnectorTrust(data)
+    const upgraded = prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.2', new Date(), userHome)
+    expect(readFileSync(join(upgraded.connectorPath, 'mcp.json'), 'utf8')).toBe(firstConfig)
+    expect(upgraded).toMatchObject({ requiresTrust: false, trustReason: 'none' })
+    expect(upgraded.registrationChanged).toBe(false)
+  })
+
+  it('连接配置哈希真正变化时要求重新信任', () => {
+    const { root, payload, data } = fixture()
+    const userHome = join(root, 'user')
+    prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.1', new Date(), userHome)
+    acknowledgeConnectorTrust(data)
+    const statePath = join(data, 'workbuddy', 'privateradar-workbuddy', 'install-state.json')
+    const state = JSON.parse(readFileSync(statePath, 'utf8'))
+    writeFileSync(statePath, `${JSON.stringify({ ...state, configHash: 'old-configuration' })}\n`)
+    const changed = prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.2', new Date(), userHome)
+    expect(changed).toMatchObject({ requiresTrust: true, trustReason: 'configuration_changed' })
+  })
+
+  it('通过 WorkBuddy 用户目录检测已安装状态', () => {
+    const { root } = fixture()
+    const home = join(root, 'user')
+    mkdirSync(join(home, '.workbuddy'), { recursive: true })
+    expect(detectWorkBuddyInstalled(home, join(root, 'local'), join(root, 'programs'))).toBe(true)
+    expect(detectWorkBuddyInstalled(join(root, 'empty'), join(root, 'local'), join(root, 'programs'))).toBe(false)
+  })
+
+  it('正式日志不保留密钥或令牌', () => {
+    const { root } = fixture()
+    const logs = join(root, 'logs')
+    writeOperationalLog(logs, 'START_sk-secret-value', 'token=private-value')
+    const content = readFileSync(join(logs, 'privateradar.log'), 'utf8')
+    expect(content).not.toContain('sk-secret-value')
+    expect(content).not.toContain('private-value')
+    expect(content).toContain('REDACTED')
+  })
+
+  it('安装状态不会记录聊天正文', () => {
+    const { root, payload, data } = fixture()
+    prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.1', new Date(), join(root, 'user'))
+    const state = connectorSetupState(data)
+    expect(Object.keys(state ?? {}).sort()).toEqual(['appVersion', 'configHash', 'connectorId', 'preparedAt', 'trustReason'].sort())
+  })
+
+  it('源文件缺失时不会误报准备成功', () => {
+    const { root, payload, data } = fixture()
+    rmSync(join(payload, 'dist', 'server.mjs'))
+    expect(() => prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.1', new Date(), join(root, 'user'))).toThrow('连接组件文件不完整')
+  })
+
+  it('目标文件损坏时最终完整性校验失败', () => {
+    const { root, payload, data } = fixture()
+    const result = prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.1', new Date(), join(root, 'user'))
+    writeFileSync(join(result.connectorPath, 'mcp.json'), '')
+    expect(() => validateConnectorInstallation(result.connectorPath)).toThrow('连接组件文件不完整：mcp.json')
+  })
+
+  it('按官方用户级配置注册正式服务且保留其他服务', () => {
+    const { root, payload, data } = fixture()
+    const userHome = join(root, 'user')
+    const configPath = join(userHome, '.workbuddy', 'mcp.json')
+    mkdirSync(join(userHome, '.workbuddy'), { recursive: true })
+    const legacy = { type: 'stdio', command: 'legacy', disabled: true }
+    writeFileSync(configPath, `${JSON.stringify({ mcpServers: { 'privateradar-local-spike': legacy } }, null, 2)}\n`)
+
+    const result = prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.1', new Date(), userHome)
+    const config = JSON.parse(readFileSync(configPath, 'utf8'))
+    expect(config.mcpServers['privateradar-local-spike']).toEqual(legacy)
+    expect(config.mcpServers['privateradar-workbuddy'].cwd).toBe(result.connectorPath)
+    expect(config.mcpServers['privateradar-workbuddy'].args).toContain(join(data, 'private-radar.db'))
+    expect(isWorkBuddyConnectorRegistered(data, userHome)).toBe(true)
+    expect(readFileSync(`${configPath}.privateradar-backup`, 'utf8')).toContain('privateradar-local-spike')
+  })
+
+  it('重复配置不重写正式注册且不依赖旧 Spike', () => {
+    const { root, payload, data } = fixture()
+    const userHome = join(root, 'user')
+    const first = prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.1', new Date(), userHome)
+    const second = prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.1', new Date(), userHome)
+    expect(first.registrationChanged).toBe(true)
+    expect(second.registrationChanged).toBe(false)
+    const config = JSON.parse(readFileSync(second.registrationPath, 'utf8'))
+    expect(Object.keys(config.mcpServers)).toEqual(['privateradar-workbuddy'])
+  })
+
+  it('接受 WorkBuddy 信任后补充的 disabled false 且不反复改写', () => {
+    const { root, payload, data } = fixture()
+    const userHome = join(root, 'user')
+    const first = prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.1', new Date(), userHome)
+    const config = JSON.parse(readFileSync(first.registrationPath, 'utf8'))
+    config.mcpServers['privateradar-workbuddy'].disabled = false
+    writeFileSync(first.registrationPath, `${JSON.stringify(config, null, 2)}\n`)
+
+    expect(isWorkBuddyConnectorRegistered(data, userHome)).toBe(true)
+    const repeated = prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.1', new Date(), userHome)
+    expect(repeated.registrationChanged).toBe(false)
+    expect(JSON.parse(readFileSync(first.registrationPath, 'utf8')).mcpServers['privateradar-workbuddy'].disabled).toBe(false)
+  })
+
+  it('WorkBuddy 用户配置损坏时拒绝覆盖且不报告注册成功', () => {
+    const { root, payload, data } = fixture()
+    const userHome = join(root, 'user')
+    const configPath = join(userHome, '.workbuddy', 'mcp.json')
+    mkdirSync(join(userHome, '.workbuddy'), { recursive: true })
+    writeFileSync(configPath, '{broken')
+    expect(() => prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.1', new Date(), userHome)).toThrow('WorkBuddy 用户配置格式无效')
+    expect(readFileSync(configPath, 'utf8')).toBe('{broken')
+  })
+
+  it('正式配置已启用且存在信任记录时判定已连接', () => {
+    const { root, payload, data } = fixture()
+    const userHome = join(root, 'user')
+    prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.1', new Date(), userHome)
+    writeFileSync(join(userHome, '.workbuddy', 'mcp-approvals.json'), JSON.stringify({
+      'approval-hash::privateradar-workbuddy': Date.now()
+    }))
+    expect(inspectWorkBuddyConnection(data, userHome)).toEqual({ connected: true, message: 'WorkBuddy 已连接。' })
+  })
+
+  it('正式配置关闭或未信任时返回明确原因', () => {
+    const { root, payload, data } = fixture()
+    const userHome = join(root, 'user')
+    const result = prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.1', new Date(), userHome)
+    expect(inspectWorkBuddyConnection(data, userHome)).toMatchObject({ connected: false, message: expect.stringContaining('尚未') })
+    const config = JSON.parse(readFileSync(result.registrationPath, 'utf8'))
+    config.mcpServers['privateradar-workbuddy'].disabled = true
+    writeFileSync(result.registrationPath, JSON.stringify(config))
+    expect(inspectWorkBuddyConnection(data, userHome)).toEqual({ connected: false, message: 'PrivateRadar 在 WorkBuddy 中已关闭，请先启用。' })
+  })
+
+  it('路径错误或只有旧 Spike 不会误报正式连接', () => {
+    const { root, payload, data } = fixture()
+    const userHome = join(root, 'user')
+    const result = prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.1', new Date(), userHome)
+    const approvalPath = join(userHome, '.workbuddy', 'mcp-approvals.json')
+    writeFileSync(approvalPath, JSON.stringify({ 'approval-hash::privateradar-workbuddy': Date.now() }))
+    const config = JSON.parse(readFileSync(result.registrationPath, 'utf8'))
+    config.mcpServers['privateradar-workbuddy'].cwd = 'C:\\开发目录\\错误路径'
+    writeFileSync(result.registrationPath, JSON.stringify(config))
+    expect(inspectWorkBuddyConnection(data, userHome)).toMatchObject({ connected: false, message: expect.stringContaining('路径') })
+
+    writeFileSync(result.registrationPath, JSON.stringify({ mcpServers: { 'privateradar-local-spike': { disabled: false } } }))
+    writeFileSync(approvalPath, JSON.stringify({ 'old-hash::privateradar-local-spike': Date.now() }))
+    expect(inspectWorkBuddyConnection(data, userHome)).toEqual({ connected: false, message: 'WorkBuddy 中尚未注册 PrivateRadar。' })
+  })
+})

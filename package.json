@@ -1,0 +1,86 @@
+{
+  "name": "private-radar",
+  "version": "0.2.0-alpha.8",
+  "productName": "PrivateRadar",
+  "private": true,
+  "author": "PrivateRadar",
+  "description": "本地优先的个人聊天情报系统",
+  "engines": {
+    "node": ">=24"
+  },
+  "main": "out/main/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "npm run typecheck && electron-vite build && npm run build:mcp",
+    "build:mcp": "esbuild ./src/main/integrations/workbuddy/server.ts --bundle --platform=node --format=esm --outfile=./integrations/workbuddy/connector/dist/server.mjs",
+    "dist:win": "npm run build && electron-builder --win nsis --x64",
+    "dist:win:dir": "npm run build && electron-builder --win --x64 --dir",
+    "preview": "electron-vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.0.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "zod": "^4.6.3"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "^2.0.0",
+    "@types/node": "^24.3.0",
+    "@types/react": "^19.1.12",
+    "@types/react-dom": "^19.1.9",
+    "@vitejs/plugin-react": "^5.0.2",
+    "electron": "^44.3.0",
+    "electron-builder": "^26.0.12",
+    "electron-vite": "^4.0.0",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.4",
+    "vitest": "^5.0.0"
+  },
+  "build": {
+    "appId": "cn.privateradar.desktop",
+    "productName": "PrivateRadar",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "integrations/workbuddy/connector",
+        "to": "workbuddy-connector",
+        "filter": [
+          "connector-meta.json",
+          "mcp.json",
+          "icon.svg",
+          "skills/**/*",
+          "dist/server.mjs"
+        ]
+      }
+    ],
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "PrivateRadar-Setup-${version}-x64.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "PrivateRadar",
+      "uninstallDisplayName": "PrivateRadar",
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}

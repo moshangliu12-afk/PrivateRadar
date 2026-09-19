@@ -1,0 +1,6 @@
+message_id,platform,conversation_name,sender_name,timestamp,content,message_type,links
+demo-shared-004,local-file,内容创作实验室,云舒,2026-09-12 10:20:00,推荐一个支持 Markdown 的公众号排版工具。,text,
+demo-shared-005,local-file,效率工具交流群,嘉木,2026-09-12 16:40:00,今晚八点有线上产品交流会，报名即将截止。,text,
+demo-csv-006,local-file,AI 工具体验群,北辰,2026-09-13 09:10:00,"CSV 中带逗号的正文，也能被正确读取。",text,
+demo-csv-007,local-file,独立开发者群,方糖,2026-09-13 11:25:00,增量导入不应该重复保存旧消息。,text,
+demo-csv-008,local-file,内容创作实验室,木棉,2026-09-13 15:50:00,这个资料值得保存：https://example.com/local-first,link,https://example.com/local-first

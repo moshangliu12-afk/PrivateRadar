@@ -1,0 +1,9 @@
+{
+  "messages": [
+    {"message_id":"demo-json-001","platform":"local-file","conversation_name":"AI 工具体验群","sender_name":"林舟","timestamp":"2026-09-10 09:15:00","content":"我试了新的本地知识库，检索速度很快。","message_type":"text"},
+    {"message_id":"demo-json-002","platform":"local-file","conversation_name":"AI 工具体验群","sender_name":"小满","timestamp":"2026-09-10 09:18:00","content":"可以分享一下安装文档吗？","message_type":"text"},
+    {"message_id":"demo-json-003","platform":"local-file","conversation_name":"独立开发者群","sender_name":"阿诚","timestamp":"2026-09-11 14:05:00","content":"这个 SQLite 教程讲得很清楚：https://example.com/sqlite-guide","message_type":"link","links":["https://example.com/sqlite-guide"]},
+    {"message_id":"demo-shared-004","platform":"local-file","conversation_name":"内容创作实验室","sender_name":"云舒","timestamp":"2026-09-12 10:20:00","content":"推荐一个支持 Markdown 的公众号排版工具。","message_type":"text"},
+    {"message_id":"demo-shared-005","platform":"local-file","conversation_name":"效率工具交流群","sender_name":"嘉木","timestamp":"2026-09-12 16:40:00","content":"今晚八点有线上产品交流会，报名即将截止。","message_type":"text"}
+  ]
+}

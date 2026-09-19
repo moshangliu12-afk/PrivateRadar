@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "privateradar-workbuddy": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["dist/server.mjs"],
+      "runtime": {
+        "type": "node",
+        "version": "24"
+      },
+      "timeout": 30000
+    }
+  }
+}

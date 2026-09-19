@@ -1,0 +1,20 @@
+{
+  "name": "PrivateRadar",
+  "name_zh": "PrivateRadar",
+  "name_en": "PrivateRadar",
+  "description": "将微信分享中的聊天消息快速写入本机 PrivateRadar；群名确认后直接导入。",
+  "description_zh": "将微信分享中的聊天消息快速写入本机 PrivateRadar；群名确认后直接导入。",
+  "description_en": "Write structured chat messages from the current context to local PrivateRadar.",
+  "source": "privateradar-workbuddy",
+  "type": "mcp",
+  "version": "0.2.0-alpha.4",
+  "minWorkbuddyVersion": "5.0.0",
+  "examples_zh": [
+    "将这份聊天记录导入 PrivateRadar",
+    "群名是产品交流群，发送者和时间未知，按快速导入处理"
+  ],
+  "examples_en": [
+    "Write these test chat messages to PrivateRadar",
+    "Save the structured messages in this context to PrivateRadar"
+  ]
+}
