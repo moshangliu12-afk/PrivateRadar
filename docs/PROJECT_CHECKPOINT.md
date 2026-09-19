@@ -2,11 +2,11 @@
 
 ## 冻结状态
 
-- 当前版本：`0.2.0-alpha.8`
-- 状态：**最终冻结**。除非有明确的新版本任务，不再修改 alpha.8。
+- 当前版本：`0.2.0-alpha.9`
+- 状态：**最终冻结**。除非有明确的新版本任务，不再修改 alpha.9。
 - 目标平台：Windows 11 x64；Electron 桌面应用。
 - 产品定位：本地优先的个人聊天情报系统。把用户主动导入的聊天记录保存在本机，提供今日情报、跨群话题雷达和“问我的聊天”。
-- 正式安装包：`release/PrivateRadar-Setup-0.2.0-alpha.8-x64.exe`。
+- 正式安装包：`release/PrivateRadar-Setup-0.2.0-alpha.9-x64.exe`。
 
 ## 当前架构
 
@@ -95,6 +95,14 @@
 - 设置页可由用户主动“导出测试反馈”。导出只包含反馈条目及关联的最小消息片段/证据，不导出整个聊天数据库；无自动上传、无网络请求。
 - 用户反馈仅用于未来人工分析和标注，**绝不在 alpha.8 自动改权重、排序、扩展词、Embedding 或模型**。
 
+## alpha.9 Search 空白归一化修复与安装验收
+
+- alpha.9 只修复 Search 中文本空白不一致导致的漏召回：Query 已归一化空白，但 hybrid-search 对原始正文直接 `includes`，双空格、多空格、换行或制表符会使 lexical / expansion 失配，即使 FTS 已命中仍可能被后续硬筛选淘汰。
+- 修复将 Search 比较文本统一为 Unicode NFKC、连续空白折叠、trim 与 lowercase；未改变 Search V2 权重、阈值、实体、时间或排序逻辑。
+- 未修改 D1、Daily Value、Topic、WorkBuddy Connector、MCP 协议、SQLite schema、identity / fingerprint 或去重规则。
+- Windows 真实升级安装验收通过：既有 146 条消息、12 批导入和本地数据库保留；WorkBuddy 已连接；`圆点贴纸` 双空格历史消息无需重新导入即可命中 1 条并展示证据和 Search 反馈；普通关键词正常命中，不存在关键词保持 0；Daily、Topic 与 Settings 正常。（本条查询文本为本次隐私修订从零构造的合成等价展示；保留原始验收事实及计数，不宣称原始数据为合成数据。）
+- 最新安装包：`release/PrivateRadar-Setup-0.2.0-alpha.9-x64.exe`（116,724,220 字节，2026-09-19 20:49:58）。
+- alpha.9 是新的最终冻结基线。
 ## SQLite、migration 与兼容性约束
 
 正式用户数据目录：
@@ -144,7 +152,7 @@
 - alpha.8 功能基线全量回归：有正式数据库安全副本环境时 `186/186` 通过。
 - 最近一次无需正式库的全量回归：`183` 通过、`4` 条正式数据库副本测试按环境变量跳过。
 - 最后一轮 Search feedback UI 微调：相关测试 `8/8` 通过；TypeScript typecheck、Electron production build、WorkBuddy MCP build、Windows installer build 全部通过。
-- 最新安装包：`release/PrivateRadar-Setup-0.2.0-alpha.8-x64.exe`。
+- 最新安装包：`release/PrivateRadar-Setup-0.2.0-alpha.9-x64.exe`。
 - 最新安装包大小：`116,674,854` 字节；构建时间：`2026-09-19 17:36:15`。
 - Windows 真实 smoke：已完成安装、启动、Daily / Search / Topic / 设置访问、反馈写入与恢复、导出、Search 反馈视觉与交互复测；结果通过。
 - 安装升级与默认卸载不得删除 `%APPDATA%\PrivateRadar`；NSIS 配置 `deleteAppDataOnUninstall: false`。

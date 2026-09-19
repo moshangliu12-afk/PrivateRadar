@@ -35,6 +35,16 @@ describe('问我的聊天 V2 自然语言检索', () => {
         { content: 'DeepSeek 的合成更新公告仅描述沙盘纸鲸的调色功能。', source_position: 3 }
       ]
     })
+
+    ingestWorkBuddyMessages(db, {
+      source_batch_id: 'search-v2-whitespace-regression',
+      batch_metadata: { conversation_name: '合成排练信息群', conversation_name_source: 'user_supplied' },
+      messages: [
+        { content: '合成纸偶展的圆点贴纸分成三组  左格放星纹卡  右格放空白卡', source_position: 0 },
+        { content: '合成轨道通知      彩纸归位演练     请到沙盘集合', source_position: 1 },
+        { content: '纸偶排练\n\t请于 周五\t前集合', source_position: 2 }
+      ]
+    })
   })
 
   afterAll(() => db.close())
@@ -77,6 +87,16 @@ describe('问我的聊天 V2 自然语言检索', () => {
     const response = await askChat(db, '有没有人讨论特斯拉降价', { anchorDate, aiProvider: null, embeddingProvider: null })
     expect(response.insufficientEvidence).toBe(true)
     expect(response.answer).toBe('没有找到足够相关的聊天记录。')
+  })
+
+  it.each([
+    ['真实案例：正文双空格、查询单空格', '合成纸偶展的圆点贴纸分成三组 左格放星纹卡 右格放空白卡', '圆点贴纸'],
+    ['正文多个连续空格、查询单空格', '合成轨道通知 彩纸归位演练 请到沙盘集合', '彩纸归位演练'],
+    ['正文换行和制表符、查询普通空格', '纸偶排练 请于 周五 前集合', '纸偶排练']
+  ])('%s 仍能命中', async (_name, query, expectedContent) => {
+    const response = await askChat(db, query, { anchorDate, aiProvider: null, embeddingProvider: null })
+    expect(response.insufficientEvidence).toBe(false)
+    expect(response.results.some((item) => item.content.includes(expectedContent))).toBe(true)
   })
 
   it('产品、群与发送人结构化筛选仍保留', async () => {

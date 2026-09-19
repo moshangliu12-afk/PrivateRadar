@@ -108,7 +108,7 @@ async function rankRows(
     if (understanding.searchTerms.length >= 2 && lexical < 0.5 && entity === 0 && expansion === 0 && semantic < 0.58) return []
     if (!matchesRequiredTerms(row, searchTerms) && entity === 0 && expansion === 0 && semantic < 0.58) return []
     if (understanding.coreTopics.includes('工具更新') && expansion === 0 && semantic < 0.58) return []
-    if (understanding.searchTerms.includes('工具') && !row.content.includes('工具') && subject === 0 && expansion === 0 && semantic < 0.58) return []
+    if (understanding.searchTerms.includes('工具') && !normalizeSearchText(row.content).includes(normalizeSearchText('工具')) && subject === 0 && expansion === 0 && semantic < 0.58) return []
     const d1 = Math.min(1, (d1Scores.get(row.id) ?? 0) / 16)
     const topic = Math.min(1, (topicScores.get(row.id) ?? 0) / 100)
     const filterMatch = understanding.conversationIds.length > 0 || understanding.senderIds.length > 0 ? 1 : 0
@@ -152,8 +152,8 @@ function matchesStrictEntities(row: MessageRow, queryEntities: string[]): boolea
 function matchesRequiredTerms(row: MessageRow, searchTerms: string[]): boolean {
   const required = searchTerms.filter((term) => ['公众号', '微信小程序', 'GitHub'].includes(term))
   if (required.length === 0) return true
-  const haystack = `${row.content} ${safeStringArray(row.links_json).join(' ')}`.toLowerCase()
-  return required.some((term) => haystack.includes(term.toLowerCase()))
+  const haystack = normalizeSearchText(`${row.content} ${safeStringArray(row.links_json).join(' ')}`)
+  return required.some((term) => haystack.includes(normalizeSearchText(term)))
 }
 
 function deduplicateResults(results: ChatSearchResult[]): ChatSearchResult[] {
@@ -215,8 +215,8 @@ function allSearchTerms(understanding: QueryUnderstanding): string[] {
 
 function expansionScore(row: MessageRow, understanding: QueryUnderstanding): number {
   if (understanding.expandedTerms.length === 0) return 0
-  const content = `${row.content} ${safeStringArray(row.links_json).join(' ')}`.toLowerCase()
-  const has = (term: string): boolean => content.includes(term.toLowerCase())
+  const content = normalizeSearchText(`${row.content} ${safeStringArray(row.links_json).join(' ')}`)
+  const has = (term: string): boolean => content.includes(normalizeSearchText(term))
   const eventMatch = understanding.eventTerms.some(has)
   if (understanding.coreTopics.includes('工具更新')) {
     const hasSubject = /工具|产品|软件/.test(row.content) || extractEntityKeys(row.content, DEFAULT_DAILY_CONFIG).size > 0
@@ -246,10 +246,14 @@ function ftsSearch(db: DatabaseSync, terms: string[], allowed: Set<string>): Map
 
 function lexicalScore(row: MessageRow, terms: string[]): number {
   if (terms.length === 0) return 0
-  const haystack = `${row.content} ${safeStringArray(row.links_json).join(' ')}`.toLowerCase()
+  const haystack = normalizeSearchText(`${row.content} ${safeStringArray(row.links_json).join(' ')}`)
   let matched = 0
-  for (const term of terms) if (haystack.includes(term.toLowerCase())) matched += 1
+  for (const term of terms) if (haystack.includes(normalizeSearchText(term))) matched += 1
   return Math.min(1, matched / Math.min(3, terms.length))
+}
+
+function normalizeSearchText(value: string): string {
+  return value.normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase()
 }
 
 function actionScore(question: string, content: string): number {
