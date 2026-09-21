@@ -39,9 +39,15 @@ function withTopicDataQuality(db: DatabaseSync, summary: TopicRadarSummary): Top
   }
 }
 
-export async function getDashboardSummary(db: DatabaseSync, databasePath: string, forceRegenerate = false, refreshLocal = false): Promise<DashboardSummary> {
+export async function getDashboardSummary(
+  db: DatabaseSync,
+  databasePath: string,
+  forceRegenerate = false,
+  refreshLocal = false,
+  requestedDate?: string
+): Promise<DashboardSummary> {
   const latest = db.prepare(`SELECT MAX(COALESCE(date(NULLIF(timestamp, ''), 'localtime'), date(imported_at, 'localtime'))) AS date FROM messages`).get() as { date: string | null }
-  const date = latest.date ?? new Date().toISOString().slice(0, 10)
+  const date = requestedDate ?? latest.date ?? localDateKey()
   const stats = db.prepare(`
     SELECT COUNT(*) AS message_count,
            COUNT(DISTINCT CASE WHEN conversation_name_source <> 'unknown' AND conversation_name IS NOT NULL AND conversation_name <> '' THEN conversation_id END) AS conversation_count
@@ -70,4 +76,23 @@ export async function getDashboardSummary(db: DatabaseSync, databasePath: string
     databasePath,
     items: brief.items
   }
+}
+
+function localDateKey(now = new Date()): string {
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+}
+
+export function validateDashboardDateKey(value: unknown): string | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== 'string') throw new Error('日期必须为 YYYY-MM-DD')
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  if (!match) throw new Error('日期必须为 YYYY-MM-DD')
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  const date = new Date(year, month - 1, day, 12, 0, 0, 0)
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    throw new Error('日期无效')
+  }
+  return value
 }

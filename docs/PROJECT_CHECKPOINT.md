@@ -2,11 +2,11 @@
 
 ## 冻结状态
 
-- 当前版本：`0.2.0-alpha.10`
-- 状态：**最终冻结**。除非有明确的新版本任务，不再修改 alpha.10。
+- 当前版本：`0.2.0-alpha.11`
+- 状态：**最终冻结**。除非有明确的新版本任务，不再修改 alpha.11。
 - 目标平台：Windows 11 x64；Electron 桌面应用。
 - 产品定位：本地优先的个人聊天情报系统。把用户主动导入的聊天记录保存在本机，提供今日情报、跨群话题雷达和“问我的聊天”。
-- 正式安装包：`release/PrivateRadar-Setup-0.2.0-alpha.10-x64.exe`。
+- 正式安装包：`release/PrivateRadar-Setup-0.2.0-alpha.11-x64.exe`。
 
 ## 当前架构
 
@@ -58,6 +58,9 @@
 - Final Daily 允许为 0，禁止为了凑数量展示低价值候选。
 - 典型冻结行为：消防安全通知可因风险与行动要求成为高优先级；裸链接、只有问题、opaque token、普通闲聊应被 Daily Value 挡出。
 - 首页不展示“D1 候选”或 “D1 xx.xx 分”；“查看依据”展示中文化的今日价值、优先级、信息信号分和判断依据。
+- alpha.11 仅增加 Daily 历史日期浏览：默认仍显示数据库中最新有消息的本地日期；Renderer 保存 `selectedDate` 与 `latestDate`，支持上一自然日、下一自然日和“回到最新”。
+- 历史 Summary 使用可选且严格校验的 `YYYY-MM-DD` 参数贯通 Renderer → preload → IPC → main；无日期继续使用单值 `DashboardSummaryCache`，明确历史日期绕过该缓存。
+- 日期导航按本地日历字段计算，不依赖 `toISOString()` 或 UTC 24 小时毫秒加减；无消息显示“当天没有聊天记录”，有消息但 Final Daily 为 0 显示“当天没有值得关注的情报”，统计卡统一使用“当日”语义。
 
 ### 问我的聊天（Search）
 
@@ -116,6 +119,15 @@
 - 最新安装包：`release/PrivateRadar-Setup-0.2.0-alpha.10-x64.exe`（116,725,107 字节，2026-09-21 16:00:04）。
 - alpha.10 是新的最终冻结基线。
 
+## alpha.11 Daily 历史浏览与安装验收
+
+- alpha.11 只实现 Daily 历史日期浏览，未修改 SQLite schema、Daily signals、D1 score、`minimumScore = 3.2`、`daily-candidate-v1.3-action-signals`、`daily-value-v2`、Search、Topic、WorkBuddy、MCP、identity / dedup、FTS 或原始 messages。
+- 默认 Daily 继续打开数据库中最新有消息的日期，而不是系统日历今天；最新日期禁用“下一天”，“回到最新”仅在历史日期显示。
+- 历史日期通过可选 `date?: YYYY-MM-DD` 请求 Summary；日期必须为真实本地日历日期。无参数保持 latest 单值缓存行为，明确历史日期直接读取/生成对应 Summary，避免误用最新摘要缓存。
+- Windows 真实覆盖安装验收通过：默认 `2026-09-20` 的当日消息为 21、当日情报为 4（模型替换、聊天转入 WorkBuddy、外部改动失效风险、生成失败积分损失）；上一日 `2026-09-19` 的当日消息为 8、当日情报为 2（社保认证、周六提醒）。左右导航、“回到最新”、最新日期禁用未来、当日统计文案、Search、Topic、WorkBuddy、Daily / Search 反馈均正常。
+- 最新安装包：`release/PrivateRadar-Setup-0.2.0-alpha.11-x64.exe`（116,725,947 字节，2026-09-21 17:59:33）。
+- alpha.11 是新的最终冻结基线。
+
 ## SQLite、migration 与兼容性约束
 
 正式用户数据目录：
@@ -165,9 +177,10 @@
 - alpha.8 功能基线全量回归：有正式数据库安全副本环境时 `186/186` 通过。
 - 最近一次无需正式库的全量回归：`183` 通过、`4` 条正式数据库副本测试按环境变量跳过。
 - alpha.10 最终回归：Daily `50` 通过；全量 `189` 通过、`4` 跳过；TypeScript typecheck、Electron production build、WorkBuddy MCP build、Windows installer build 全部通过。
-- 最新安装包：`release/PrivateRadar-Setup-0.2.0-alpha.10-x64.exe`。
-- 最新安装包大小：`116,725,107` 字节；构建时间：`2026-09-21 16:00:04`。
-- Windows 真实 smoke：已完成覆盖升级、启动、Daily / Search / Topic / 设置访问与反馈区复测；结果通过。
+- alpha.11 最终回归：Daily / dashboard `54` 通过；全量 `194` 通过、`4` 跳过；TypeScript typecheck、Electron production build、WorkBuddy MCP build、Windows installer build 和真实历史浏览 UI 验收全部通过。
+- 最新安装包：`release/PrivateRadar-Setup-0.2.0-alpha.11-x64.exe`。
+- 最新安装包大小：`116,725,947` 字节；构建时间：`2026-09-21 17:59:33`。
+- Windows 真实 smoke：已完成 alpha.10 → alpha.11 覆盖升级、启动、Daily 历史浏览、Search / Topic / 设置访问与反馈区复测；结果通过。
 - 安装升级与默认卸载不得删除 `%APPDATA%\PrivateRadar`；NSIS 配置 `deleteAppDataOnUninstall: false`。
 - 未配置代码签名；Windows SmartScreen / 未知发布者提示仍是 Alpha 已知限制。
 
@@ -201,7 +214,7 @@
 ## NEW_CODEX_SESSION_PROMPT
 
 ```text
-继续 PrivateRadar。请先阅读 docs/PROJECT_CHECKPOINT.md，严格把 0.2.0-alpha.10 视为冻结基线。
+继续 PrivateRadar。请先阅读 docs/PROJECT_CHECKPOINT.md，严格把 0.2.0-alpha.11 视为冻结基线。
 
 不要修改 D1、Daily Value、Search、Topic、WorkBuddy、MCP、SQLite identity、正式数据库或正式安装包，除非我明确指定一个新的版本目标、范围、验收条件和允许改动的模块。
 

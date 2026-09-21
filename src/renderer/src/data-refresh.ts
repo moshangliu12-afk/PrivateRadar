@@ -1,7 +1,7 @@
 import type { DashboardSummary, FirstUseStatus, TopicRadarSummary } from '../../shared/models'
 
 export interface RefreshApi {
-  getDashboardSummary: () => Promise<DashboardSummary>
+  getDashboardSummary: (date?: string) => Promise<DashboardSummary>
   getTopicRadarSummary: () => Promise<TopicRadarSummary>
   askChat?: (question: string) => Promise<unknown>
 }
@@ -20,14 +20,14 @@ export function isCompletedDataImport(status: FirstUseStatus): boolean {
   return status.latestImport?.status === 'success' || status.latestImport?.status === 'partial'
 }
 
-export async function refreshAfterExternalImport(api: RefreshApi, radarIsOpen: boolean): Promise<ExternalImportRefresh> {
-  const summary = await api.getDashboardSummary()
+export async function refreshAfterExternalImport(api: RefreshApi, radarIsOpen: boolean, date?: string): Promise<ExternalImportRefresh> {
+  const summary = await api.getDashboardSummary(date)
   const radar = radarIsOpen ? await api.getTopicRadarSummary() : null
   return { summary, radar }
 }
 
-export function loadLatestDaily(api: Pick<RefreshApi, 'getDashboardSummary'>): Promise<DashboardSummary> {
-  return api.getDashboardSummary()
+export function loadDaily(api: Pick<RefreshApi, 'getDashboardSummary'>, date?: string): Promise<DashboardSummary> {
+  return api.getDashboardSummary(date)
 }
 
 export function senderCountLabel(count: number): number | string {

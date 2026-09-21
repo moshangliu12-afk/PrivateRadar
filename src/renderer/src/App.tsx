@@ -17,12 +17,16 @@ import type {
   TopicRadarSummary,
   TopicReasonCode
 } from '../../shared/models'
-import { isCompletedDataImport, loadLatestDaily, refreshAfterExternalImport, refreshSubmittedSearch, senderCountLabel } from './data-refresh'
+import { isCompletedDataImport, loadDaily, refreshAfterExternalImport, refreshSubmittedSearch, senderCountLabel } from './data-refresh'
+import { canNavigateToNextDate, formatLocalDateKey, shiftLocalDateKey, shouldShowReturnToLatest } from './daily-date'
 
 const NAV_ITEMS = ['今日情报', '话题雷达', '问我的聊天', '设置']
 
 export function App(): React.JSX.Element {
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
+  const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [latestDate, setLatestDate] = useState<string | null>(null)
+  const [dailyLoading, setDailyLoading] = useState(false)
   const [page, setPage] = useState<'welcome' | 'import-guide' | 'import-complete' | 'daily' | 'radar' | 'search' | 'settings'>('daily')
   const [firstUse, setFirstUse] = useState<FirstUseStatus | null>(null)
   const [bootstrapped, setBootstrapped] = useState(false)
@@ -49,6 +53,8 @@ export function App(): React.JSX.Element {
     Promise.all([window.privateRadar.getDashboardSummary(), window.privateRadar.getFirstUseStatus()])
       .then(([nextSummary, status]) => {
         setSummary(nextSummary)
+        setSelectedDate(nextSummary.date)
+        setLatestDate(nextSummary.date)
         setFirstUse(status)
         observedImportJobId.current = status.latestImport?.jobId ?? null
         if (status.firstLaunch) setPage('welcome')
@@ -79,9 +85,13 @@ export function App(): React.JSX.Element {
         observedImportJobId.current = nextJobId
         setFirstUse(status)
         if (isNewJob && isCompletedDataImport(status)) {
-          const refreshed = await refreshAfterExternalImport(window.privateRadar, page === 'radar')
+          const latest = await loadDaily(window.privateRadar)
+          const staysOnLatest = selectedDate === null || selectedDate === latestDate
+          const refreshed = await refreshAfterExternalImport(window.privateRadar, page === 'radar', staysOnLatest ? undefined : selectedDate)
           setSummary(refreshed.summary)
           setRadar(refreshed.radar)
+          setLatestDate(latest.date)
+          if (staysOnLatest) setSelectedDate(latest.date)
           const refreshedSearch = await refreshSubmittedSearch(window.privateRadar, submittedQuestion.current)
           if (refreshedSearch) setQueryResponse(refreshedSearch)
         }
@@ -91,12 +101,15 @@ export function App(): React.JSX.Element {
       }).catch(() => undefined).finally(() => { checking = false })
     }, 2000)
     return () => window.clearInterval(timer)
-  }, [bootstrapped, page, importBaselineJobId])
+  }, [bootstrapped, page, importBaselineJobId, latestDate, selectedDate])
 
   async function activateDemo(): Promise<void> {
     setError('')
     try {
-      setSummary(await window.privateRadar.activateDemo())
+      const nextSummary = await window.privateRadar.activateDemo()
+      setSummary(nextSummary)
+      setSelectedDate(nextSummary.date)
+      setLatestDate(nextSummary.date)
       setFirstUse(await window.privateRadar.getFirstUseStatus())
       setPage('daily')
     } catch (reason) {
@@ -124,7 +137,10 @@ export function App(): React.JSX.Element {
       const result = await window.privateRadar.chooseAndImportFile()
       if (result) {
         setImportResult(result)
-        setSummary(await window.privateRadar.getDashboardSummary())
+        const nextSummary = await window.privateRadar.getDashboardSummary()
+        setSummary(nextSummary)
+        setSelectedDate(nextSummary.date)
+        setLatestDate(nextSummary.date)
         if (page === 'radar') setRadar(await window.privateRadar.getTopicRadarSummary())
       }
     } catch (reason) {
@@ -148,9 +164,45 @@ export function App(): React.JSX.Element {
     setPage('daily')
     setError('')
     try {
-      setSummary(await loadLatestDaily(window.privateRadar))
+      const nextSummary = await loadDaily(window.privateRadar)
+      setSummary(nextSummary)
+      setSelectedDate(nextSummary.date)
+      setLatestDate(nextSummary.date)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '无法刷新今日情报')
+    }
+  }
+
+  async function loadSelectedDate(date: string): Promise<void> {
+    setDailyLoading(true)
+    setError('')
+    setOpenCandidateId('')
+    setEvidence(null)
+    try {
+      setSummary(await loadDaily(window.privateRadar, date))
+      setSelectedDate(date)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '无法读取当日情报')
+    } finally {
+      setDailyLoading(false)
+    }
+  }
+
+  async function goToLatestDate(): Promise<void> {
+    if (!latestDate) return
+    setDailyLoading(true)
+    setError('')
+    setOpenCandidateId('')
+    setEvidence(null)
+    try {
+      const nextSummary = await loadDaily(window.privateRadar)
+      setSummary(nextSummary)
+      setSelectedDate(nextSummary.date)
+      setLatestDate(nextSummary.date)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '无法读取最新日期情报')
+    } finally {
+      setDailyLoading(false)
     }
   }
 
@@ -211,7 +263,7 @@ export function App(): React.JSX.Element {
     setRegenerating(true)
     setError('')
     try {
-      setSummary(await window.privateRadar.regenerateDashboard())
+      setSummary(await window.privateRadar.regenerateDashboard(selectedDate ?? undefined))
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '重新生成失败')
     } finally {
@@ -255,14 +307,21 @@ export function App(): React.JSX.Element {
       <main>
         <header>
           <div>
-            <div className="eyebrow">{page === 'settings' ? '数据与隐私' : (page === 'radar' ? radar?.date : summary?.date) ?? '正在读取日期'}</div>
+            {page === 'daily' && selectedDate && latestDate
+              ? <div className="daily-date-navigation">
+                  <button type="button" aria-label="上一天" onClick={() => void loadSelectedDate(shiftLocalDateKey(selectedDate, -1))} disabled={dailyLoading}>‹</button>
+                  <strong>{formatLocalDateKey(selectedDate)}</strong>
+                  <button type="button" aria-label="下一天" onClick={() => void loadSelectedDate(shiftLocalDateKey(selectedDate, 1))} disabled={dailyLoading || !canNavigateToNextDate(selectedDate, latestDate)}>›</button>
+                  {shouldShowReturnToLatest(selectedDate, latestDate) && <button className="return-latest-button" type="button" onClick={() => void goToLatestDate()} disabled={dailyLoading}>回到最新</button>}
+                </div>
+              : <div className="eyebrow">{page === 'settings' ? '数据与隐私' : (page === 'radar' ? radar?.date : summary?.date) ?? '正在读取日期'}</div>}
             <h1>{page === 'daily' ? '今日情报' : page === 'radar' ? '话题雷达' : page === 'search' ? '问我的聊天' : '设置'}</h1>
             <p>{page === 'daily' ? '从噪音里，找到今天真正值得看的信息。' : page === 'radar' ? '识别相对过去七天正在突然升温的跨群话题。' : page === 'search' ? '先检索本地证据，再基于证据回答。' : '查看数据来源、存储状态与隐私说明。'}</p>
           </div>
           <div className="header-actions">
             {page === 'daily' && summary && <span className={`mode-badge ${summary.mode}`}>{modeLabel(summary)}</span>}
             {summary?.demoMode && <span className="demo-badge">当前为演示数据</span>}
-            {page === 'daily' && summary?.mode === 'ai' && <button className="regenerate-button" type="button" onClick={() => void regenerate()} disabled={regenerating}>{regenerating ? '正在整理…' : '重新生成'}</button>}
+            {page === 'daily' && summary?.mode === 'ai' && <button className="regenerate-button" type="button" onClick={() => void regenerate()} disabled={regenerating || dailyLoading}>{regenerating ? '正在整理…' : '重新生成'}</button>}
             <button className="import-button" type="button" onClick={() => void beginWechatImport()}>
               开始导入我的聊天
             </button>
@@ -271,15 +330,16 @@ export function App(): React.JSX.Element {
 
         {error && <div className="error">数据读取失败：{error}</div>}
         {!summary && !error && <div className="loading">正在读取本地消息……</div>}
+        {page === 'daily' && summary && dailyLoading && <div className="loading">正在读取当日聊天……</div>}
 
         {importResult && <ImportReport result={importResult} />}
 
-        {page === 'daily' && summary && (
+        {page === 'daily' && summary && !dailyLoading && (
           <>
             <section className="stats">
-              <Stat label="今日分析群" value={summary.conversationCount} suffix="个" />
-              <Stat label="今日消息" value={summary.messageCount} suffix="条" />
-              <Stat label="今日情报" value={summary.finalIntelligenceCount} suffix="条" />
+              <Stat label="当日分析群" value={summary.conversationCount} suffix="个" />
+              <Stat label="当日消息" value={summary.messageCount} suffix="条" />
+              <Stat label="当日情报" value={summary.finalIntelligenceCount} suffix="条" />
               <div className="stat mode-stat"><span>当前模式</span><strong>{modeLabel(summary)}</strong></div>
             </section>
 
@@ -325,9 +385,9 @@ export function App(): React.JSX.Element {
                   {openCandidateId === item.candidateId && <EvidencePanel evidence={evidence} />}
                 </div>
               ))}
-              {summary.items.length === 0 && <div className="empty-candidates">今天没有值得关注的情报。</div>}
+              {summary.items.length === 0 && <div className="empty-candidates">{summary.messageCount === 0 ? '当天没有聊天记录' : '当天没有值得关注的情报。'}</div>}
             </section>
-            <MissingImportantFeedback dateKey={summary.date} />
+            {summary.messageCount > 0 && <MissingImportantFeedback dateKey={summary.date} />}
           </>
         )}
         {page === 'radar' && !radar && !error && <div className="loading">正在计算过去 7 天历史基线……</div>}

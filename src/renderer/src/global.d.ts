@@ -3,9 +3,9 @@ import type { CandidateEvidence, ChatQueryResponse, ConnectorSetupResult, DailyB
 declare global {
   interface Window {
     privateRadar: {
-      getDashboardSummary: () => Promise<DashboardSummary>
-      refreshDashboard: () => Promise<DashboardSummary>
-      regenerateDashboard: () => Promise<DashboardSummary>
+      getDashboardSummary: (date?: string) => Promise<DashboardSummary>
+      refreshDashboard: (date?: string) => Promise<DashboardSummary>
+      regenerateDashboard: (date?: string) => Promise<DashboardSummary>
       getCandidateEvidence: (candidateId: string) => Promise<CandidateEvidence | null>
       getTopicRadarSummary: () => Promise<TopicRadarSummary>
       getTopicEvidence: (topicId: string, date: string) => Promise<TopicEvidence | null>

@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
 import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { openDatabase, getTopicRadarSummary } from './database'
+import { openDatabase, getDashboardSummary, getTopicRadarSummary, validateDashboardDateKey } from './database'
 import { importChatFile } from './import/importer'
 import { getCandidateEvidence } from './intelligence/daily/repository'
 import { getTopicEvidence } from './intelligence/topics/repository'
@@ -81,14 +81,19 @@ app.whenReady().then(() => {
     radarDirty = true
   })
 
-  ipcMain.handle('dashboard:get-summary', () => summaryCache.get())
-  ipcMain.handle('dashboard:refresh', () => {
-    radarDirty = true
-    return summaryCache.refresh()
+  ipcMain.handle('dashboard:get-summary', (_event, requestedDate?: unknown) => {
+    const date = validateDashboardDateKey(requestedDate)
+    return date ? getDashboardSummary(db, databasePath, false, false, date) : summaryCache.get()
   })
-  ipcMain.handle('dashboard:regenerate', () => {
+  ipcMain.handle('dashboard:refresh', (_event, requestedDate?: unknown) => {
     radarDirty = true
-    return summaryCache.refresh(true)
+    const date = validateDashboardDateKey(requestedDate)
+    return date ? getDashboardSummary(db, databasePath, false, true, date) : summaryCache.refresh()
+  })
+  ipcMain.handle('dashboard:regenerate', (_event, requestedDate?: unknown) => {
+    radarDirty = true
+    const date = validateDashboardDateKey(requestedDate)
+    return date ? getDashboardSummary(db, databasePath, true, true, date) : summaryCache.refresh(true)
   })
   ipcMain.handle('candidate:get-evidence', (_event, candidateId: string) => getCandidateEvidence(db, candidateId))
   ipcMain.handle('radar:get-summary', async () => {

@@ -2,9 +2,9 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { CandidateEvidence, ChatQueryResponse, ConnectorSetupResult, DailyBriefItem, DashboardSummary, FeedbackExportResult, FeedbackState, FirstUseStatus, ImportResult, MessageContext, TopicEvidence, TopicRadarSummary } from '../shared/models'
 
 contextBridge.exposeInMainWorld('privateRadar', {
-  getDashboardSummary: (): Promise<DashboardSummary> => ipcRenderer.invoke('dashboard:get-summary'),
-  refreshDashboard: (): Promise<DashboardSummary> => ipcRenderer.invoke('dashboard:refresh'),
-  regenerateDashboard: (): Promise<DashboardSummary> => ipcRenderer.invoke('dashboard:regenerate'),
+  getDashboardSummary: (date?: string): Promise<DashboardSummary> => ipcRenderer.invoke('dashboard:get-summary', date),
+  refreshDashboard: (date?: string): Promise<DashboardSummary> => ipcRenderer.invoke('dashboard:refresh', date),
+  regenerateDashboard: (date?: string): Promise<DashboardSummary> => ipcRenderer.invoke('dashboard:regenerate', date),
   getCandidateEvidence: (candidateId: string): Promise<CandidateEvidence | null> => ipcRenderer.invoke('candidate:get-evidence', candidateId),
   getTopicRadarSummary: (): Promise<TopicRadarSummary> => ipcRenderer.invoke('radar:get-summary'),
   getTopicEvidence: (topicId: string, date: string): Promise<TopicEvidence | null> => ipcRenderer.invoke('topic:get-evidence', topicId, date),

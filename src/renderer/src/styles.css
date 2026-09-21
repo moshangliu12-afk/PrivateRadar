@@ -18,6 +18,12 @@ nav button:disabled { opacity: .45; }
 main { grid-column: 2; padding: 46px 56px 70px; max-width: 1240px; width: 100%; margin: 0 auto; }
 header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 32px; }
 .eyebrow, .section-heading span { color: #758a43; font-size: 12px; letter-spacing: .12em; font-weight: 700; }
+.daily-date-navigation { display: flex; align-items: center; gap: 8px; min-height: 20px; color: #758a43; font-size: 12px; letter-spacing: .06em; font-weight: 700; }
+.daily-date-navigation > strong { min-width: 112px; text-align: center; }
+.daily-date-navigation > button { display: grid; place-items: center; min-width: 24px; height: 24px; border: 0; border-radius: 6px; color: #60763a; background: transparent; cursor: pointer; font: 700 21px/1 Georgia, serif; }
+.daily-date-navigation > button:hover:not(:disabled) { background: #e9efdc; }
+.daily-date-navigation > button:disabled { color: #b9beb1; cursor: default; }
+.daily-date-navigation > .return-latest-button { width: auto; height: auto; margin-left: 5px; padding: 4px 8px; border: 1px solid #cdd8bb; color: #5c7337; background: #f6f8ef; font: 700 11px/1 "Microsoft YaHei UI", sans-serif; }
 h1 { margin: 7px 0 5px; font: 700 38px/1.15 Georgia, "Microsoft YaHei UI", serif; }
 header p { margin: 0; color: #77786f; }
 .header-actions { display: flex; align-items: center; gap: 10px; }
