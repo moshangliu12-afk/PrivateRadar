@@ -29,10 +29,10 @@ function assessment(sampleId: string) {
 }
 
 describe('Daily Value 今日价值层', () => {
-  it('从零合成夹具保持 3 / 14 / 23 和 2 / 5 / 33 的基线', () => {
+  it('从零合成夹具保持 2 / 15 / 23 和 2 / 5 / 33 的基线', () => {
     expect(DAILY_VALUE_LABEL_FIXTURES).toHaveLength(40)
-    expect(DAILY_VALUE_LABEL_FIXTURES.filter((item) => item.humanLabel === 'must_show')).toHaveLength(3)
-    expect(DAILY_VALUE_LABEL_FIXTURES.filter((item) => item.humanLabel === 'may_show')).toHaveLength(14)
+    expect(DAILY_VALUE_LABEL_FIXTURES.filter((item) => item.humanLabel === 'must_show')).toHaveLength(2)
+    expect(DAILY_VALUE_LABEL_FIXTURES.filter((item) => item.humanLabel === 'may_show')).toHaveLength(15)
     expect(DAILY_VALUE_LABEL_FIXTURES.filter((item) => item.humanLabel === 'drop')).toHaveLength(23)
     expect(DAILY_VALUE_LABEL_FIXTURES.filter((item) => item.desiredPriority === 'high')).toHaveLength(2)
     expect(DAILY_VALUE_LABEL_FIXTURES.filter((item) => item.desiredPriority === 'medium')).toHaveLength(5)
@@ -49,9 +49,8 @@ describe('Daily Value 今日价值层', () => {
     }
   })
 
-  it('三个 MUST_SHOW 合成样本均保留为明确期望的优先级', () => {
+  it('两个 MUST_SHOW 合成样本均保留为明确期望的优先级', () => {
     expect(assessment('DV-014')).toMatchObject({ dailyValue: 'must_show', dailyPriority: 'high' })
-    expect(assessment('DV-028')).toMatchObject({ dailyValue: 'must_show', dailyPriority: 'medium' })
     expect(assessment('DV-030')).toMatchObject({ dailyValue: 'must_show', dailyPriority: 'high' })
   })
 

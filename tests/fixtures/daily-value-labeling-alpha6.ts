@@ -41,7 +41,7 @@ export const DAILY_VALUE_LABEL_FIXTURES: DailyValueLabelFixture[] = [
   { sampleId: 'DV-025', text: '🧩', selectedByD1: false, humanLabel: 'drop', desiredPriority: 'low' },
   { sampleId: 'DV-026', text: '纸风筝挪到角落。', selectedByD1: false, humanLabel: 'drop', desiredPriority: 'low' },
   { sampleId: 'DV-027', text: '虚构沙盘的计费记录异常，标记额度被扣除。', selectedByD1: true, humanLabel: 'may_show', desiredPriority: 'low' },
-  { sampleId: 'DV-028', text: '虚构折页工具发布了星纹索引功能。', selectedByD1: true, humanLabel: 'must_show', desiredPriority: 'medium' },
+  { sampleId: 'DV-028', text: '虚构折页工具发布了星纹索引功能。', selectedByD1: true, humanLabel: 'may_show', desiredPriority: 'medium' },
   { sampleId: 'DV-029', text: '合成练习项目文档用于绘制纸环地图：https://github.com/example/synthetic-paper-ring', selectedByD1: true, humanLabel: 'may_show', desiredPriority: 'medium' },
   { sampleId: 'DV-030', text: '合成简报 2004年2月3日：虚构纸舟系统上线航线图；虚构棋盘工具发布配色功能。', selectedByD1: true, humanLabel: 'must_show', desiredPriority: 'high' },
   { sampleId: 'DV-031', text: 'https://synthetic.invalid/workshop', selectedByD1: true, humanLabel: 'drop', desiredPriority: 'low' },

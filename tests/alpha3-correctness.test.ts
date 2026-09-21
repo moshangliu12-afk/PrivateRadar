@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MockAIProvider } from '../src/main/ai/mock-provider'
 import { ingestWorkBuddyMessages } from '../src/main/integrations/workbuddy/ingest'
 import { buildAIInput } from '../src/main/intelligence/daily/brief'
+import { DAILY_ALGORITHM_VERSION } from '../src/main/intelligence/daily/pipeline'
 import { loadSavedDailyCandidates, runDailyIntelligence } from '../src/main/intelligence/daily/repository'
 import { loadSavedTopicRadar, runTopicRadar } from '../src/main/intelligence/topics/repository'
 import { askChat } from '../src/main/retrieval/service'
@@ -100,15 +101,23 @@ describe('Alpha.3 未知发送者语义', () => {
     expect(senderCountLabel(2)).toBe(2)
   })
 
-  it('不复用可能包含旧发送人数语义的 Daily 缓存', () => {
+  it('旧 Daily algorithm version 的候选不会复用，正常重算会写入当前版本且不改原始消息', () => {
     const db = database()
     ingestWorkBuddyMessages(db, {
       source_batch_id: '旧Daily缓存',
       messages: [{ content: 'PrivateIndex 发布更新。', timestamp: '2026-09-14 09:00' }]
     })
-    runDailyIntelligence(db, '2026-09-14')
-    db.prepare(`UPDATE daily_intelligence_candidates SET algorithm_version = 'daily-candidate-v1'`).run()
+    const beforeMessageCount = (db.prepare(`SELECT COUNT(*) AS count FROM messages`).get() as { count: number }).count
+    const first = runDailyIntelligence(db, '2026-09-14')
+    expect(loadSavedDailyCandidates(db, '2026-09-14')).toEqual(first.candidates)
+
+    db.prepare(`UPDATE daily_intelligence_candidates SET algorithm_version = 'daily-candidate-v1.2-daily-value'`).run()
     expect(loadSavedDailyCandidates(db, '2026-09-14')).toEqual([])
+
+    const recomputed = runDailyIntelligence(db, '2026-09-14')
+    expect(loadSavedDailyCandidates(db, '2026-09-14')).toEqual(recomputed.candidates)
+    expect(db.prepare(`SELECT DISTINCT algorithm_version AS version FROM daily_intelligence_candidates`).all()).toEqual([{ version: DAILY_ALGORITHM_VERSION }])
+    expect((db.prepare(`SELECT COUNT(*) AS count FROM messages`).get() as { count: number }).count).toBe(beforeMessageCount)
   })
 
   it('不复用可能包含旧发送人数语义的 Topic 缓存', () => {

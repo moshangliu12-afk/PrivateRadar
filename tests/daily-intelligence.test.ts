@@ -7,6 +7,8 @@ import { extractFeatures, isNoiseMessage } from '../src/main/intelligence/daily/
 import { importanceScore, messageInformationScore } from '../src/main/intelligence/daily/importance-score'
 import { buildDailyCandidates } from '../src/main/intelligence/daily/pipeline'
 import { getCandidateEvidence, runDailyIntelligence } from '../src/main/intelligence/daily/repository'
+import { assessDailyValue } from '../src/main/intelligence/daily/daily-value'
+import { analyzeDailyValueSignals } from '../src/main/intelligence/daily/signals'
 import type { DailyMessage } from '../src/main/intelligence/daily/types'
 
 function message(id: string, content: string, options: Partial<DailyMessage> = {}): DailyMessage {
@@ -82,6 +84,80 @@ describe('今日情报候选引擎', () => {
     expect(result.candidates[0].importanceScore).toBeGreaterThanOrEqual(DEFAULT_DAILY_CONFIG.minimumScore)
     expect(result.candidates[0].reasonCodes).toEqual(expect.arrayContaining(['SPECIFIC_NUMBER_OR_DATE', 'INFORMATION_DENSE', 'NEW_TOPIC']))
     expect(result.candidates[0].reasonCodes).not.toContain('PRODUCT_OR_VERSION')
+  })
+
+  it('行动、变化、失败损失和使用风险的高价值口语消息进入两层 Daily', () => {
+    const cases = [
+      {
+        id: 'deadline',
+        text: '虚构纸偶剧场入场认证提醒：每月17日前需完成认证，未认证将暂停领取测试权益，之后可补发。',
+        score: 4.1,
+        value: 'must_show', priority: 'high'
+      },
+      {
+        id: 'capability',
+        text: '虚构水滴系统现已支持纸偶棋谱的逐页旋转。',
+        score: 4.1,
+        value: 'may_show', priority: 'medium'
+      },
+      {
+        id: 'configuration',
+        text: '合成沙盘已把配色模型换成 PaperLoom 8.6，输出纹样由六角网格展示。',
+        score: 6.8,
+        value: 'may_show', priority: 'medium'
+      },
+      {
+        id: 'failure-loss',
+        text: '虚构纸鲸的折叠投影做不出来，练习额度已消耗。',
+        score: 4.1,
+        value: 'may_show', priority: 'low'
+      },
+      {
+        id: 'limitation',
+        text: '纸偶沙盘依赖转盘刻度，刻度失效后不能使用，改用手动描格会增加成本。',
+        score: 4.1,
+        value: 'may_show', priority: 'low'
+      }
+    ] as const
+
+    for (const item of cases) {
+      const source = message(item.id, item.text)
+      expect(isNoiseMessage(source, DEFAULT_DAILY_CONFIG), item.id).toBe(false)
+      const candidate = buildDailyCandidates([source], '2004-02-03').candidates[0]
+      expect(candidate, item.id).toBeDefined()
+      expect(candidate.importanceScore, item.id).toBe(item.score)
+      expect(assessDailyValue(candidate), item.id).toMatchObject({ dailyValue: item.value, dailyPriority: item.priority })
+    }
+
+    const failureSignals = analyzeDailyValueSignals(cases[3].text)
+    expect(failureSignals.failureOrLoss).toBe(true)
+    expect(failureSignals.opportunity).toBe(false)
+
+    const limitationSignals = analyzeDailyValueSignals(cases[4].text)
+    expect(limitationSignals.broadImpact).toBe(false)
+  })
+
+  it('正式安全通知的维护行动在代表文本截断后仍保持高优先级', () => {
+    const safety = message('formal-safety', [
+      '虚构纸轮剧场公共安全公告：请大家维护演练通道安全，避免拼装转盘滑落。',
+      '这是一段专为截断回归构造的纸偶舞台说明，舞台由棋盘、折页、圆筒和没有动力的纸轮组成。所有道具都属于虚构沙盘，不对应现实场地或真实活动。',
+      '合成排练按方格编号摆放纸制组件，左侧一列用于展示圆形拼片，右侧一列用于展示三角形拼片；中间留空，只作为纸偶移动的虚构通道。纸质转盘旁的提示卡用于说明不同颜色的折线，不记录参与者身份。每段说明均是独立构造的测试文字，保留足够长度，以核验代表文本在截断后仍带有前段明确的公共安全维护要求。',
+      '演练结束请及时处理散落纸片，保持通道畅通。'
+    ].join(''))
+    const candidate = buildDailyCandidates([safety], '2004-02-03').candidates[0]
+    expect(candidate).toBeDefined()
+    expect(candidate.representativeText).toHaveLength(240)
+    expect(assessDailyValue(candidate)).toMatchObject({ dailyValue: 'must_show', dailyPriority: 'high' })
+  })
+
+  it('短问句、裸片段与普通口语不会因行动价值信号误入 D1', () => {
+    const negative = [
+      '下午好，先摆纸环', '纸偶转半圈', '这颗棋子呢', '摆好了', '先等等', '朝左走吗',
+      '把格子涂青', '帮看小圆点', '上午好，合成转盘慢慢旋转', 'https://synthetic.invalid/no-context',
+      '[图片] synthetic_negative_004.jpg', '[文件] synthetic_scratch_005.pdf', 'Claude Code', 'qyx+zpt v8.6 demo'
+    ]
+    const result = buildDailyCandidates(negative.map((text, index) => message(`negative-${index}`, text)), '2004-02-03')
+    expect(result.candidates).toEqual([])
   })
 
   it('高信息量消息获得更高基础分', () => {

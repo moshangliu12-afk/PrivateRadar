@@ -2,11 +2,11 @@
 
 ## 冻结状态
 
-- 当前版本：`0.2.0-alpha.9`
-- 状态：**最终冻结**。除非有明确的新版本任务，不再修改 alpha.9。
+- 当前版本：`0.2.0-alpha.10`
+- 状态：**最终冻结**。除非有明确的新版本任务，不再修改 alpha.10。
 - 目标平台：Windows 11 x64；Electron 桌面应用。
 - 产品定位：本地优先的个人聊天情报系统。把用户主动导入的聊天记录保存在本机，提供今日情报、跨群话题雷达和“问我的聊天”。
-- 正式安装包：`release/PrivateRadar-Setup-0.2.0-alpha.9-x64.exe`。
+- 正式安装包：`release/PrivateRadar-Setup-0.2.0-alpha.10-x64.exe`。
 
 ## 当前架构
 
@@ -46,13 +46,15 @@
 
 ### 今日情报（Daily）
 
-- D1 保持冻结：先做低信息过滤、候选归并与信息信号评分，门槛仍为 `3.2`。
+- D1 先做低信息过滤、候选归并与信息信号评分，门槛仍为 `3.2`，不得因单条普通聊天降低全局门槛。
 - 媒体/附件纯占位、文件扩展名伪产品、文件名日期数字等 alpha.5 已修复；原消息仍保留并可搜索，但不得独立进入 D1。
-- 当前 D1 算法版本：`daily-candidate-v1.2-daily-value`。
-- alpha.6 新增 Daily Value 层，版本：`daily-value-v1`：
+- 当前 D1 算法版本：`daily-candidate-v1.3-action-signals`；D1 candidate eligibility、特征或评分语义变化时必须同步更新版本，使旧历史候选自然失效并按正常链路重算。
+- alpha.10 使用共享确定性 signal analyzer 识别 `ACTION_REQUIRED`、`DEADLINE / TIME_SENSITIVE`、`CONSEQUENCE`、`VERIFIABLE_CHANGE`、`FAILURE / LOSS` 与 `RISK / LIMITATION`；不按群类型判断价值，也不让 AI 新增候选。
+- Daily Value 层版本：`daily-value-v2`：
   - `MUST_SHOW` / `MAY_SHOW` / `DROP`
   - 优先级：`HIGH` / `MEDIUM` / `LOW`
   - 最终排序：`Daily Value → Priority → D1 importance_score`。
+- 普通明确能力、配置或模型变化为 `MAY_SHOW / MEDIUM`；行动 + 截止 + 后果为 `MUST_SHOW / HIGH`；单条失败 + 明确损失为 `MAY_SHOW / LOW`；明确风险/限制默认 `MAY_SHOW / LOW`，仅有更强证据时才提升。
 - Final Daily 允许为 0，禁止为了凑数量展示低价值候选。
 - 典型冻结行为：消防安全通知可因风险与行动要求成为高优先级；裸链接、只有问题、opaque token、普通闲聊应被 Daily Value 挡出。
 - 首页不展示“D1 候选”或 “D1 xx.xx 分”；“查看依据”展示中文化的今日价值、优先级、信息信号分和判断依据。
@@ -103,6 +105,17 @@
 - Windows 真实升级安装验收通过：既有 146 条消息、12 批导入和本地数据库保留；WorkBuddy 已连接；`圆点贴纸` 双空格历史消息无需重新导入即可命中 1 条并展示证据和 Search 反馈；普通关键词正常命中，不存在关键词保持 0；Daily、Topic 与 Settings 正常。（本条查询文本为本次隐私修订从零构造的合成等价展示；保留原始验收事实及计数，不宣称原始数据为合成数据。）
 - 最新安装包：`release/PrivateRadar-Setup-0.2.0-alpha.9-x64.exe`（116,724,220 字节，2026-09-19 20:49:58）。
 - alpha.9 是新的最终冻结基线。
+
+## alpha.10 Daily 行动价值识别、历史候选失效与安装验收
+
+- alpha.10 只改进 Daily 对行动、截止、后果、可核对变化、失败损失与风险限制的确定性识别；`minimumScore` 仍为 `3.2`，没有降低。
+- 未修改 Search、Topic、WorkBuddy / MCP、SQLite schema、原始消息、FTS、identity / fingerprint、去重或反馈结构。
+- `DAILY_VALUE_VERSION` 为 `daily-value-v2`，只负责 Value / Brief 缓存；`DAILY_ALGORITHM_VERSION` 为 `daily-candidate-v1.3-action-signals`，使旧 `v1.2` 历史 D1 candidate 自然失效并重新计算。
+- 隔离副本持久化重算：2026-09-19 为 D1 `4`、Final `2`（社保认证 `MUST_SHOW / HIGH`、周六安全提醒 `MAY_SHOW / MEDIUM`）；2026-09-20 为 D1 `5`、Final `4`（模型替换、聊天转入工具为 `MAY_SHOW / MEDIUM`；失效风险、生成失败积分损失为 `MAY_SHOW / LOW`）。
+- Windows 真实覆盖安装验收通过：167 条消息、14 个聊天批次和 167 条 FTS 保留；WorkBuddy、Topic、Search、Daily / Search 反馈正常；`圆点贴纸` 与“纸鲸调色”正常命中，不存在词保持 0，未发现普通闲聊明显误入 Daily。（本条查询文本为本次隐私修订从零构造的合成等价展示；保留原始验收事实及计数，不宣称原始数据为合成数据。）
+- 最新安装包：`release/PrivateRadar-Setup-0.2.0-alpha.10-x64.exe`（116,725,107 字节，2026-09-21 16:00:04）。
+- alpha.10 是新的最终冻结基线。
+
 ## SQLite、migration 与兼容性约束
 
 正式用户数据目录：
@@ -136,7 +149,7 @@
 
 ## 已冻结、不得无理由破坏的行为
 
-1. 不改 D1 权重、3.2 门槛、`NEW_TOPIC` 或 Daily Value v1，除非新版本有足够真实用户标注并明确立项。
+1. 不改 D1 权重、3.2 门槛、`NEW_TOPIC` 或 Daily Value v2，除非新版本有足够真实用户标注并明确立项。
 2. 不把 Daily Value、D1 信号分和优先级重新混为单一分数。
 3. 不因反馈点击即时学习或改变 Daily/Search 结果。
 4. 不让 `imported_at`、批次 `approximate_date` 冒充原始消息时间。
@@ -151,10 +164,10 @@
 
 - alpha.8 功能基线全量回归：有正式数据库安全副本环境时 `186/186` 通过。
 - 最近一次无需正式库的全量回归：`183` 通过、`4` 条正式数据库副本测试按环境变量跳过。
-- 最后一轮 Search feedback UI 微调：相关测试 `8/8` 通过；TypeScript typecheck、Electron production build、WorkBuddy MCP build、Windows installer build 全部通过。
-- 最新安装包：`release/PrivateRadar-Setup-0.2.0-alpha.9-x64.exe`。
-- 最新安装包大小：`116,674,854` 字节；构建时间：`2026-09-19 17:36:15`。
-- Windows 真实 smoke：已完成安装、启动、Daily / Search / Topic / 设置访问、反馈写入与恢复、导出、Search 反馈视觉与交互复测；结果通过。
+- alpha.10 最终回归：Daily `50` 通过；全量 `189` 通过、`4` 跳过；TypeScript typecheck、Electron production build、WorkBuddy MCP build、Windows installer build 全部通过。
+- 最新安装包：`release/PrivateRadar-Setup-0.2.0-alpha.10-x64.exe`。
+- 最新安装包大小：`116,725,107` 字节；构建时间：`2026-09-21 16:00:04`。
+- Windows 真实 smoke：已完成覆盖升级、启动、Daily / Search / Topic / 设置访问与反馈区复测；结果通过。
 - 安装升级与默认卸载不得删除 `%APPDATA%\PrivateRadar`；NSIS 配置 `deleteAppDataOnUninstall: false`。
 - 未配置代码签名；Windows SmartScreen / 未知发布者提示仍是 Alpha 已知限制。
 
@@ -164,7 +177,7 @@
 2. 因此快速导入数据可以用于正文 Search 与 Daily，但 Topic 的独立人数、跨群传播和精确趋势可能降级。
 3. WorkBuddy 分享包路线目前只能可靠导入正文；历史微信本地数据库读取 Spike 已判定 `NO-GO`，不要重新安装、初始化或绕过微信数据保护。
 4. Search V2 依赖小规模、可解释的查询扩展；尚未有真实 Embedding，FTS 使用 `unicode61`，复杂中文同义表达仍可能漏召回。
-5. Daily Value v1 只基于 40 条人工价值标注设计，当前重点是 Precision；已知 MAY_SHOW recall gaps 需要更多真实反馈后再单独立项。
+5. Daily Value v2 仍以有限人工价值标注和确定性规则设计，当前重点是 Precision；新的 MAY_SHOW recall gaps 需要更多真实反馈后再单独立项。
 6. AI Provider / Embedding Provider 是可选架构；无配置时规则模式必须完整可用。
 7. Feedback 导出可能包含用户主动评价过的聊天片段，只能由用户显式触发、选择位置并自行决定如何分享。
 8. WorkBuddy 平台的 Skill/模型编排会带来较长首次响应时间；当前无证据表明 PrivateRadar 本地导入、SQLite 或 FTS 是该瓶颈。
@@ -178,7 +191,7 @@
 4. `src/main/schema.ts`
 5. `src/main/import/normalize.ts`、`src/main/import/fingerprint.ts`、`src/main/import/importer.ts`
 6. `src/main/integrations/workbuddy/README.md` 及同目录实现文件
-7. `src/main/intelligence/daily/pipeline.ts`、`importance-score.ts`、`daily-value.ts`、`brief.ts`、`repository.ts`
+7. `src/main/intelligence/daily/pipeline.ts`、`signals.ts`、`importance-score.ts`、`daily-value.ts`、`brief.ts`、`repository.ts`
 8. `src/main/intelligence/topics/pipeline.ts`、`signal-score.ts`、`repository.ts`
 9. `src/main/retrieval/query-understanding.ts`、`hybrid-search.ts`、`service.ts`
 10. `src/main/feedback/repository.ts`
@@ -188,7 +201,7 @@
 ## NEW_CODEX_SESSION_PROMPT
 
 ```text
-继续 PrivateRadar。请先阅读 docs/PROJECT_CHECKPOINT.md，严格把 0.2.0-alpha.8 视为冻结基线。
+继续 PrivateRadar。请先阅读 docs/PROJECT_CHECKPOINT.md，严格把 0.2.0-alpha.10 视为冻结基线。
 
 不要修改 D1、Daily Value、Search、Topic、WorkBuddy、MCP、SQLite identity、正式数据库或正式安装包，除非我明确指定一个新的版本目标、范围、验收条件和允许改动的模块。
 

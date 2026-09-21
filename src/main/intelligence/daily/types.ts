@@ -24,6 +24,14 @@ export interface MessageFeatures {
   hasNumberOrDate: boolean
   hasEventOrRelease: boolean
   hasFileOrResource: boolean
+  hasExplicitObject: boolean
+  actionRequired: boolean
+  deadlineOrTimeSensitive: boolean
+  consequence: boolean
+  verifiableChange: boolean
+  failureOrLoss: boolean
+  riskOrLimitation: boolean
+  alternativeCost: boolean
   informationDense: boolean
   meaningfulLength: number
 }

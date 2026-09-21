@@ -6,8 +6,8 @@ import { importanceScore, messageInformationScore } from './importance-score'
 import { extractEntityKeys, shouldMerge, similarityTokens, tokenSetSimilarity } from './similarity'
 import type { CandidateCluster, DailyMessage, DailyPipelineResult, MessageFeatures } from './types'
 
-// v1.2：D1 特征不变；最终 Daily 由独立的 Daily Value 层决定展示与排序。
-export const DAILY_ALGORITHM_VERSION = 'daily-candidate-v1.2-daily-value'
+// v1.3：D1 使用行动价值共享信号，候选缓存必须随特征与评分语义失效。
+export const DAILY_ALGORITHM_VERSION = 'daily-candidate-v1.3-action-signals'
 
 export function buildDailyCandidates(
   messages: DailyMessage[],
@@ -202,6 +202,14 @@ function mergeFeatures(left: MessageFeatures, right: MessageFeatures): MessageFe
     hasNumberOrDate: left.hasNumberOrDate || right.hasNumberOrDate,
     hasEventOrRelease: left.hasEventOrRelease || right.hasEventOrRelease,
     hasFileOrResource: left.hasFileOrResource || right.hasFileOrResource,
+    hasExplicitObject: left.hasExplicitObject || right.hasExplicitObject,
+    actionRequired: left.actionRequired || right.actionRequired,
+    deadlineOrTimeSensitive: left.deadlineOrTimeSensitive || right.deadlineOrTimeSensitive,
+    consequence: left.consequence || right.consequence,
+    verifiableChange: left.verifiableChange || right.verifiableChange,
+    failureOrLoss: left.failureOrLoss || right.failureOrLoss,
+    riskOrLimitation: left.riskOrLimitation || right.riskOrLimitation,
+    alternativeCost: left.alternativeCost || right.alternativeCost,
     informationDense: left.informationDense || right.informationDense,
     meaningfulLength: Math.max(left.meaningfulLength, right.meaningfulLength)
   }

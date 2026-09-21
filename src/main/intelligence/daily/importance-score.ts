@@ -16,6 +16,11 @@ export function messageInformationScore(features: MessageFeatures): number {
   if (features.hasEventOrRelease) score += 1.2
   if (features.hasFileOrResource) score += 0.7
   if (features.informationDense) score += 1.2
+  // 单个词不加分；只有行动/变化/失败/风险与明确影响组成强组合时才允许单条消息进入 D1。
+  if (features.actionRequired && (features.deadlineOrTimeSensitive || features.consequence)) score += 1.8
+  if (features.verifiableChange && features.hasExplicitObject) score += 1.8
+  if (features.failureOrLoss) score += 1.8
+  if (features.riskOrLimitation && (features.consequence || features.alternativeCost)) score += 1.8
 
   if (features.meaningfulLength >= 12 && features.meaningfulLength <= 180) score += 1
   else if (features.meaningfulLength > 180 && features.meaningfulLength <= 400) score += 0.6

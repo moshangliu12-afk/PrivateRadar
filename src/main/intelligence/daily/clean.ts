@@ -1,4 +1,5 @@
 import type { DailyIntelligenceConfig } from './config'
+import { analyzeDailyValueSignals } from './signals'
 import type { DailyMessage, MessageFeatures } from './types'
 
 const URL_PATTERN = /https?:\/\/[^\s，。；;!?！？]+/gi
@@ -26,6 +27,7 @@ export function isNoiseMessage(message: DailyMessage, config: DailyIntelligenceC
   const compact = text.replace(/[，,。.!！?？\s]/g, '')
   if (!text) return true
   if (isMediaPlaceholderOnly(text)) return true
+  if (/^https?:\/\/[^\s]+$/i.test(text)) return true
   if (message.messageType.toLowerCase() === 'emoji') return true
   if (isOnlyEmojiOrPunctuation(text)) return true
   if (config.exactNoise.has(compact.toLowerCase())) return true
@@ -40,11 +42,13 @@ export function extractFeatures(message: DailyMessage, config: DailyIntelligence
   const links = Array.from(new Set([...message.links, ...(text.match(URL_PATTERN) ?? [])]))
   const domains = links.map(domainOf).filter(Boolean)
   const semanticText = removeFileNamesAndUrls(text)
+  const valueSignals = analyzeDailyValueSignals(text)
   const hasLink = links.length > 0
   const hasGithub = domains.some((domain) => domain === 'github.com') || /\bgithub\b/i.test(text)
   const hasTrustedLink = domains.some((domain) => config.trustedDomains.has(domain))
-  const hasProductOrVersion = hasProductOrVersionSignal(semanticText)
-  const hasNumberOrDate = hasSemanticNumberOrDate(semanticText)
+  const rawProductOrVersion = hasProductOrVersionSignal(semanticText)
+  const hasProductOrVersion = rawProductOrVersion && !valueSignals.opaqueTokenOnly && (valueSignals.verifiableChange || /发布|更新|上线|开源|公告|报名|截止|漏洞|修复|会议|报告|教程|文档|项目|工具/i.test(semanticText))
+  const hasNumberOrDate = !valueSignals.opaqueTokenOnly && hasSemanticNumberOrDate(semanticText)
   const hasEventOrRelease = /发布|更新|上线|开源|公告|报名|截止|漏洞|修复|会议|发布会|报告/i.test(text)
   const hasFileOrResource = /文件|文档|教程|报告|资料|项目|仓库|代码|下载|PDF|CSV|JSON/i.test(text)
   // 这里只计入已经通过语义校验的信号，文件名中的扩展名、编号和随机串不能叠加为“信息密集”。
@@ -58,6 +62,14 @@ export function extractFeatures(message: DailyMessage, config: DailyIntelligence
     hasNumberOrDate,
     hasEventOrRelease,
     hasFileOrResource,
+    hasExplicitObject: valueSignals.hasExplicitObject,
+    actionRequired: valueSignals.actionRequired,
+    deadlineOrTimeSensitive: valueSignals.deadlineOrTimeSensitive,
+    consequence: valueSignals.consequence,
+    verifiableChange: valueSignals.verifiableChange,
+    failureOrLoss: valueSignals.failureOrLoss,
+    riskOrLimitation: valueSignals.riskOrLimitation,
+    alternativeCost: valueSignals.alternativeCost,
     informationDense,
     meaningfulLength: text.length
   }
