@@ -626,7 +626,33 @@ function SettingsPage({ status, importing, onImportFile, onConfigure, onCheck }:
     if (result.cancelled) return
     setNotice(result.count === 0 ? '没有反馈记录，已导出空的反馈文件。' : `已导出 ${result.count} 条反馈记录。`)
   }
-  return <section className="settings-page"><div className="settings-grid"><div><span>PrivateRadar 版本</span><strong>{status.appVersion}</strong></div><div><span>WorkBuddy</span><strong>{status.workBuddyConnected ? '已连接' : '未连接'}</strong></div><div><span>本地数据库</span><strong>{status.databaseHealthy ? '正常' : '需要检查'}</strong></div><div><span>已导入消息</span><strong>{status.totalMessageCount.toLocaleString()} 条</strong></div><div><span>聊天批次</span><strong>{status.importBatchCount.toLocaleString()} 批</strong></div></div><div className="storage-card"><span>数据存储位置</span><code>{status.dataDirectory}</code><p>聊天原文默认保存在你的电脑上。安装升级和默认卸载不会删除这些数据。</p></div><div className="settings-actions"><button className="primary-action" type="button" onClick={() => void checkConnection()} disabled={checking}>{checking ? '正在检查…' : '检查 WorkBuddy 连接'}</button><button type="button" onClick={() => void onConfigure()}>配置 WorkBuddy</button><button type="button" onClick={() => void openDirectory('data')}>打开数据目录</button><button type="button" onClick={() => void openDirectory('log')}>打开日志目录</button><button type="button" onClick={() => void onImportFile()} disabled={importing}>{importing ? '正在导入…' : '从文件导入'}</button><button type="button" onClick={() => void exportFeedback()}>导出测试反馈</button></div>{notice && <div className={status.workBuddyConnected ? 'mode-notice' : 'error'}>{notice}</div>}</section>
+  return <section className="settings-page">
+    <DataStatusCard status={status} />
+    <div className="settings-grid"><div><span>PrivateRadar 版本</span><strong>{status.appVersion}</strong></div><div><span>本地数据库</span><strong>{status.databaseHealthy ? '正常' : '需要检查'}</strong></div></div>
+    <div className="storage-card"><span>数据存储位置</span><code>{status.dataDirectory}</code><p>聊天原文默认保存在你的电脑上。安装升级和默认卸载不会删除这些数据。</p></div>
+    <div className="settings-actions"><button className="primary-action" type="button" onClick={() => void checkConnection()} disabled={checking}>{checking ? '正在检查…' : '检查 WorkBuddy 连接'}</button><button type="button" onClick={() => void onConfigure()}>配置 WorkBuddy</button><button type="button" onClick={() => void openDirectory('data')}>打开数据目录</button><button type="button" onClick={() => void openDirectory('log')}>打开日志目录</button><button type="button" onClick={() => void onImportFile()} disabled={importing}>{importing ? '正在导入…' : '从文件导入'}</button><button type="button" onClick={() => void exportFeedback()}>导出测试反馈</button></div>
+    {notice && <div className={status.workBuddyConnected ? 'mode-notice' : 'error'}>{notice}</div>}
+  </section>
+}
+
+function DataStatusCard({ status }: { status: FirstUseStatus }): React.JSX.Element {
+  const { latestAttempt, lastSuccessfulImport, latestMessageDate } = status.dataStatus
+  if (!latestAttempt) return <section className="data-status-card data-status-empty">
+    <div><span>数据状态</span><strong>尚未导入聊天数据</strong></div>
+    <div className="data-status-summary"><span>累计</span><strong>{status.totalMessageCount.toLocaleString()} 条消息 · {status.importBatchCount.toLocaleString()} 个聊天批次</strong></div>
+    <div className="data-status-summary"><span>WorkBuddy</span><strong>{status.workBuddyConnected ? '已连接' : '未连接'}</strong></div>
+  </section>
+  const successfulLatest = latestAttempt.status === 'success' || latestAttempt.status === 'partial'
+  return <section className="data-status-card">
+    <div className="data-status-heading"><span>数据状态</span><div className="data-status-recent"><strong>最近一次导入</strong><span>{latestAttempt.source} · {formatDateTime(latestAttempt.completedAt)}</span></div><b className={`import-status ${latestAttempt.status}`}>{importStatusLabel(latestAttempt.status)}</b></div>
+    <div className="data-status-metrics"><span>新增 <strong>{latestAttempt.importedCount}</strong></span><span>重复 <strong>{latestAttempt.duplicateCount}</strong></span><span>更新 <strong>{latestAttempt.updatedCount}</strong></span><span>错误 <strong>{latestAttempt.errorCount}</strong></span></div>
+    {!successfulLatest && lastSuccessfulImport && <div className="data-status-last-success"><span>最近成功导入</span><strong>{lastSuccessfulImport.source} · {formatDateTime(lastSuccessfulImport.completedAt)}</strong></div>}
+    <div className="data-status-facts"><div className="data-status-summary"><span>数据最新至</span><strong>{latestMessageDate ?? '暂无消息'}</strong></div><div className="data-status-summary"><span>累计</span><strong>{status.totalMessageCount.toLocaleString()} 条消息 · {status.importBatchCount.toLocaleString()} 个聊天批次</strong></div><div className="data-status-summary"><span>WorkBuddy</span><strong>{status.workBuddyConnected ? '已连接' : '未连接'}</strong></div></div>
+  </section>
+}
+
+function importStatusLabel(status: 'success' | 'partial' | 'failed'): string {
+  return status === 'success' ? '成功' : status === 'partial' ? '部分完成' : '失败'
 }
 
 function RadarPage({

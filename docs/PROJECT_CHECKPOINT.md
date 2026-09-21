@@ -2,11 +2,11 @@
 
 ## 冻结状态
 
-- 当前版本：`0.2.0-alpha.11`
-- 状态：**最终冻结**。除非有明确的新版本任务，不再修改 alpha.11。
+- 当前版本：`0.2.0-alpha.12`
+- 状态：**最终冻结**。除非有明确的新版本任务，不再修改 alpha.12。
 - 目标平台：Windows 11 x64；Electron 桌面应用。
 - 产品定位：本地优先的个人聊天情报系统。把用户主动导入的聊天记录保存在本机，提供今日情报、跨群话题雷达和“问我的聊天”。
-- 正式安装包：`release/PrivateRadar-Setup-0.2.0-alpha.11-x64.exe`。
+- 正式安装包：`release/PrivateRadar-Setup-0.2.0-alpha.12-x64.exe`。
 
 ## 当前架构
 
@@ -128,6 +128,17 @@
 - 最新安装包：`release/PrivateRadar-Setup-0.2.0-alpha.11-x64.exe`（116,725,947 字节，2026-09-21 17:59:33）。
 - alpha.11 是新的最终冻结基线。
 
+## alpha.12 Settings 数据状态与安装验收
+
+- alpha.12 只新增 Settings“数据状态”区域，复用现有 `import_jobs`、`messages` 与 WorkBuddy 连接状态；没有新增 schema 或 migration。
+- 数据状态区分最近一次终态导入与最近成功导入，展示用户可理解的来源、完成时间、新增、重复、更新与错误数量；不向 Renderer 暴露 `error_details_json`、`source_batch_id`、内部 adapter 名称或不存在的 `skipped_count`。
+- “数据最新至”沿用 Daily 的本地日期归属语义：优先消息真实 `timestamp`，缺失时使用 `imported_at` 参与日期计算；仅展示事实，不做新鲜度评分、过期判断、自动提醒、后台轮询或定时同步。
+- Settings 最终卡片采用紧凑布局：最近导入与轻量状态标签、导入结果指标、数据最新至 / 累计 / WorkBuddy 横向三列；Windows 正式安装版已人工验收通过。
+- 正式验收数据保持为 167 条 messages、14 个 chat batches、167 条 FTS；WorkBuddy 已连接，数据库完整性正常。
+- 未修改 Search、Daily、Topic、WorkBuddy ingest / MCP、SQLite schema、FTS、identity / fingerprint、去重、feedback、EmbeddingProvider 或语义检索相关实现。
+- 最新安装包：`release/PrivateRadar-Setup-0.2.0-alpha.12-x64.exe`（116,726,980 字节，2026-09-21 21:49:54）。
+- alpha.12 是新的最终冻结基线。
+
 ## SQLite、migration 与兼容性约束
 
 正式用户数据目录：
@@ -178,9 +189,10 @@
 - 最近一次无需正式库的全量回归：`183` 通过、`4` 条正式数据库副本测试按环境变量跳过。
 - alpha.10 最终回归：Daily `50` 通过；全量 `189` 通过、`4` 跳过；TypeScript typecheck、Electron production build、WorkBuddy MCP build、Windows installer build 全部通过。
 - alpha.11 最终回归：Daily / dashboard `54` 通过；全量 `194` 通过、`4` 跳过；TypeScript typecheck、Electron production build、WorkBuddy MCP build、Windows installer build 和真实历史浏览 UI 验收全部通过。
-- 最新安装包：`release/PrivateRadar-Setup-0.2.0-alpha.11-x64.exe`。
-- 最新安装包大小：`116,725,947` 字节；构建时间：`2026-09-21 17:59:33`。
-- Windows 真实 smoke：已完成 alpha.10 → alpha.11 覆盖升级、启动、Daily 历史浏览、Search / Topic / 设置访问与反馈区复测；结果通过。
+- alpha.12 最终回归：first-use `9/9` 通过；全量 `198` 通过、`4` 跳过；TypeScript typecheck、Electron production build、WorkBuddy MCP build、Windows installer build 和 Settings 数据状态真实 UI 验收全部通过。
+- 最新安装包：`release/PrivateRadar-Setup-0.2.0-alpha.12-x64.exe`。
+- 最新安装包大小：`116,726,980` 字节；构建时间：`2026-09-21 21:49:54`。
+- Windows 真实 smoke：已完成 alpha.11 → alpha.12 覆盖升级、启动、数据保留、Settings 数据状态与紧凑三列布局验收；结果通过。
 - 安装升级与默认卸载不得删除 `%APPDATA%\PrivateRadar`；NSIS 配置 `deleteAppDataOnUninstall: false`。
 - 未配置代码签名；Windows SmartScreen / 未知发布者提示仍是 Alpha 已知限制。
 
@@ -214,7 +226,7 @@
 ## NEW_CODEX_SESSION_PROMPT
 
 ```text
-继续 PrivateRadar。请先阅读 docs/PROJECT_CHECKPOINT.md，严格把 0.2.0-alpha.11 视为冻结基线。
+继续 PrivateRadar。请先阅读 docs/PROJECT_CHECKPOINT.md，严格把 0.2.0-alpha.12 视为冻结基线。
 
 不要修改 D1、Daily Value、Search、Topic、WorkBuddy、MCP、SQLite identity、正式数据库或正式安装包，除非我明确指定一个新的版本目标、范围、验收条件和允许改动的模块。
 

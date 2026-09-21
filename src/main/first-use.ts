@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { dirname, join } from 'node:path'
-import type { FirstUseStatus, LatestGuidedImport } from '../shared/models'
+import type { DataStatus, DataStatusImport, FirstUseStatus, LatestGuidedImport } from '../shared/models'
 import { acknowledgeConnectorTrust, connectorSetupState, detectWorkBuddyInstalled, inspectWorkBuddyConnection, isWorkBuddyConnectorRegistered } from './deployment'
 
 const CONNECTOR_FRESH_MS = 45_000
@@ -35,7 +35,8 @@ export function getFirstUseStatus(
     databasePath,
     dataDirectory,
     logDirectory: join(dataDirectory, 'logs'),
-    latestImport: latestGuidedImport(db)
+    latestImport: latestGuidedImport(db),
+    dataStatus: readDataStatus(db)
   }
 }
 
@@ -103,6 +104,51 @@ function latestGuidedImport(db: DatabaseSync): LatestGuidedImport | null {
   }
 }
 
+function readDataStatus(db: DatabaseSync): DataStatus {
+  const latestAttempt = importStatus(db.prepare(`
+    SELECT adapter, source_name, file_type, status, recognized_count, imported_count,
+           duplicate_count, updated_count, error_count, started_at,
+           COALESCE(completed_at, started_at) AS completed_at
+    FROM import_jobs
+    WHERE status IN ('success', 'partial', 'failed')
+    ORDER BY completed_at DESC, id DESC LIMIT 1
+  `).get() as ImportJobStatusRow | undefined)
+  const lastSuccessfulImport = importStatus(db.prepare(`
+    SELECT adapter, source_name, file_type, status, recognized_count, imported_count,
+           duplicate_count, updated_count, error_count, started_at,
+           COALESCE(completed_at, started_at) AS completed_at
+    FROM import_jobs
+    WHERE status IN ('success', 'partial')
+    ORDER BY completed_at DESC, id DESC LIMIT 1
+  `).get() as ImportJobStatusRow | undefined)
+  const row = db.prepare(`
+    SELECT MAX(COALESCE(date(NULLIF(timestamp, ''), 'localtime'), date(imported_at, 'localtime'))) AS latest_message_date
+    FROM messages
+  `).get() as { latest_message_date: string | null }
+  return { latestAttempt, lastSuccessfulImport, latestMessageDate: row.latest_message_date }
+}
+
+function importStatus(row: ImportJobStatusRow | undefined): DataStatusImport | null {
+  if (!row) return null
+  return {
+    status: row.status,
+    source: displayImportSource(row),
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
+    recognizedCount: Number(row.recognized_count),
+    importedCount: Number(row.imported_count),
+    duplicateCount: Number(row.duplicate_count),
+    updatedCount: Number(row.updated_count),
+    errorCount: Number(row.error_count)
+  }
+}
+
+function displayImportSource(row: ImportJobStatusRow): string {
+  if (row.adapter === 'workbuddy' || row.adapter.includes('workbuddy')) return 'WorkBuddy'
+  if (row.adapter === 'file' || row.file_type) return '文件导入'
+  return '其他导入'
+}
+
 function capabilityNotice(sender: 'confirmed' | 'missing', timestamp: 'confirmed' | 'approximate' | 'missing'): string {
   if (sender === 'confirmed' && timestamp === 'confirmed') return '今日情报、话题雷达和聊天搜索都可以正常使用。'
   if (sender === 'missing' && timestamp !== 'confirmed') return '今日情报和聊天搜索可以正常使用；由于缺少原始发送人和时间，部分趋势统计精度会降低。'
@@ -146,4 +192,18 @@ interface BatchStatsRow {
   conversation_known: number | null
   sender_known: number | null
   timestamp_known: number | null
+}
+
+interface ImportJobStatusRow {
+  adapter: string
+  source_name: string | null
+  file_type: string | null
+  status: DataStatusImport['status']
+  recognized_count: number
+  imported_count: number
+  duplicate_count: number
+  updated_count: number
+  error_count: number
+  started_at: string
+  completed_at: string
 }

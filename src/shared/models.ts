@@ -219,6 +219,24 @@ export interface LatestGuidedImport {
   completedAt: string
 }
 
+export interface DataStatusImport {
+  status: 'success' | 'partial' | 'failed'
+  source: string
+  startedAt: string
+  completedAt: string
+  recognizedCount: number
+  importedCount: number
+  duplicateCount: number
+  updatedCount: number
+  errorCount: number
+}
+
+export interface DataStatus {
+  latestAttempt: DataStatusImport | null
+  lastSuccessfulImport: DataStatusImport | null
+  latestMessageDate: string | null
+}
+
 export interface FirstUseStatus {
   firstLaunch: boolean
   demoMode: boolean
@@ -235,6 +253,7 @@ export interface FirstUseStatus {
   dataDirectory: string
   logDirectory: string
   latestImport: LatestGuidedImport | null
+  dataStatus: DataStatus
 }
 
 export interface ConnectorSetupResult {
