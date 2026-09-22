@@ -47,10 +47,12 @@ export interface TopicPipelineInput {
 export interface TopicPipelineResult {
   date: string
   historyDays: number
+  historySufficient: boolean
   topics: TopicRadarItem[]
+  newTopics: TopicRadarItem[]
+  warmingTopics: TopicRadarItem[]
 }
 
 export interface TopicMetricDraft {
   trend: TopicTrendPoint[]
 }
-

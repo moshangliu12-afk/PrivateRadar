@@ -3,12 +3,13 @@ import type { DailyCandidate, TopicRadarItem, TopicTrendPoint } from '../../../s
 import { DEFAULT_TOPIC_RADAR_CONFIG } from './config'
 import { recognizeTopicClusters } from './recognition'
 import { calculateSignalScore } from './signal-score'
-import type { TopicPipelineInput } from './types'
+import type { TopicPipelineInput, TopicPipelineResult } from './types'
 
-// Topic 的 D1 importance 输入随 Daily v1.1 更新，故仅升级缓存版本以触发重算。
-export const TOPIC_ALGORITHM_VERSION = 'topic-radar-v1.1-daily-semantic-content'
+// v1.2 将“新出现”和“正在升温”分开，旧缓存不能沿用新的趋势语义。
+export const TOPIC_ALGORITHM_VERSION = 'topic-radar-v1.2-trend-classification'
+export const MINIMUM_TREND_HISTORY_DAYS = 2
 
-export function buildTopicRadar(input: TopicPipelineInput): { date: string; historyDays: number; topics: TopicRadarItem[] } {
+export function buildTopicRadar(input: TopicPipelineInput): TopicPipelineResult {
   const config = input.config ?? DEFAULT_TOPIC_RADAR_CONFIG
   const windowDates = dateRange(input.date, config.historyDays)
   const historyDates = windowDates.slice(0, -1)
@@ -71,14 +72,35 @@ export function buildTopicRadar(input: TopicPipelineInput): { date: string; hist
     })
   }
 
+  const attentionTopics = topics
+    .filter((topic) => topic.signalScore >= config.minimumSignalScore)
+    .sort((left, right) => right.signalScore - left.signalScore || left.firstSeenAt.localeCompare(right.firstSeenAt) || left.topicId.localeCompare(right.topicId))
+    .slice(0, config.topLimit)
+  const historySufficient = availableHistoryDates.length >= MINIMUM_TREND_HISTORY_DAYS
+  const classified = classifyTopicRadarItems(attentionTopics, historySufficient)
+
   return {
     date: input.date,
     historyDays: availableHistoryDates.length,
-    topics: topics
-      .filter((topic) => topic.signalScore >= config.minimumSignalScore)
-      .sort((left, right) => right.signalScore - left.signalScore || left.firstSeenAt.localeCompare(right.firstSeenAt) || left.topicId.localeCompare(right.topicId))
-      .slice(0, config.topLimit)
+    historySufficient,
+    topics: attentionTopics,
+    ...classified
   }
+}
+
+export function classifyTopicRadarItems(
+  topics: TopicRadarItem[],
+  historySufficient: boolean
+): Pick<TopicPipelineResult, 'newTopics' | 'warmingTopics'> {
+  const newTopics = topics.filter((topic) => topic.reasonCodes.includes('NEW_TOPIC'))
+  const warmingTopics = historySufficient
+    ? topics.filter((topic) =>
+      !topic.reasonCodes.includes('NEW_TOPIC') &&
+      topic.messageCount > topic.historicalAvgMessageCount &&
+      topic.growthRate > 0
+    )
+    : []
+  return { newTopics, warmingTopics }
 }
 
 function maxD1Importance(sourceIds: string[], candidates: DailyCandidate[]): number {

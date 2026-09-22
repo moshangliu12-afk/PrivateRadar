@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite'
 import type { DailyCandidate, EvidenceMessage, TopicEvidence, TopicRadarItem, TopicRadarSummary } from '../../../shared/models'
 import { loadMessagesForDate, runDailyIntelligence } from '../daily/repository'
-import { buildTopicRadar, TOPIC_ALGORITHM_VERSION } from './pipeline'
+import { buildTopicRadar, classifyTopicRadarItems, MINIMUM_TREND_HISTORY_DAYS, TOPIC_ALGORITHM_VERSION } from './pipeline'
 
 export function runTopicRadar(db: DatabaseSync, date: string, d1Candidates?: DailyCandidate[]): TopicRadarSummary {
   const candidates = d1Candidates ?? runDailyIntelligence(db, date).candidates
@@ -37,29 +37,33 @@ export function loadSavedTopicRadar(db: DatabaseSync, date: string): TopicRadarS
     FROM messages
     WHERE date(timestamp, 'localtime') < ? AND date(timestamp, 'localtime') >= date(?, '-7 days')
   `).get(date, date) as { count: number }).count)
+  const historySufficient = historyDays >= MINIMUM_TREND_HISTORY_DAYS
+  const topics = rows.map((row) => ({
+    topicId: row.topic_id,
+    canonicalName: row.canonical_name,
+    aliases: JSON.parse(row.aliases_json) as string[],
+    date: row.metric_date,
+    messageCount: row.message_count,
+    conversationCount: row.conversation_count,
+    senderCount: row.sender_count,
+    firstSeenAt: row.first_seen_at,
+    lastSeenAt: row.last_seen_at,
+    historicalAvgMessageCount: row.historical_avg_message_count,
+    historicalAvgConversationCount: row.historical_avg_conversation_count,
+    historicalAvgSenderCount: row.historical_avg_sender_count,
+    growthRate: row.growth_rate,
+    noveltyScore: row.novelty_score,
+    signalScore: row.signal_score,
+    sourceMessageIds: JSON.parse(row.source_message_ids_json) as string[],
+    reasonCodes: JSON.parse(row.reason_codes_json) as TopicRadarItem['reasonCodes'],
+    trend: JSON.parse(row.trend_json) as TopicRadarItem['trend']
+  }))
   return {
     date,
     historyDays,
-    topics: rows.map((row) => ({
-      topicId: row.topic_id,
-      canonicalName: row.canonical_name,
-      aliases: JSON.parse(row.aliases_json) as string[],
-      date: row.metric_date,
-      messageCount: row.message_count,
-      conversationCount: row.conversation_count,
-      senderCount: row.sender_count,
-      firstSeenAt: row.first_seen_at,
-      lastSeenAt: row.last_seen_at,
-      historicalAvgMessageCount: row.historical_avg_message_count,
-      historicalAvgConversationCount: row.historical_avg_conversation_count,
-      historicalAvgSenderCount: row.historical_avg_sender_count,
-      growthRate: row.growth_rate,
-      noveltyScore: row.novelty_score,
-      signalScore: row.signal_score,
-      sourceMessageIds: JSON.parse(row.source_message_ids_json) as string[],
-      reasonCodes: JSON.parse(row.reason_codes_json) as TopicRadarItem['reasonCodes'],
-      trend: JSON.parse(row.trend_json) as TopicRadarItem['trend']
-    }))
+    historySufficient,
+    topics,
+    ...classifyTopicRadarItems(topics, historySufficient)
   }
 }
 

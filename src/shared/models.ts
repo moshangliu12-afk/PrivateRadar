@@ -197,7 +197,10 @@ export interface TopicRadarItem {
 export interface TopicRadarSummary {
   date: string
   historyDays: number
+  historySufficient: boolean
   topics: TopicRadarItem[]
+  newTopics: TopicRadarItem[]
+  warmingTopics: TopicRadarItem[]
   dataQualityNotice?: string | null
 }
 

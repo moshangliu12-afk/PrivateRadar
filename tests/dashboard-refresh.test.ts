@@ -149,7 +149,10 @@ describe('Renderer 数据刷新动作', () => {
 
   it('外部导入发生且 Topic 正在显示时，同时刷新 Daily 并重新请求 Topic', async () => {
     const summary = summaryFixture('2026-09-14')
-    const radar: TopicRadarSummary = { date: '2026-09-14', historyDays: 7, topics: [] }
+    const radar: TopicRadarSummary = {
+      date: '2026-09-14', historyDays: 7, historySufficient: true,
+      topics: [], newTopics: [], warmingTopics: []
+    }
     const api = {
       getDashboardSummary: vi.fn().mockResolvedValue(summary),
       getTopicRadarSummary: vi.fn().mockResolvedValue(radar)

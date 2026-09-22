@@ -98,7 +98,9 @@ header p { margin: 0; color: #77786f; }
 .evidence-message span { font-size: 10px; color: #999b91; }
 .evidence-message p { margin: 4px 0 0; font-size: 12px; line-height: 1.55; }
 .empty-candidates { padding: 28px; text-align: center; color: #85877e; background: #fffdf8; border-radius: 14px; }
-.radar-stats { display: grid; grid-template-columns: repeat(2, minmax(180px, 260px)); gap: 14px; }
+.radar-stats { display: grid; grid-template-columns: repeat(3, minmax(160px, 220px)); gap: 14px; }
+.radar-section + .radar-section { margin-top: 28px; }
+.trend-history-notice { margin: -5px 0 12px; padding: 10px 13px; border-radius: 9px; color: #78672f; background: #f4ecd6; font-size: 12px; }
 .topic-list { display: grid; gap: 10px; }
 .topic-wrap { border: 1px solid #e0dccf; border-radius: 14px; background: #fffdf8; overflow: hidden; }
 .topic-card { display: grid; grid-template-columns: 48px 1fr auto; gap: 18px; align-items: start; padding: 20px 22px; }

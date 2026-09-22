@@ -1,9 +1,9 @@
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
 import { seedDemoData } from '../src/main/demo'
-import { buildTopicRadar } from '../src/main/intelligence/topics/pipeline'
+import { buildTopicRadar, TOPIC_ALGORITHM_VERSION } from '../src/main/intelligence/topics/pipeline'
 import { calculateSignalScore, smoothedGrowthRate } from '../src/main/intelligence/topics/signal-score'
-import { getTopicEvidence, runTopicRadar } from '../src/main/intelligence/topics/repository'
+import { getTopicEvidence, loadSavedTopicRadar, runTopicRadar } from '../src/main/intelligence/topics/repository'
 import type { SignalScoreInput } from '../src/main/intelligence/topics/types'
 import type { DailyMessage } from '../src/main/intelligence/daily/types'
 import { initializeDatabase } from '../src/main/schema'
@@ -91,6 +91,92 @@ describe('E1 话题雷达', () => {
     expect(result.reasonCodes).toContain('NEW_TOPIC')
   })
 
+  it('单条首次出现话题只进入新出现，不进入正在升温', () => {
+    const result = buildTopicRadar({
+      messages: [message('1', '2026-09-12', 'NovaFlow 1.0 正式发布。')],
+      date: '2026-09-12',
+      availableHistoryDates: []
+    })
+    expect(result.newTopics).toHaveLength(1)
+    expect(result.newTopics[0].signalScore).toBeGreaterThanOrEqual(8)
+    expect(result.warmingTopics).toHaveLength(0)
+  })
+
+  it('多条首次出现话题即使高 Signal 也不进入正在升温', () => {
+    const today = Array.from({ length: 6 }, (_, index) =>
+      message(`n${index}`, '2026-09-12', `NovaFlow 2.0 正式发布，新增能力 ${index}。`, `g${index % 3}`, `u${index}`)
+    )
+    const result = buildTopicRadar({ messages: today, date: '2026-09-12', availableHistoryDates: ['2026-09-10', '2026-09-11'] })
+    expect(result.historySufficient).toBe(true)
+    expect(result.newTopics).toHaveLength(1)
+    expect(result.newTopics[0].signalScore).toBeGreaterThanOrEqual(8)
+    expect(result.warmingTopics).toHaveLength(0)
+  })
+
+  it('历史出现过且今日增长时进入正在升温', () => {
+    const messages = [
+      message('h1', '2026-09-10', 'NovaFlow 正式发布。'),
+      message('h2', '2026-09-11', 'NovaFlow 新版发布。'),
+      ...Array.from({ length: 4 }, (_, index) => message(`t${index}`, '2026-09-12', `NovaFlow 今日新增能力 ${index}。`, `g${index % 2}`, `u${index}`))
+    ]
+    const result = buildTopicRadar({ messages, date: '2026-09-12', availableHistoryDates: ['2026-09-10', '2026-09-11'] })
+    expect(result.newTopics).toHaveLength(0)
+    expect(result.warmingTopics).toHaveLength(1)
+    expect(result.warmingTopics[0].growthRate).toBeGreaterThan(0)
+  })
+
+  it('历史出现过但今日持平或下降时不进入正在升温', () => {
+    const steady = buildTopicRadar({
+      messages: [
+        message('s1', '2026-09-10', 'NovaFlow 正式发布。'),
+        message('s2', '2026-09-11', 'NovaFlow 新版发布。'),
+        message('s3', '2026-09-12', 'NovaFlow 今日动态。')
+      ],
+      date: '2026-09-12',
+      availableHistoryDates: ['2026-09-10', '2026-09-11']
+    })
+    const decliningMessages = [
+      ...Array.from({ length: 3 }, (_, index) => message(`a${index}`, '2026-09-10', `NovaFlow 历史发布 ${index}。`)),
+      ...Array.from({ length: 3 }, (_, index) => message(`b${index}`, '2026-09-11', `NovaFlow 历史更新 ${index}。`)),
+      message('c1', '2026-09-12', 'NovaFlow 今日动态。')
+    ]
+    const declining = buildTopicRadar({ messages: decliningMessages, date: '2026-09-12', availableHistoryDates: ['2026-09-10', '2026-09-11'] })
+    expect(steady.warmingTopics).toHaveLength(0)
+    expect(declining.warmingTopics).toHaveLength(0)
+  })
+
+  it.each([
+    [[], false],
+    [['2026-09-11'], false],
+    [['2026-09-10', '2026-09-11'], true]
+  ])('有效历史日期 %j 时 historySufficient=%s', (availableHistoryDates, expected) => {
+    const result = buildTopicRadar({
+      messages: [message('1', '2026-09-12', 'NovaFlow 1.0 正式发布。')],
+      date: '2026-09-12',
+      availableHistoryDates
+    })
+    expect(result.historySufficient).toBe(expected)
+  })
+
+  it('真实 2026-09-20 回归为两个新话题且没有升温话题', () => {
+    const messages = [
+      message('h1', '2026-09-14', '历史日期中的另一个产品 NovaFlow 正式发布。'),
+      message('1', '2026-09-20', '我已经把我这个工具传到GitHub上面去了'),
+      message('2', '2026-09-20', '@所有人 我这边已经把AI工作站的图片模型都换成了GPT-image-2.5，文字模型换成了 Claude-Sonnet-5，成本不变。', 'g2', 'u2')
+    ]
+    const before = JSON.stringify(messages)
+    const result = buildTopicRadar({ messages, date: '2026-09-20', availableHistoryDates: ['2026-09-14'] })
+    expect(result.historyDays).toBe(1)
+    expect(result.historySufficient).toBe(false)
+    expect(result.newTopics).toHaveLength(2)
+    expect(result.newTopics.map((topic) => topic.canonicalName)).toEqual(expect.arrayContaining([
+      '我已经把我这个工具传到GitHub上面去了',
+      'GPT-image-2.5'
+    ]))
+    expect(result.warmingTopics).toHaveLength(0)
+    expect(JSON.stringify(messages)).toBe(before)
+  })
+
   it('历史不足 7 天时使用已有历史日期', () => {
     const messages = [
       message('1', '2026-09-10', 'NovaFlow 1.0 发布工作流功能。'),
@@ -165,8 +251,11 @@ describe('E1 话题雷达', () => {
     const result = runTopicRadar(db, date)
     const topic = result.topics[0]
     const evidence = getTopicEvidence(db, topic.topicId, date)
+    const saved = loadSavedTopicRadar(db, date)
+    const versions = db.prepare('SELECT DISTINCT algorithm_version AS version FROM topic_daily_metrics WHERE metric_date = ?').all(date) as Array<{ version: string }>
     expect(evidence?.messages.map((item) => item.messageId)).toEqual(topic.sourceMessageIds)
     expect(evidence?.messages.every((item) => item.isSource)).toBe(true)
+    expect(saved).not.toBeNull()
+    expect(versions).toEqual([{ version: TOPIC_ALGORITHM_VERSION }])
   })
 })
-

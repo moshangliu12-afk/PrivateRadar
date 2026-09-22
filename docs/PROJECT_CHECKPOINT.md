@@ -2,11 +2,11 @@
 
 ## 冻结状态
 
-- 当前版本：`0.2.0-alpha.12`
-- 状态：**最终冻结**。除非有明确的新版本任务，不再修改 alpha.12。
+- 当前版本：`0.2.0-alpha.13`
+- 状态：**最终冻结**。除非有明确的新版本任务，不再修改 alpha.13。
 - 目标平台：Windows 11 x64；Electron 桌面应用。
 - 产品定位：本地优先的个人聊天情报系统。把用户主动导入的聊天记录保存在本机，提供今日情报、跨群话题雷达和“问我的聊天”。
-- 正式安装包：`release/PrivateRadar-Setup-0.2.0-alpha.12-x64.exe`。
+- 正式安装包：`release/PrivateRadar-Setup-0.2.0-alpha.13-x64.exe`。
 
 ## 当前架构
 
@@ -139,6 +139,18 @@
 - 最新安装包：`release/PrivateRadar-Setup-0.2.0-alpha.12-x64.exe`（116,726,980 字节，2026-09-21 21:49:54）。
 - alpha.12 是新的最终冻结基线。
 
+## alpha.13 Topic Radar 趋势语义拆分与安装验收
+
+- alpha.13 将 Topic Radar 明确拆分为 `newTopics`（新出现）与 `warmingTopics`（正在升温）；`topics` 继续作为达到 Signal attention threshold 的话题全集。
+- `warmingTopics` 只接纳历史中真实出现、今日消息数高于历史日均、`growthRate > 0`、不包含 `NEW_TOPIC` 且 `historySufficient = true` 的话题；Signal Score 继续表示值得注意程度，不再等价于趋势分类。
+- `historyDays` 统计目标日前 7 天窗口内存在原始 `timestamp` 消息的不同本地日期数；`historySufficient` 要求至少 2 个有效历史日期。历史不足时不输出强 warming 结论，并提示“历史数据不足，趋势仅供参考”。
+- Topic 算法版本升级为 `topic-radar-v1.2-trend-classification`；旧缓存自然失效并按现有消息重算，不需要清库、重新导入或 schema migration。
+- 缺少原始 `timestamp` 的消息不参与 Topic 趋势时间判断；不使用 `imported_at` 冒充原始聊天时间。
+- 未修改 Search、Daily、WorkBuddy、MCP、SQLite schema、FTS、identity / fingerprint、去重或 feedback。
+- Windows 正式覆盖安装与人工 UI 验收通过：2026-09-20 历史基线为 1 天，新出现 2 个（GitHub 工具上传、`GPT-image-2.5`），正在升温 0 个；无第三条误入或旧缓存混入。Daily 历史浏览、三项 Search、WorkBuddy、Settings 与两处 feedback 回归正常。
+- 最新安装包：`release/PrivateRadar-Setup-0.2.0-alpha.13-x64.exe`（116,727,123 字节，SHA-256 `013ab3855ef5ef0fa97afed830dec79026f2029e45b9842a08b9f3314915381b`）。
+- alpha.13 是新的最终冻结基线。
+
 ## SQLite、migration 与兼容性约束
 
 正式用户数据目录：
@@ -190,9 +202,10 @@
 - alpha.10 最终回归：Daily `50` 通过；全量 `189` 通过、`4` 跳过；TypeScript typecheck、Electron production build、WorkBuddy MCP build、Windows installer build 全部通过。
 - alpha.11 最终回归：Daily / dashboard `54` 通过；全量 `194` 通过、`4` 跳过；TypeScript typecheck、Electron production build、WorkBuddy MCP build、Windows installer build 和真实历史浏览 UI 验收全部通过。
 - alpha.12 最终回归：first-use `9/9` 通过；全量 `198` 通过、`4` 跳过；TypeScript typecheck、Electron production build、WorkBuddy MCP build、Windows installer build 和 Settings 数据状态真实 UI 验收全部通过。
-- 最新安装包：`release/PrivateRadar-Setup-0.2.0-alpha.12-x64.exe`。
-- 最新安装包大小：`116,726,980` 字节；构建时间：`2026-09-21 21:49:54`。
-- Windows 真实 smoke：已完成 alpha.11 → alpha.12 覆盖升级、启动、数据保留、Settings 数据状态与紧凑三列布局验收；结果通过。
+- alpha.13 最终回归：Topic `21/21` 通过；全量 `206` 通过、`4` 跳过；TypeScript typecheck、Electron production build、WorkBuddy MCP build、Windows installer build 和 Topic Radar 真实 UI 验收全部通过。
+- 最新安装包：`release/PrivateRadar-Setup-0.2.0-alpha.13-x64.exe`。
+- 最新安装包大小：`116,727,123` 字节；构建时间：`2026-09-22 20:42:32`。
+- Windows 真实 smoke：已完成 alpha.12 → alpha.13 覆盖升级、启动、数据保留、Topic 新出现 / 正在升温拆分和核心回归验收；结果通过。
 - 安装升级与默认卸载不得删除 `%APPDATA%\PrivateRadar`；NSIS 配置 `deleteAppDataOnUninstall: false`。
 - 未配置代码签名；Windows SmartScreen / 未知发布者提示仍是 Alpha 已知限制。
 
@@ -207,6 +220,9 @@
 7. Feedback 导出可能包含用户主动评价过的聊天片段，只能由用户显式触发、选择位置并自行决定如何分享。
 8. WorkBuddy 平台的 Skill/模型编排会带来较长首次响应时间；当前无证据表明 PrivateRadar 本地导入、SQLite 或 FTS 是该瓶颈。
 9. 当前主要验证 Windows 11 + WorkBuddy 5.5.5；其他 WorkBuddy 版本、macOS 和全新实体机器覆盖有限。
+10. Search 对 Topic metrics 的存在性检查和 Signal 分数读取目前未按 `algorithm_version` 过滤；当前不影响 alpha.13 Topic UI 与既有 Search 行为，后续算法改版时需要补强。
+11. 当前 167 条消息中 64 条有原始 `timestamp`、103 条缺少原始 `timestamp`；后者不参与 Topic 趋势时间判断。
+12. Semantic Search PoC 因 Transformers.js / ONNX 本机运行时不稳定而暂停，当前不进入正式产品，也不继续 sqlite-vec。
 
 ## 下一版本开始前必须阅读
 
@@ -226,7 +242,7 @@
 ## NEW_CODEX_SESSION_PROMPT
 
 ```text
-继续 PrivateRadar。请先阅读 docs/PROJECT_CHECKPOINT.md，严格把 0.2.0-alpha.12 视为冻结基线。
+继续 PrivateRadar。请先阅读 docs/PROJECT_CHECKPOINT.md，严格把 0.2.0-alpha.13 视为冻结基线。
 
 不要修改 D1、Daily Value、Search、Topic、WorkBuddy、MCP、SQLite identity、正式数据库或正式安装包，除非我明确指定一个新的版本目标、范围、验收条件和允许改动的模块。
 

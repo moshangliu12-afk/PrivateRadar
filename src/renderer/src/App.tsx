@@ -670,14 +670,60 @@ function RadarPage({
     <>
       <section className="radar-stats">
         <Stat label="历史基线" value={radar.historyDays} suffix="天" />
-        <Stat label="正在升温" value={radar.topics.length} suffix="个" />
+        <Stat label="新出现" value={radar.newTopics.length} suffix="个" />
+        <Stat label="正在升温" value={radar.warmingTopics.length} suffix="个" />
       </section>
-      <section className="section-heading">
-        <div><span>相对历史变化 · 本地规则</span><h2>正在升温</h2></div>
-        <small>Signal Score 不等于绝对消息量</small>
-      </section>
-      <section className="topic-list">
-        {radar.topics.map((topic, index) => (
+      <TopicSection
+        title="新出现"
+        description="今天首次出现的话题"
+        topics={radar.newTopics}
+        emptyText="今天没有新出现的话题。"
+        openTopicId={openTopicId}
+        evidence={evidence}
+        onToggleEvidence={onToggleEvidence}
+      />
+      <TopicSection
+        title="正在升温"
+        description="相比近期历史明显增加的话题"
+        topics={radar.warmingTopics}
+        emptyText="暂未发现明显升温的话题。"
+        notice={radar.historySufficient ? null : '历史数据不足，趋势仅供参考'}
+        openTopicId={openTopicId}
+        evidence={evidence}
+        onToggleEvidence={onToggleEvidence}
+      />
+    </>
+  )
+}
+
+function TopicSection({
+  title,
+  description,
+  topics,
+  emptyText,
+  notice,
+  openTopicId,
+  evidence,
+  onToggleEvidence
+}: {
+  title: string
+  description: string
+  topics: TopicRadarSummary['topics']
+  emptyText: string
+  notice?: string | null
+  openTopicId: string
+  evidence: TopicEvidence | null
+  onToggleEvidence: (topicId: string, date: string) => Promise<void>
+}): React.JSX.Element {
+  return (
+    <section className="radar-section">
+      <div className="section-heading">
+        <div><span>{description}</span><h2>{title}</h2></div>
+        <small>Signal Score 表示值得注意程度</small>
+      </div>
+      {notice && <div className="trend-history-notice">{notice}</div>}
+      <div className="topic-list">
+        {topics.map((topic, index) => (
           <div className="topic-wrap" key={topic.topicId}>
             <article className="topic-card">
               <div className="rank">{String(index + 1).padStart(2, '0')}</div>
@@ -701,9 +747,9 @@ function RadarPage({
             {openTopicId === topic.topicId && <TopicEvidencePanel evidence={evidence} />}
           </div>
         ))}
-        {radar.topics.length === 0 && <div className="empty-candidates">今天没有达到升温阈值的话题。</div>}
-      </section>
-    </>
+        {topics.length === 0 && <div className="empty-candidates">{emptyText}</div>}
+      </div>
+    </section>
   )
 }
 
