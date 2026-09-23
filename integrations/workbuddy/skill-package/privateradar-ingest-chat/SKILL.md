@@ -31,6 +31,15 @@ author: PrivateRadar
 10. 用户确认群名后，立即按 `import_mode: quick` 调用正式 Tool；不要再询问日期、发送者或逐条时间。
 11. Tool 成功后只回复导入成功与新增、重复、更新、无效数量；不要重复调用 Tool 做重复校验，不做额外分析。
 
+## 调用前的逐条时间检查（必须）
+
+在调用 `privateradar_ingest_messages` 之前，必须先检查当前材料是否包含能够与每条消息可靠对应的原始时间。快速导入表示少交互、快速完成，不表示忽略材料中已经存在的时间。
+
+- 原始微信或源材料直接显示了某条消息的时间：填写 `timestamp`，并标记 `timestamp_source: source_native`。
+- 用户明确提供了某条消息的时间：填写 `timestamp`，并标记 `timestamp_source: user_supplied`。
+- 没有时间或无法可靠对应到具体消息：省略 `timestamp` 和 `timestamp_source`；快速模式不以追问用户补时间为前置条件。
+- 禁止用 `approximate_date`、`imported_at`、当前时间、消息顺序或正文中的“下午”“昨天”等措辞生成时间，也禁止人工生成等间隔时间。
+
 ## 群名不得推测
 
 - 只有用户明确提供的名称才可写入 `conversation_name`，并标记 `conversation_name_source: user_supplied`。
@@ -58,3 +67,49 @@ author: PrivateRadar
 - 如果用户明确选择“按未知字段导入”，群名、发送人和时间均可省略，直接调用正式 Tool。
 - 只有用户主动要求“提高分析精度”时，才可以一次性询问群名、大致日期和发送人标记；这不是快速导入的默认路径。
 - 单条正文缺失时可随本批提交，让 Tool 将该条记为无效；其余有效消息仍应导入。
+
+## 正式调用示例
+
+源材料含有可逐条对应时间时：
+
+```json
+{
+  "import_mode": "quick",
+  "batch_metadata": {
+    "conversation_name": "产品交流群",
+    "conversation_name_source": "user_supplied"
+  },
+  "messages": [
+    {
+      "platform": "wechat",
+      "conversation_name": "产品交流群",
+      "content": "新版已经发布。",
+      "source_position": 0,
+      "timestamp": "2026-09-20T12:02:00+08:00",
+      "timestamp_source": "source_native"
+    }
+  ]
+}
+```
+
+源材料没有可靠逐条时间时，省略时间字段：
+
+```json
+{
+  "import_mode": "quick",
+  "batch_metadata": {
+    "conversation_name": "产品交流群",
+    "conversation_name_source": "user_supplied"
+  },
+  "messages": [
+    {
+      "platform": "wechat",
+      "conversation_name": "产品交流群",
+      "content": "新版已经发布。",
+      "source_position": 0
+    }
+  ]
+}
+```
+
+缺少时间是允许的；不得为满足字段完整度伪造时间。

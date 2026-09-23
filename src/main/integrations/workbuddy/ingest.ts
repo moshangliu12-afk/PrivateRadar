@@ -22,6 +22,9 @@ export interface WorkBuddyTiming {
 }
 
 export interface WorkBuddyIngestResult extends ImportResult, WorkBuddyBatchSummary {
+  timestampPresentCount: number
+  timestampMissingCount: number
+  timestampInvalidCount: number
   timingMs: WorkBuddyTiming
 }
 
@@ -36,6 +39,7 @@ export class WorkBuddyAdapter {
     const serialized = JSON.stringify({ messages })
     const adapterPrepareMs = performance.now() - prepareStarted
     let pipelineTiming: ImportPipelineTiming | null = null
+    const timestampCounts = { present: 0, missing: 0, invalid: 0 }
     const result = importChatContent(
       this.db,
       'workbuddy-mcp.json',
@@ -50,6 +54,7 @@ export class WorkBuddyAdapter {
         identityScopedFingerprint: true,
         useLegacyFingerprintDedup: false,
         messageSource: 'workbuddy',
+        onTimestampClassified: (status) => { timestampCounts[status] += 1 },
         onTiming: (timing) => { pipelineTiming = timing }
       }
     )
@@ -61,6 +66,9 @@ export class WorkBuddyAdapter {
     return {
       ...result,
       ...batch,
+      timestampPresentCount: timestampCounts.present,
+      timestampMissingCount: timestampCounts.missing,
+      timestampInvalidCount: timestampCounts.invalid,
       timingMs: {
         validationMs,
         adapterPrepareMs,

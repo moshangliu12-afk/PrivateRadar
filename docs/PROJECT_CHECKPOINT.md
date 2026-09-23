@@ -2,11 +2,11 @@
 
 ## 冻结状态
 
-- 当前版本：`0.2.0-alpha.13`
-- 状态：**最终冻结**。除非有明确的新版本任务，不再修改 alpha.13。
+- 当前版本：`0.2.0-alpha.14`
+- 状态：**最终冻结**。除非有明确的新版本任务，不再修改 alpha.14。
 - 目标平台：Windows 11 x64；Electron 桌面应用。
 - 产品定位：本地优先的个人聊天情报系统。把用户主动导入的聊天记录保存在本机，提供今日情报、跨群话题雷达和“问我的聊天”。
-- 正式安装包：`release/PrivateRadar-Setup-0.2.0-alpha.13-x64.exe`。
+- 正式安装包：`release/PrivateRadar-Setup-0.2.0-alpha.14-x64.exe`。
 
 ## 当前架构
 
@@ -35,9 +35,10 @@
   - Connector ID：`privateradar-workbuddy`
   - Tool：`privateradar_ingest_messages`
   - 不使用旧 `privateradar-local-spike`，不使用 Harness、直接 JSON-RPC 或脚本兜底。
-- WorkBuddy 支持快速导入：只确认群名；发送人、逐条时间缺失时保持 `null + unknown`，不补造。
+- WorkBuddy 支持快速导入：少交互、快速导入；仍须提取原材料中已存在且可逐条对应的可靠时间。发送人、逐条时间缺失时保持 `null + unknown`，不补造。
 - 完整导入可记录群名、用户补充的大致日期、可用发送人映射；`approximate_date` 和 `imported_at` **绝不能**写入消息 `timestamp`。
 - 字段来源优先级：`source_native > user_supplied > inferred > unknown`。低可信来源不能覆盖高可信来源。
+- 消息原始时间仅接受原材料直接提供的可靠时间（`source_native`）或用户明确提供的时间（`user_supplied`）；无法确认时为 `unknown`。不得用 `imported_at`、`approximate_date`、当前时间、消息位置、等间隔时间或正文语义推测伪造原始时间。
 - 稳定身份与 fingerprint 已分离：
   - 有 `source_message_id`：优先 `platform + source_message_id`。
   - 无来源 ID：使用 `platform + source_batch_id + source_position + normalized content`。
@@ -87,7 +88,7 @@
 
 - 正式 Connector 包：`integrations/workbuddy/connector/`；运行时代码：`src/main/integrations/workbuddy/`。
 - WorkBuddy GUI → 正式 Connector → `privateradar_ingest_messages` → 正式 SQLite 的端到端链路已真实验收通过。
-- WorkBuddy Skill：`privateradar-ingest-chat 0.2.0-alpha.4-skill.2`，保持不变。
+- WorkBuddy Skill 已随 alpha.14 更新；正式发布资产为 `release/privateradar-ingest-chat-0.2.0-alpha.14.zip`。
 - Connector ID 与 Tool 名不得无理由变更，否则 WorkBuddy 会要求用户重新信任。
 - WorkBuddy 首次 Skill/模型响应耗时属于平台侧；不要为了优化该等待时间改 SQLite、FTS 或 Connector 协议。
 
@@ -151,6 +152,20 @@
 - 最新安装包：`release/PrivateRadar-Setup-0.2.0-alpha.13-x64.exe`（116,727,123 字节，SHA-256 `013ab3855ef5ef0fa97afed830dec79026f2029e45b9842a08b9f3314915381b`）。
 - alpha.13 是新的最终冻结基线。
 
+## alpha.14 WorkBuddy 时间完整性与安装验收
+
+- alpha.14 增强 WorkBuddy 时间完整性规则。quick 模式表示少交互、快速导入，不表示忽略原材料已有的逐条可靠时间；来源区分 `source_native`、`user_supplied` 与 `unknown`。
+- 禁止用 `imported_at`、`approximate_date`、当前时间、消息位置、等间隔时间或正文语义推测补造原始时间。缺少可靠时间的消息允许导入并保持 `timestamp=NULL`、`timestamp_source=unknown`；非法时间使对应消息失败，不静默降级为 NULL。
+- 导入结果新增 `timestampPresentCount`、`timestampMissingCount`、`timestampInvalidCount`；MCP 结构化输出对应 `timestamp_present_count`、`timestamp_missing_count`、`timestamp_invalid_count`。
+- 同一 stable identity 的消息后续获得可靠时间时，在原消息上完成 enrichment：消息 ID、stable identity、fingerprint 不变，不增加重复消息或 FTS 记录。
+- 正式环境已覆盖安装 `0.2.0-alpha.14` 并升级 WorkBuddy Connector。实际安装 Skill 与 alpha.14 正式 Skill 源一致，Skill SHA-256 为 `6A23F75DB154D0D84ADFD6616BAF52737A851A2837CEAE5F85D450E3AD3A616C`。
+- 真实 WorkBuddy 导入“九木测试群”：新增 8、重复 0、更新 0、错误 0；时间统计为 present 0、missing 8、invalid 0。正式库只读核验本批 8 条 timestamp 全部 NULL、来源全部 unknown，原始元数据没有伪造时间字段，也没有重复 stable identity。正式库现为 175 条 messages、175 条 FTS、15 个 chat batches。
+- synthetic MCP 正向测试为 present 2、missing 1、invalid 1：合法时间写入，缺失可为 NULL，非法时间保持失败；同一稳定消息补充真实时间的 enrichment 验证通过。不再为封板人工制造微信完整时间。
+- 历史 103 条缺 timestamp 消息不自动迁移或回填；仅当原始材料仍存在、stable identity 可保持时，未来才适合重新导入补全。
+- 未修改 SQLite schema、identity / fingerprint、FTS、Topic、Daily、Search 或 feedback；Search 的两处 Topic metrics 查询仍未过滤 `algorithm_version`，Semantic Search / ONNX PoC 继续暂停。
+- 正式安装包：`release/PrivateRadar-Setup-0.2.0-alpha.14-x64.exe`（116,728,111 字节，SHA-256 `4e5eca812312f00e8e979050bd8c79d6e4483b66ac3250dc78d59a860a498917`）。正式 Skill ZIP：`release/privateradar-ingest-chat-0.2.0-alpha.14.zip`（2,922 字节，SHA-256 `802b97ef3f13eb36d80e7bda77539002c1e89560a1de12e70a1ec30e7e67f3ca`）。
+- alpha.14 是新的最终冻结基线。
+
 ## SQLite、migration 与兼容性约束
 
 正式用户数据目录：
@@ -203,9 +218,10 @@
 - alpha.11 最终回归：Daily / dashboard `54` 通过；全量 `194` 通过、`4` 跳过；TypeScript typecheck、Electron production build、WorkBuddy MCP build、Windows installer build 和真实历史浏览 UI 验收全部通过。
 - alpha.12 最终回归：first-use `9/9` 通过；全量 `198` 通过、`4` 跳过；TypeScript typecheck、Electron production build、WorkBuddy MCP build、Windows installer build 和 Settings 数据状态真实 UI 验收全部通过。
 - alpha.13 最终回归：Topic `21/21` 通过；全量 `206` 通过、`4` 跳过；TypeScript typecheck、Electron production build、WorkBuddy MCP build、Windows installer build 和 Topic Radar 真实 UI 验收全部通过。
-- 最新安装包：`release/PrivateRadar-Setup-0.2.0-alpha.13-x64.exe`。
-- 最新安装包大小：`116,727,123` 字节；构建时间：`2026-09-22 20:42:32`。
-- Windows 真实 smoke：已完成 alpha.12 → alpha.13 覆盖升级、启动、数据保留、Topic 新出现 / 正在升温拆分和核心回归验收；结果通过。
+- alpha.14 真实 WorkBuddy 时间完整性、synthetic MCP 正向时间和 stable identity enrichment 验收通过；冻结前全量测试为 `211` 通过、`4` 跳过，TypeScript typecheck、Electron production build 与 MCP build 均通过。
+- 最新安装包：`release/PrivateRadar-Setup-0.2.0-alpha.14-x64.exe`。
+- 最新安装包大小：`116,728,111` 字节；SHA-256：`4e5eca812312f00e8e979050bd8c79d6e4483b66ac3250dc78d59a860a498917`。
+- Windows 真实 smoke：已完成 alpha.14 覆盖安装、WorkBuddy Connector 与 Skill 升级、真实无时间材料导入和核心时间链路验收；结果通过。
 - 安装升级与默认卸载不得删除 `%APPDATA%\PrivateRadar`；NSIS 配置 `deleteAppDataOnUninstall: false`。
 - 未配置代码签名；Windows SmartScreen / 未知发布者提示仍是 Alpha 已知限制。
 
@@ -220,8 +236,8 @@
 7. Feedback 导出可能包含用户主动评价过的聊天片段，只能由用户显式触发、选择位置并自行决定如何分享。
 8. WorkBuddy 平台的 Skill/模型编排会带来较长首次响应时间；当前无证据表明 PrivateRadar 本地导入、SQLite 或 FTS 是该瓶颈。
 9. 当前主要验证 Windows 11 + WorkBuddy 5.5.5；其他 WorkBuddy 版本、macOS 和全新实体机器覆盖有限。
-10. Search 对 Topic metrics 的存在性检查和 Signal 分数读取目前未按 `algorithm_version` 过滤；当前不影响 alpha.13 Topic UI 与既有 Search 行为，后续算法改版时需要补强。
-11. 当前 167 条消息中 64 条有原始 `timestamp`、103 条缺少原始 `timestamp`；后者不参与 Topic 趋势时间判断。
+10. Search 对 Topic metrics 的存在性检查和 Signal 分数读取目前未按 `algorithm_version` 过滤；当前不影响 alpha.14 既有 Search 行为，后续算法改版时需要补强。
+11. alpha.13 历史 167 条消息中有 103 条缺少原始 `timestamp`；alpha.14 又新增 8 条经确认缺少原始时间的消息。当前正式库共 175 条消息；缺时间消息不参与 Topic 趋势时间判断，不自动迁移或回填。
 12. Semantic Search PoC 因 Transformers.js / ONNX 本机运行时不稳定而暂停，当前不进入正式产品，也不继续 sqlite-vec。
 
 ## 下一版本开始前必须阅读
@@ -242,7 +258,7 @@
 ## NEW_CODEX_SESSION_PROMPT
 
 ```text
-继续 PrivateRadar。请先阅读 docs/PROJECT_CHECKPOINT.md，严格把 0.2.0-alpha.13 视为冻结基线。
+继续 PrivateRadar。请先阅读 docs/PROJECT_CHECKPOINT.md，严格把 0.2.0-alpha.14 视为冻结基线。
 
 不要修改 D1、Daily Value、Search、Topic、WorkBuddy、MCP、SQLite identity、正式数据库或正式安装包，除非我明确指定一个新的版本目标、范围、验收条件和允许改动的模块。
 

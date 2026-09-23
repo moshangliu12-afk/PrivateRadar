@@ -26,6 +26,7 @@ export interface ImportChatOptions {
   identityScopedFingerprint?: boolean
   useLegacyFingerprintDedup?: boolean
   messageSource?: string
+  onTimestampClassified?: (status: 'present' | 'missing' | 'invalid') => void
   onTiming?: (timing: ImportPipelineTiming) => void
 }
 
@@ -63,7 +64,7 @@ export function importChatContent(
     const normalizeStarted = performance.now()
     for (const [index, row] of parsed.rows.entries()) {
       try {
-        normalized.push(normalizeMessage(row.value, fileName, {
+        const item = normalizeMessage(row.value, fileName, {
           allowMissingMetadata: options.allowMissingMetadata,
           metadataDefaultSource: options.metadataDefaultSource,
           contentDefaultSource: options.contentDefaultSource,
@@ -71,8 +72,13 @@ export function importChatContent(
           sourcePosition: index,
           identityScopedFingerprint: options.identityScopedFingerprint,
           messageSource: options.messageSource
-        }))
+        })
+        normalized.push(item)
+        options.onTimestampClassified?.(item.message.timestamp ? 'present' : 'missing')
       } catch (error) {
+        if (error instanceof Error && error.message === '时间格式无效') {
+          options.onTimestampClassified?.('invalid')
+        }
         errors.push(`${row.location}：${error instanceof Error ? error.message : '消息无效'}`)
       }
     }

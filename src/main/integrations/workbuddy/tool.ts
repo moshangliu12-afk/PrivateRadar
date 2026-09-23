@@ -10,7 +10,7 @@ export function createWorkBuddyMcpServer(db: DatabaseSync, log?: (event: string,
     'privateradar_ingest_messages',
     {
       title: '写入 PrivateRadar 聊天消息',
-      description: '微信聊天导入专用。用户要求导入且群名已确认时立即调用；快速模式允许直接省略未知 sender/timestamp，不得猜测，不要扫描代码或寻找脚本替代方案。成功后只需简短确认统计。',
+      description: '微信聊天导入专用。调用前先检查源材料是否包含可逐条对应的原始时间；有则传 timestamp，无可靠时间才省略，不得猜测。用户要求导入且群名已确认时立即调用，不要扫描代码或寻找脚本替代方案。成功后只需简短确认统计。',
       inputSchema: workBuddyIngestSchema,
       outputSchema: workBuddyResultSchema
     },
@@ -34,6 +34,9 @@ export function createWorkBuddyMcpServer(db: DatabaseSync, log?: (event: string,
         conversation_status: result.conversationStatus,
         sender_status: result.senderStatus,
         timestamp_status: result.timestampStatus,
+        timestamp_present_count: result.timestampPresentCount,
+        timestamp_missing_count: result.timestampMissingCount,
+        timestamp_invalid_count: result.timestampInvalidCount,
         capability_notice: result.capabilityNotice,
         timing_ms: {
           validation: result.timingMs.validationMs,
@@ -59,8 +62,11 @@ export function createWorkBuddyMcpServer(db: DatabaseSync, log?: (event: string,
 }
 
 function resultText(result: ReturnType<typeof ingestWorkBuddyMessages>): string {
-  if (result.status === 'failed') return `导入失败：${result.errors[0] ?? '消息未写入'}`
+  const timestampParts = [`${result.timestampPresentCount} 条已识别`, `${result.timestampMissingCount} 条缺失`]
+  if (result.timestampInvalidCount > 0) timestampParts.push(`${result.timestampInvalidCount} 条格式异常`)
+  const timestampSummary = `时间：${timestampParts.join(' · ')}`
+  if (result.status === 'failed') return `导入失败：${result.errors[0] ?? '消息未写入'}\n${timestampSummary}`
   const summary = `导入完成：新增 ${result.importedCount}，重复 ${result.duplicateCount}，更新 ${result.updatedCount}，无效 ${result.invalidCount}。`
   const metadataIncomplete = result.senderStatus !== 'confirmed' || result.timestampStatus !== 'confirmed'
-  return metadataIncomplete ? `${summary}\n${result.capabilityNotice}` : summary
+  return metadataIncomplete ? `${summary}\n${timestampSummary}\n${result.capabilityNotice}` : `${summary}\n${timestampSummary}`
 }

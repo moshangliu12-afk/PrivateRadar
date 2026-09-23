@@ -64,6 +64,7 @@ describe('WorkBuddy MCP Connector Spike', () => {
     expect(first.timingMs.rpcHandlerMs).toBeGreaterThanOrEqual(0)
     expect(first.timingMs.sqliteWriteAndFtsMs).toBeGreaterThanOrEqual(0)
     expect(first.invalidCount).toBe(1)
+    expect(first).toMatchObject({ timestampPresentCount: 4, timestampMissingCount: 0, timestampInvalidCount: 0 })
 
     const second = ingestWorkBuddyMessages(db, {
       messages: [...messages, { platform: 'wechat', conversation_name: '合成协议演练群', sender_name: '坏数据' }]
@@ -96,10 +97,57 @@ describe('WorkBuddy MCP Connector Spike', () => {
       messages: contents.map((content, source_position) => ({ content, source_position }))
     })
     expect(result.importedCount).toBe(9)
+    expect(result).toMatchObject({ timestampPresentCount: 0, timestampMissingCount: 9, timestampInvalidCount: 0 })
     expect(Object.values(result.timingMs).every((value) => Number.isFinite(value) && value >= 0)).toBe(true)
     expect(result.timingMs.rpcHandlerMs).toBeGreaterThanOrEqual(
       result.timingMs.sqliteWriteAndFtsMs
     )
+    db.close()
+  })
+
+  it('只接受已支持的带时区和无时区标准时间格式', () => {
+    const db = new DatabaseSync(':memory:')
+    initializeDatabase(db)
+    const result = ingestWorkBuddyMessages(db, {
+      source_batch_id: '时间格式回归',
+      messages: [
+        { content: '带时区时间', source_position: 0, timestamp: '2004-02-05T14:37:00+08:00', timestamp_source: 'source_native' },
+        { content: '无时区标准时间', source_position: 1, timestamp: '2004-02-05 14:38:00', timestamp_source: 'user_supplied' }
+      ]
+    })
+    const rows = db.prepare('SELECT timestamp, timestamp_source FROM messages ORDER BY source_position').all()
+    expect(result).toMatchObject({ importedCount: 2, timestampPresentCount: 2, timestampMissingCount: 0, timestampInvalidCount: 0 })
+    expect(rows).toEqual([
+      { timestamp: '2004-02-05T06:37:00.000Z', timestamp_source: 'source_native' },
+      { timestamp: '2004-02-05T06:38:00.000Z', timestamp_source: 'user_supplied' }
+    ])
+    db.close()
+  })
+
+  it('混合批次分别统计合法、缺失和非法时间且非法消息不入库', () => {
+    const db = new DatabaseSync(':memory:')
+    initializeDatabase(db)
+    const valid = Array.from({ length: 6 }, (_, source_position) => ({
+      content: `有时间消息 ${source_position + 1}`,
+      source_position,
+      timestamp: `2004-02-05 14:${String(source_position).padStart(2, '0')}:00`,
+      timestamp_source: 'source_native' as const
+    }))
+    const missing = Array.from({ length: 3 }, (_, index) => ({
+      content: `缺时间消息 ${index + 1}`,
+      source_position: index + 6
+    }))
+    const result = ingestWorkBuddyMessages(db, {
+      source_batch_id: '混合时间完整性',
+      messages: [...valid, ...missing, { content: '非法时间消息', source_position: 9, timestamp: 'not-a-time' }]
+    })
+    expect(result).toMatchObject({
+      status: 'partial', recognizedCount: 9, importedCount: 9, invalidCount: 1,
+      timestampPresentCount: 6, timestampMissingCount: 3, timestampInvalidCount: 1
+    })
+    expect(result.errors).toContain('第 10 条：时间格式无效')
+    expect(db.prepare('SELECT COUNT(*) AS count FROM messages').get()).toEqual({ count: 9 })
+    expect(db.prepare('SELECT COUNT(*) AS count FROM messages_fts').get()).toEqual({ count: 9 })
     db.close()
   })
 
@@ -122,8 +170,12 @@ describe('WorkBuddy MCP Connector Spike', () => {
       status: 'success',
       imported_count: 4,
       duplicate_count: 0,
-      invalid_count: 0
+      invalid_count: 0,
+      timestamp_present_count: 4,
+      timestamp_missing_count: 0,
+      timestamp_invalid_count: 0
     })
+    expect((result.content[0] as { type: 'text'; text: string }).text).toContain('时间：4 条已识别 · 0 条缺失')
     expect((result.structuredContent as { timing_ms: { validation: number } }).timing_ms.validation).toBeGreaterThanOrEqual(0)
 
     await client.close()

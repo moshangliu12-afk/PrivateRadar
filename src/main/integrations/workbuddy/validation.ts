@@ -9,7 +9,7 @@ export const workBuddyMessageSchema = z.object({
   sender_name: z.string().trim().min(1).optional().describe('发送人显示名；缺失时不要补造'),
   sender_name_source: provenanceSchema.optional().describe('发送人来源；未声明时，有值按 user_supplied，缺失按 unknown'),
   timestamp: z.string().trim().min(1).optional().describe('原始消息时间；缺失时不要使用当前时间代替'),
-  timestamp_source: provenanceSchema.optional().describe('时间来源；未声明时，有值按 user_supplied，缺失按 unknown'),
+  timestamp_source: provenanceSchema.optional().describe('时间来源；源材料直接提供用 source_native，用户明确提供用 user_supplied，缺失按 unknown'),
   content: z.string().trim().min(1).optional().describe('原始消息正文，不得总结或改写；缺失时该条记为无效，不影响同批其他消息'),
   content_source: provenanceSchema.optional().describe('正文来源；默认 source_native'),
   source_message_id: z.string().trim().min(1).optional().describe('来源系统可靠消息 ID'),
@@ -48,6 +48,9 @@ export const workBuddyResultSchema = z.object({
   conversation_status: z.enum(['confirmed', 'missing']),
   sender_status: z.enum(['confirmed', 'missing']),
   timestamp_status: z.enum(['confirmed', 'approximate', 'missing']),
+  timestamp_present_count: z.number().int().nonnegative(),
+  timestamp_missing_count: z.number().int().nonnegative(),
+  timestamp_invalid_count: z.number().int().nonnegative(),
   capability_notice: z.string(),
   timing_ms: z.object({
     validation: z.number().nonnegative(),

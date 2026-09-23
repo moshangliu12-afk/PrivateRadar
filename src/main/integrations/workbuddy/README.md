@@ -15,6 +15,32 @@
 
 `approximate_date` 和 `imported_at` 只属于批次，绝不复制到消息 `timestamp`。只有来源可逐条对应的时间才进入消息时间字段。
 
+调用 Tool 前必须先检查当前材料是否包含可逐条对应的原始时间。快速导入只减少交互，不得跳过这项检查。源材料直接提供的时间标记为 `source_native`，用户明确提供的时间标记为 `user_supplied`；没有可靠时间时省略时间字段。
+
+带原始时间的最小消息示例：
+
+```json
+{
+  "conversation_name": "产品交流群",
+  "content": "新版已经发布。",
+  "source_position": 0,
+  "timestamp": "2026-09-20T12:02:00+08:00",
+  "timestamp_source": "source_native"
+}
+```
+
+没有可靠逐条时间时，应使用不含时间字段的消息：
+
+```json
+{
+  "conversation_name": "产品交流群",
+  "content": "新版已经发布。",
+  "source_position": 0
+}
+```
+
+不得使用批次大致日期、导入时间、当前时间、消息顺序或正文措辞推导逐条时间，也不得人工生成等间隔时间。当前明确支持带时区 ISO 8601，以及 `YYYY-MM-DD HH:mm[:ss]` 或等价 `T` 分隔的无时区格式；后者按既定 `+08:00` 规则处理。不正式承诺中文自然语言日期、Unix 数字时间或其他模糊格式。
+
 批次 `completeness_level` 表示当前最高可用完整度：
 
 - `content_only`：只有正文。

@@ -19,6 +19,15 @@ description: 当用户要求把微信分享或当前上下文中的聊天记录�
 6. Tool 可用时只能调用 `privateradar_ingest_messages`。禁止寻找或使用脚本、Harness、stdio、JSON-RPC、手动 `server.mjs` 等替代方案。
 7. Tool 成功后只回复一到两句：导入是否成功，以及新增/重复/更新/无效数量。除非存在数据完整度降级，否则不要追加分析。
 
+## 调用前的逐条时间检查（必须）
+
+在调用 `privateradar_ingest_messages` 之前，必须先检查当前材料是否包含能够与每条消息可靠对应的原始时间。快速导入表示少交互、快速完成，不表示忽略材料中已经存在的时间。
+
+- 原始微信或源材料直接显示了某条消息的时间：为该条填写 `timestamp`，并标记 `timestamp_source: source_native`。
+- 用户明确提供了某条消息的时间：为该条填写 `timestamp`，并标记 `timestamp_source: user_supplied`。
+- 没有时间或无法可靠对应到具体消息：省略该条的 `timestamp` 和 `timestamp_source`；快速模式不以追问用户补时间为前置条件。
+- 禁止用 `approximate_date`、`imported_at`、当前时间、消息顺序或正文中的“下午”“昨天”等措辞生成时间，也禁止人工生成等间隔时间。
+
 ## 快速导入
 
 只确认群名。调用 Tool 时传递 `import_mode: quick`，在 `batch_metadata` 中传群名及 `conversation_name_source: user_supplied`。发送人和时间缺失时省略字段，不得补造，不得再次确认。
@@ -52,3 +61,47 @@ description: 当用户要求把微信分享或当前上下文中的聊天记录�
 - `source_position`：按原始顺序从 0 开始填写；补全元数据时不得改变。
 
 禁止猜测缺失字段。正文缺失的单条消息可以作为无效记录交给 Tool，其余消息继续导入。一次最多提交 500 条。失败时只说明 Tool 返回的错误和可执行的重试建议，不寻找替代通道。
+
+## 正式调用示例
+
+源材料含有可逐条对应时间时：
+
+```json
+{
+  "import_mode": "quick",
+  "batch_metadata": {
+    "conversation_name": "产品交流群",
+    "conversation_name_source": "user_supplied"
+  },
+  "messages": [
+    {
+      "platform": "wechat",
+      "conversation_name": "产品交流群",
+      "content": "新版已经发布。",
+      "source_position": 0,
+      "timestamp": "2026-09-20T12:02:00+08:00",
+      "timestamp_source": "source_native"
+    }
+  ]
+}
+```
+
+源材料没有可靠逐条时间时，正确做法是省略时间，而不是补造：
+
+```json
+{
+  "import_mode": "quick",
+  "batch_metadata": {
+    "conversation_name": "产品交流群",
+    "conversation_name_source": "user_supplied"
+  },
+  "messages": [
+    {
+      "platform": "wechat",
+      "conversation_name": "产品交流群",
+      "content": "新版已经发布。",
+      "source_position": 0
+    }
+  ]
+}
+```
