@@ -24,6 +24,7 @@ export interface BatchImportItem {
   snapshot_relative_path: string | null
   snapshot_sha256: string | null
   source_batch_id: string | null
+  effective_job_id: string | null
   status: BatchImportStatus
   error_summary: string | null
   created_at: string
