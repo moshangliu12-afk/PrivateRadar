@@ -1,0 +1,352 @@
+import { createHash, randomUUID } from 'node:crypto'
+import { createReadStream } from 'node:fs'
+import { copyFile, lstat, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { constants } from 'node:fs'
+import { dirname, join, resolve, sep } from 'node:path'
+import type { DatabaseSync } from 'node:sqlite'
+import { workBuddyIngestSchema, type WorkBuddyIngestInput } from '../integrations/workbuddy/validation'
+import type { BatchImportItem } from './repository'
+
+const ITEM_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const ZIP_NAME = 'original.zip'
+const SNAPSHOT_NAME = 'messages.json'
+const SNAPSHOT_VERSION = 1
+
+export type EvidenceState = 'pending' | 'available' | 'missing' | 'corrupt' | 'error'
+
+export interface EvidencePartResult {
+  status: EvidenceState
+  relativePath: string | null
+  expectedSha256: string | null
+  actualSha256: string | null
+  messageCount?: number
+  error?: string
+}
+
+export interface EvidenceVerification {
+  itemId: string
+  status: EvidenceState
+  zip: EvidencePartResult
+  snapshot: EvidencePartResult
+}
+
+export interface StoredEvidenceFile {
+  relativePath: string
+  sha256: string
+}
+
+export async function saveOriginalZip(
+  db: DatabaseSync,
+  databasePath: string,
+  batchItemId: string,
+  sourceZipPath: string
+): Promise<StoredEvidenceFile> {
+  const item = loadItem(db, batchItemId)
+  const paths = itemPaths(databasePath, batchItemId)
+  let temporaryPath: string | null = null
+  let published = false
+  try {
+    const source = await lstat(sourceZipPath)
+    if (!source.isFile()) throw new Error('源 ZIP 不是普通文件')
+    const sourceHash = await sha256File(sourceZipPath)
+    if (item.attachment_identity && item.attachment_identity !== sourceHash) {
+      throw new EvidenceConflictError('附件项已有不同的 ZIP SHA-256')
+    }
+
+    if (item.evidence_relative_path !== null) {
+      if (item.evidence_relative_path !== paths.zipRelative || item.attachment_identity !== sourceHash) {
+        throw new EvidenceConflictError('附件项已有不同的原始 ZIP 记录')
+      }
+      const existing = await inspectFile(paths.zipPath, sourceHash, paths)
+      if (existing.status !== 'available') throw new EvidenceConflictError('已有原始 ZIP 不可验证，禁止静默替换')
+      return { relativePath: paths.zipRelative, sha256: sourceHash }
+    }
+
+    await ensureSafeDirectory(paths)
+    if (await lstatOrNull(paths.zipPath)) throw new EvidenceConflictError('原始 ZIP 目标路径已存在，禁止覆盖')
+    temporaryPath = join(paths.itemDirectory, `.original-${randomUUID()}.tmp`)
+    await copyFile(sourceZipPath, temporaryPath, constants.COPYFILE_EXCL)
+    if (await sha256File(temporaryPath) !== sourceHash) throw new Error('复制后的 ZIP SHA-256 与源文件不一致')
+    if (await lstatOrNull(paths.zipPath)) throw new EvidenceConflictError('原始 ZIP 目标路径已存在，禁止覆盖')
+    await rename(temporaryPath, paths.zipPath)
+    temporaryPath = null
+    published = true
+    if (await sha256File(paths.zipPath) !== sourceHash) throw new Error('发布后的 ZIP SHA-256 与源文件不一致')
+
+    const updated = db.prepare(`
+      UPDATE batch_import_items
+      SET attachment_identity = ?, evidence_relative_path = ?, evidence_status = 'available',
+          status = CASE WHEN status = 'failed' AND error_summary LIKE '原始 ZIP 保存失败：%'
+            THEN 'pending' ELSE status END,
+          error_summary = NULL, updated_at = ?
+      WHERE id = ? AND evidence_relative_path IS NULL
+        AND (attachment_identity IS NULL OR attachment_identity = ?)
+    `).run(sourceHash, paths.zipRelative, new Date().toISOString(), batchItemId, sourceHash)
+    if (updated.changes !== 1) throw new EvidenceConflictError('附件项原始 ZIP 记录已被其他操作更新')
+    published = false
+    return { relativePath: paths.zipRelative, sha256: sourceHash }
+  } catch (error) {
+    if (published) await rm(paths.zipPath, { force: true }).catch(() => undefined)
+    if (!(error instanceof EvidenceConflictError) && item.evidence_status !== 'available') {
+      db.prepare(`
+        UPDATE batch_import_items SET evidence_status = 'error', status = 'failed',
+          error_summary = ?, updated_at = ? WHERE id = ? AND evidence_relative_path IS NULL
+      `).run(`原始 ZIP 保存失败：${errorMessage(error)}`, new Date().toISOString(), batchItemId)
+    }
+    throw error
+  } finally {
+    if (temporaryPath) await rm(temporaryPath, { force: true }).catch(() => undefined)
+  }
+}
+
+export async function saveStructuredSnapshot(
+  db: DatabaseSync,
+  databasePath: string,
+  batchItemId: string,
+  input: WorkBuddyIngestInput
+): Promise<StoredEvidenceFile> {
+  const item = loadItem(db, batchItemId)
+  const paths = itemPaths(databasePath, batchItemId)
+  let temporaryPath: string | null = null
+  let published = false
+  try {
+    const zip = await inspectRecordedZip(item, paths)
+    if (zip.status !== 'available') throw new Error('原始 ZIP 尚未通过校验，不能保存消息快照')
+    const serializableInput = jsonValue(input)
+    const payload = { schema_version: SNAPSHOT_VERSION, input: serializableInput }
+    const serialized = `${JSON.stringify(payload)}\n`
+    const expectedHash = sha256Bytes(Buffer.from(serialized, 'utf8'))
+    validateSnapshot(serialized, input.messages.length)
+
+    if (item.snapshot_relative_path !== null) {
+      if (item.snapshot_relative_path !== paths.snapshotRelative || item.snapshot_sha256 !== expectedHash) {
+        throw new EvidenceConflictError('附件项已有不同的结构化快照记录')
+      }
+      const existing = await inspectSnapshot(paths.snapshotPath, expectedHash, paths)
+      if (existing.status !== 'available') throw new EvidenceConflictError('已有结构化快照不可验证，禁止静默替换')
+      return { relativePath: paths.snapshotRelative, sha256: expectedHash }
+    }
+
+    await ensureSafeDirectory(paths)
+    if (await lstatOrNull(paths.snapshotPath)) throw new EvidenceConflictError('结构化快照目标路径已存在，禁止覆盖')
+    temporaryPath = join(paths.itemDirectory, `.messages-${randomUUID()}.tmp`)
+    await writeFile(temporaryPath, serialized, { encoding: 'utf8', flag: 'wx' })
+    const savedText = await readFile(temporaryPath, 'utf8')
+    validateSnapshot(savedText, input.messages.length)
+    if (sha256Bytes(Buffer.from(savedText, 'utf8')) !== expectedHash) throw new Error('结构化快照写入后哈希不一致')
+    if (await lstatOrNull(paths.snapshotPath)) throw new EvidenceConflictError('结构化快照目标路径已存在，禁止覆盖')
+    await rename(temporaryPath, paths.snapshotPath)
+    temporaryPath = null
+    published = true
+    const verified = await inspectSnapshot(paths.snapshotPath, expectedHash, paths)
+    if (verified.status !== 'available' || verified.messageCount !== input.messages.length) {
+      throw new Error('发布后的结构化快照未通过校验')
+    }
+
+    const updated = db.prepare(`
+      UPDATE batch_import_items
+      SET snapshot_relative_path = ?, snapshot_sha256 = ?,
+          status = CASE WHEN status = 'failed' AND error_summary LIKE '快照保存失败：%'
+            THEN 'pending' ELSE status END,
+          error_summary = CASE WHEN error_summary LIKE '快照保存失败：%' THEN NULL ELSE error_summary END,
+          updated_at = ?
+      WHERE id = ? AND snapshot_relative_path IS NULL
+    `).run(paths.snapshotRelative, expectedHash, new Date().toISOString(), batchItemId)
+    if (updated.changes !== 1) throw new EvidenceConflictError('附件项快照记录已被其他操作更新')
+    published = false
+    return { relativePath: paths.snapshotRelative, sha256: expectedHash }
+  } catch (error) {
+    if (published) await rm(paths.snapshotPath, { force: true }).catch(() => undefined)
+    if (!(error instanceof EvidenceConflictError) && item.snapshot_relative_path === null) {
+      db.prepare(`
+        UPDATE batch_import_items SET status = 'failed', error_summary = ?, updated_at = ?
+        WHERE id = ? AND snapshot_relative_path IS NULL
+      `).run(`快照保存失败：${errorMessage(error)}`, new Date().toISOString(), batchItemId)
+    }
+    throw error
+  } finally {
+    if (temporaryPath) await rm(temporaryPath, { force: true }).catch(() => undefined)
+  }
+}
+
+export async function verifyBatchEvidence(
+  db: DatabaseSync,
+  databasePath: string,
+  batchItemId: string
+): Promise<EvidenceVerification> {
+  const item = loadItem(db, batchItemId)
+  const paths = itemPaths(databasePath, batchItemId)
+  const zip = await inspectRecordedZip(item, paths)
+  const unregisteredSnapshot = item.snapshot_relative_path === null ? await lstatOrNull(paths.snapshotPath) : null
+  const snapshot = item.snapshot_relative_path === null
+    ? { status: unregisteredSnapshot || item.error_summary?.startsWith('快照保存失败：') ? 'error' : 'pending',
+        relativePath: null, expectedSha256: null, actualSha256: null } as EvidencePartResult
+    : item.snapshot_relative_path !== paths.snapshotRelative || !item.snapshot_sha256
+      ? { status: 'corrupt', relativePath: item.snapshot_relative_path,
+          expectedSha256: item.snapshot_sha256, actualSha256: null, error: '结构化快照记录不完整或路径无效' } as EvidencePartResult
+      : await inspectSnapshot(paths.snapshotPath, item.snapshot_sha256, paths)
+  const status = ['corrupt', 'missing', 'error', 'pending'].find((state) => zip.status === state || snapshot.status === state) as EvidenceState | undefined
+  return { itemId: batchItemId, status: status ?? 'available', zip, snapshot }
+}
+
+export async function loadStructuredSnapshot(
+  db: DatabaseSync,
+  databasePath: string,
+  batchItemId: string
+): Promise<WorkBuddyIngestInput> {
+  const verified = await verifyBatchEvidence(db, databasePath, batchItemId)
+  if (verified.status !== 'available') throw new Error(`附件证据不可用：${verified.status}`)
+  const item = loadItem(db, batchItemId)
+  const paths = itemPaths(databasePath, batchItemId)
+  const bytes = await readFile(paths.snapshotPath)
+  if (sha256Bytes(bytes) !== item.snapshot_sha256) throw new Error('读取结构化快照时哈希发生变化')
+  return validateSnapshot(bytes.toString('utf8')).input
+}
+
+class EvidenceConflictError extends Error {}
+
+interface EvidencePaths {
+  root: string
+  itemDirectory: string
+  zipPath: string
+  zipRelative: string
+  snapshotPath: string
+  snapshotRelative: string
+}
+
+function itemPaths(databasePath: string, batchItemId: string): EvidencePaths {
+  if (!ITEM_ID_PATTERN.test(batchItemId)) throw new Error('附件项编号无效')
+  const dataDirectory = resolve(dirname(databasePath))
+  const root = resolve(dataDirectory, 'evidence')
+  const itemDirectory = resolve(root, batchItemId)
+  if (!itemDirectory.startsWith(`${root}${sep}`)) throw new Error('附件证据目录越界')
+  return {
+    root,
+    itemDirectory,
+    zipPath: join(itemDirectory, ZIP_NAME),
+    zipRelative: `evidence/${batchItemId}/${ZIP_NAME}`,
+    snapshotPath: join(itemDirectory, SNAPSHOT_NAME),
+    snapshotRelative: `evidence/${batchItemId}/${SNAPSHOT_NAME}`
+  }
+}
+
+function loadItem(db: DatabaseSync, batchItemId: string): BatchImportItem {
+  if (!ITEM_ID_PATTERN.test(batchItemId)) throw new Error('附件项编号无效')
+  const item = db.prepare('SELECT * FROM batch_import_items WHERE id = ?').get(batchItemId) as unknown as BatchImportItem | undefined
+  if (!item) throw new Error('附件项不存在')
+  return item
+}
+
+async function ensureSafeDirectory(paths: EvidencePaths): Promise<void> {
+  for (const path of [paths.root, paths.itemDirectory]) {
+    const existing = await lstatOrNull(path)
+    if (existing && (!existing.isDirectory() || existing.isSymbolicLink())) throw new Error('证据目录不是安全的普通目录')
+    if (!existing) await mkdir(path)
+  }
+}
+
+async function inspectRecordedZip(item: BatchImportItem, paths: EvidencePaths): Promise<EvidencePartResult> {
+  if (!item.evidence_relative_path || !item.attachment_identity) {
+    const unregisteredFile = await lstatOrNull(paths.zipPath)
+    return { status: unregisteredFile || item.evidence_status === 'error' ? 'error' : 'pending',
+      relativePath: item.evidence_relative_path, expectedSha256: item.attachment_identity, actualSha256: null }
+  }
+  if (item.evidence_relative_path !== paths.zipRelative) {
+    return { status: 'corrupt', relativePath: item.evidence_relative_path,
+      expectedSha256: item.attachment_identity, actualSha256: null, error: '原始 ZIP 相对路径无效' }
+  }
+  return inspectFile(paths.zipPath, item.attachment_identity, paths)
+}
+
+async function inspectSnapshot(path: string, expectedHash: string, paths: EvidencePaths): Promise<EvidencePartResult> {
+  const file = await inspectFile(path, expectedHash, paths)
+  if (file.status !== 'available') return file
+  try {
+    const snapshot = validateSnapshot(await readFile(path, 'utf8'))
+    return { ...file, messageCount: snapshot.input.messages.length }
+  } catch (error) {
+    return { ...file, status: 'corrupt', error: `结构化快照无效：${errorMessage(error)}` }
+  }
+}
+
+async function inspectFile(path: string, expectedHash: string, paths: EvidencePaths): Promise<EvidencePartResult> {
+  const relativePath = path === paths.zipPath ? paths.zipRelative : paths.snapshotRelative
+  const root = await lstatOrNull(paths.root)
+  const directory = await lstatOrNull(paths.itemDirectory)
+  if (root?.isSymbolicLink() || directory?.isSymbolicLink()) {
+    return { status: 'corrupt', relativePath, expectedSha256: expectedHash, actualSha256: null, error: '证据路径包含符号链接' }
+  }
+  const file = await lstatOrNull(path)
+  if (!file) return { status: 'missing', relativePath, expectedSha256: expectedHash, actualSha256: null }
+  if (!file.isFile() || file.isSymbolicLink()) {
+    return { status: 'corrupt', relativePath, expectedSha256: expectedHash, actualSha256: null, error: '证据不是普通文件' }
+  }
+  try {
+    const actualSha256 = await sha256File(path)
+    return { status: actualSha256 === expectedHash ? 'available' : 'corrupt', relativePath,
+      expectedSha256: expectedHash, actualSha256 }
+  } catch (error) {
+    return { status: 'error', relativePath, expectedSha256: expectedHash, actualSha256: null, error: errorMessage(error) }
+  }
+}
+
+async function lstatOrNull(path: string): Promise<Awaited<ReturnType<typeof lstat>> | null> {
+  try {
+    return await lstat(path)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
+    throw error
+  }
+}
+
+async function sha256File(path: string): Promise<string> {
+  const hash = createHash('sha256')
+  for await (const chunk of createReadStream(path)) hash.update(chunk)
+  return hash.digest('hex')
+}
+
+function sha256Bytes(bytes: Buffer): string {
+  return createHash('sha256').update(bytes).digest('hex')
+}
+
+function validateSnapshot(text: string, expectedCount?: number): { input: WorkBuddyIngestInput } {
+  const value: unknown = JSON.parse(text)
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('结构化快照不是 JSON 对象')
+  const record = value as Record<string, unknown>
+  if (record.schema_version !== SNAPSHOT_VERSION) throw new Error('结构化快照版本不支持')
+  const validated = workBuddyIngestSchema.safeParse(record.input)
+  if (!validated.success) throw new Error('结构化快照消息格式无效')
+  const input = record.input as WorkBuddyIngestInput
+  if (expectedCount !== undefined && input.messages.length !== expectedCount) throw new Error('结构化快照消息数量不一致')
+  return { input }
+}
+
+function jsonValue(value: unknown, visited = new Set<object>()): unknown {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (Array.isArray(value)) {
+    if (visited.has(value)) throw new Error('快照包含循环引用')
+    visited.add(value)
+    const array = value.map((entry) => jsonValue(entry, visited))
+    visited.delete(value)
+    return array
+  }
+  if (typeof value === 'object') {
+    const prototype = Object.getPrototypeOf(value)
+    if (prototype !== Object.prototype && prototype !== null) throw new Error('快照包含非 JSON 对象')
+    if (visited.has(value)) throw new Error('快照包含循环引用')
+    visited.add(value)
+    const source = value as Record<string, unknown>
+    const sorted: Record<string, unknown> = Object.create(null) as Record<string, unknown>
+    for (const key of Object.keys(source).sort()) {
+      if (source[key] !== undefined) sorted[key] = jsonValue(source[key], visited)
+    }
+    visited.delete(value)
+    return sorted
+  }
+  throw new Error('快照包含非 JSON 值')
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : '未知错误'
+}

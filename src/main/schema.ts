@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite'
+import { migrateBatchImportSchema } from './batch-import/schema'
 
 export function initializeDatabase(db: DatabaseSync): void {
   db.exec('PRAGMA journal_mode = WAL')
@@ -336,6 +337,7 @@ export function initializeDatabase(db: DatabaseSync): void {
     CREATE INDEX IF NOT EXISTS idx_messages_source_batch
       ON messages(source_batch_id);
   `)
+  migrateBatchImportSchema(db)
 }
 
 function migrateImportBatchTimes(db: DatabaseSync): void {
