@@ -104,7 +104,7 @@ describe('alpha.15 已保存附件项确定性导入', () => {
     const first = await importSavedBatchItem(f.db, f.databasePath, itemId)
     const before = storedMessages(f.db)
     const firstSource = (f.db.prepare('SELECT source_batch_id FROM batch_import_items WHERE id = ?').get(itemId) as { source_batch_id: string }).source_batch_id
-    const second = await importSavedBatchItem(f.db, f.databasePath, itemId)
+    const second = await importSavedBatchItem(f.db, f.databasePath, itemId, 'deterministic_replay')
     const after = storedMessages(f.db)
     expect(first.jobId).not.toBe(second.jobId)
     expect(first).toMatchObject({ importedCount: 4, duplicateCount: 0 })
@@ -127,7 +127,7 @@ describe('alpha.15 已保存附件项确定性导入', () => {
     const reopened = new DatabaseSync(f.databasePath)
     databases.push(reopened)
     initializeDatabase(reopened)
-    const second = await importSavedBatchItem(reopened, f.databasePath, itemId)
+    const second = await importSavedBatchItem(reopened, f.databasePath, itemId, 'deterministic_replay')
     expect(second.sourceBatchId).toBe(source)
     expect(second).toMatchObject({ importedCount: 0, duplicateCount: 4 })
     expect(listBatchItemJobs(reopened, itemId)).toHaveLength(2)

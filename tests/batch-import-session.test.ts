@@ -68,7 +68,7 @@ describe('alpha.15 双附件会话编排', () => {
     expect(count(f.db, 'messages')).toBe(9)
     expect(count(f.db, 'messages_fts')).toBe(9)
     expect(f.db.prepare('SELECT completed_at FROM batch_import_sessions WHERE id = ?').get(f.session.id)).toMatchObject({ completed_at: expect.any(String) })
-    await expect(executeBatchImportSession(f.db, f.databasePath, f.session.id)).rejects.toThrow('禁止再次首次执行')
+    await expect(executeBatchImportSession(f.db, f.databasePath, f.session.id)).rejects.toThrow('not_pending')
     expect(count(f.db, 'import_jobs')).toBe(2)
   })
 
@@ -144,7 +144,7 @@ describe('alpha.15 双附件会话编排', () => {
     await prepare(f, f.a.id, 4)
     await prepare(f, f.b.id, 1)
     const first = await importSavedBatchItem(f.db, f.databasePath, f.a.id)
-    const second = await importSavedBatchItem(f.db, f.databasePath, f.a.id)
+    const second = await importSavedBatchItem(f.db, f.databasePath, f.a.id, 'deterministic_replay')
     expect(first.importedCount).toBe(4)
     expect(second.duplicateCount).toBe(4)
     f.db.prepare('UPDATE batch_import_items SET effective_job_id = ? WHERE id = ?').run(second.jobId, f.a.id)

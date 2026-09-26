@@ -10,6 +10,34 @@ export interface ReadyBatchItem {
   input: WorkBuddyIngestInput
 }
 
+export type BatchItemClaimResult = 'claimed' | 'already_running' | 'not_executable' | 'terminal'
+
+export class BatchItemClaimError extends Error {
+  constructor(readonly reason: Exclude<BatchItemClaimResult, 'claimed'>) {
+    super(`附件项未取得首次执行权：${reason}`)
+    this.name = 'BatchItemClaimError'
+  }
+}
+
+export function claimBatchItemForFirstImport(db: DatabaseSync, batchItemId: string): BatchItemClaimResult {
+  const now = new Date().toISOString()
+  const claimed = db.prepare(`
+    UPDATE batch_import_items
+    SET status = 'in_progress', error_summary = NULL, updated_at = ?, completed_at = NULL
+    WHERE id = ? AND status IN ('pending', 'preparing') AND effective_job_id IS NULL
+      AND NOT EXISTS (SELECT 1 FROM import_jobs WHERE batch_item_id = batch_import_items.id)
+      AND NOT EXISTS (
+        SELECT 1 FROM messages WHERE source_batch_id = batch_import_items.source_batch_id
+      )
+  `).run(now, batchItemId)
+  if (claimed.changes === 1) return 'claimed'
+  const item = db.prepare('SELECT status FROM batch_import_items WHERE id = ?').get(batchItemId) as { status: BatchImportStatus } | undefined
+  if (!item) return 'not_executable'
+  if (item.status === 'in_progress') return 'already_running'
+  if (['success', 'partial_success', 'failed'].includes(item.status)) return 'terminal'
+  return 'not_executable'
+}
+
 export async function verifyBatchItemReadyForImport(
   db: DatabaseSync,
   databasePath: string,
@@ -32,9 +60,24 @@ export async function verifyBatchItemReadyForImport(
 export async function importSavedBatchItem(
   db: DatabaseSync,
   databasePath: string,
-  batchItemId: string
+  batchItemId: string,
+  mode: 'first' | 'deterministic_replay' = 'first'
 ): Promise<WorkBuddyIngestResult> {
   const initialItem = loadItem(db, batchItemId)
+  if (mode === 'first') {
+    const claim = claimBatchItemForFirstImport(db, batchItemId)
+    if (claim !== 'claimed') throw new BatchItemClaimError(claim)
+  } else {
+    const claimed = db.prepare(`
+      UPDATE batch_import_items
+      SET status = 'in_progress', error_summary = NULL, updated_at = ?, completed_at = NULL
+      WHERE id = ? AND status = 'success'
+    `).run(new Date().toISOString(), batchItemId)
+    if (claimed.changes !== 1) {
+      const current = loadItem(db, batchItemId)
+      throw new BatchItemClaimError(current.status === 'in_progress' ? 'already_running' : 'not_executable')
+    }
+  }
   try {
     // 先校验证据，缺失或损坏时不分配身份，也不创建导入任务。
     if (initialItem.evidence_status !== 'available') throw new Error('原始 ZIP 尚未登记为可用')
@@ -42,7 +85,6 @@ export async function importSavedBatchItem(
     if (verification.status !== 'available') throw new Error(`附件证据未准备好：${verification.status}`)
     ensureSourceBatchId(db, batchItemId)
     const ready = await verifyBatchItemReadyForImport(db, databasePath, batchItemId)
-    updateItemStatus(db, batchItemId, 'in_progress', null, false)
     const result = ingestWorkBuddyMessages(db, ready.input, 0, {
       batchItemId,
       sourceBatchId: ready.sourceBatchId

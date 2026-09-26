@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { loadStructuredSnapshot, verifyBatchEvidence } from './evidence'
-import { importSavedBatchItem } from './import-item'
+import { BatchItemClaimError, importSavedBatchItem } from './import-item'
 import { listBatchImportItems, type BatchImportItem, type BatchImportSession, type BatchImportStatus } from './repository'
 
 export type BatchItemOutcome = 'success' | 'failed_zero_write' | 'needs_attention' | 'pending' | 'processing'
@@ -43,19 +43,39 @@ export interface BatchSessionSummary {
   items: BatchItemSummary[]
 }
 
-const activeSessionIds = new Set<string>()
+export type BatchSessionClaimResult = 'claimed' | 'already_running' | 'not_pending'
+
+export class BatchSessionClaimError extends Error {
+  constructor(readonly reason: Exclude<BatchSessionClaimResult, 'claimed'>) {
+    super(`批量会话未取得首次执行权：${reason}`)
+    this.name = 'BatchSessionClaimError'
+  }
+}
+
+export function claimBatchSessionForFirstExecution(db: DatabaseSync, sessionId: string): BatchSessionClaimResult {
+  const now = new Date().toISOString()
+  const claimed = db.prepare(`
+    UPDATE batch_import_sessions SET status = 'in_progress', updated_at = ?, completed_at = NULL
+    WHERE id = ? AND status = 'pending'
+  `).run(now, sessionId)
+  if (claimed.changes === 1) return 'claimed'
+  const row = db.prepare('SELECT status FROM batch_import_sessions WHERE id = ?').get(sessionId) as { status: BatchImportStatus } | undefined
+  return row?.status === 'in_progress' ? 'already_running' : 'not_pending'
+}
+
+const activeSessionIds = new WeakMap<DatabaseSync, Set<string>>()
 
 export async function executeBatchImportSession(
   db: DatabaseSync,
   databasePath: string,
   sessionId: string
 ): Promise<BatchSessionSummary> {
-  claimLocalExecution(sessionId)
+  claimLocalExecution(db, sessionId)
   try {
     const session = loadSession(db, sessionId)
     const items = listBatchImportItems(db, sessionId)
     if (items.length !== 2) throw new Error('当前批量会话首次执行要求正好两个附件项')
-    if (session.status !== 'pending') throw new Error('批量会话已经开始或结束，禁止再次首次执行')
+    if (session.status !== 'pending') throw new BatchSessionClaimError(session.status === 'in_progress' ? 'already_running' : 'not_pending')
     for (const item of items) {
       if (item.status !== 'pending' || item.effective_job_id || jobIds(db, item.id).length > 0 || linkedMessageCount(db, item) > 0) {
         throw new Error('附件项已有导入记录，不能作为首次会话执行')
@@ -64,17 +84,13 @@ export async function executeBatchImportSession(
     if (items[0].source_batch_id && items[0].source_batch_id === items[1].source_batch_id) {
       throw new Error('两个附件项不能共用来源批次编号')
     }
-    const started = new Date().toISOString()
-    const claimed = db.prepare(`
-      UPDATE batch_import_sessions SET status = 'in_progress', updated_at = ?, completed_at = NULL
-      WHERE id = ? AND status = 'pending'
-    `).run(started, sessionId)
-    if (claimed.changes !== 1) throw new Error('批量会话状态已变化')
+    const claim = claimBatchSessionForFirstExecution(db, sessionId)
+    if (claim !== 'claimed') throw new BatchSessionClaimError(claim)
 
     for (const item of items) await runItem(db, databasePath, item)
     return finalizeSession(db, databasePath, sessionId)
   } finally {
-    activeSessionIds.delete(sessionId)
+    activeSessionIds.get(db)?.delete(sessionId)
   }
 }
 
@@ -83,7 +99,7 @@ export async function resumeInterruptedBatchImportSession(
   databasePath: string,
   sessionId: string
 ): Promise<BatchSessionSummary> {
-  claimLocalExecution(sessionId)
+  claimLocalExecution(db, sessionId)
   try {
     const session = loadSession(db, sessionId)
     if (session.status !== 'in_progress') throw new Error('仅执行中的批量会话可以恢复')
@@ -125,7 +141,7 @@ export async function resumeInterruptedBatchImportSession(
     for (const item of ready) await runItem(db, databasePath, item)
     return finalizeSession(db, databasePath, sessionId)
   } finally {
-    activeSessionIds.delete(sessionId)
+    activeSessionIds.get(db)?.delete(sessionId)
   }
 }
 
@@ -138,24 +154,36 @@ function bindSoleExistingJob(db: DatabaseSync, item: BatchImportItem, jobs: stri
   `).run(jobs[0], new Date().toISOString(), item.id)
 }
 
-function claimLocalExecution(sessionId: string): void {
-  if (activeSessionIds.has(sessionId)) throw new Error('批量会话正在本进程执行')
-  activeSessionIds.add(sessionId)
+function claimLocalExecution(db: DatabaseSync, sessionId: string): void {
+  let active = activeSessionIds.get(db)
+  if (!active) {
+    active = new Set<string>()
+    activeSessionIds.set(db, active)
+  }
+  if (active.has(sessionId)) throw new Error('批量会话正在当前数据库连接执行')
+  active.add(sessionId)
 }
 
 async function runItem(db: DatabaseSync, databasePath: string, item: BatchImportItem): Promise<void> {
   const before = new Set(jobIds(db, item.id))
+  let claimRejected = false
   try {
     await importSavedBatchItem(db, databasePath, item.id)
-  } catch {
+  } catch (error) {
+    if (error instanceof BatchItemClaimError) {
+      claimRejected = true
+      throw error
+    }
     // 附件服务已保存失败状态；保留其他附件已经提交的消息。
   } finally {
-    const added = jobIds(db, item.id).filter((id) => !before.has(id))
-    if (added.length > 1) throw new Error('单附件执行产生多个导入任务，无法确定有效结果')
-    if (added.length === 1) {
-      db.prepare(`
-        UPDATE batch_import_items SET effective_job_id = ?, updated_at = ? WHERE id = ?
-      `).run(added[0], new Date().toISOString(), item.id)
+    if (!claimRejected) {
+      const added = jobIds(db, item.id).filter((id) => !before.has(id))
+      if (added.length > 1) throw new Error('单附件执行产生多个导入任务，无法确定有效结果')
+      if (added.length === 1) {
+        db.prepare(`
+          UPDATE batch_import_items SET effective_job_id = ?, updated_at = ? WHERE id = ?
+        `).run(added[0], new Date().toISOString(), item.id)
+      }
     }
   }
 }
