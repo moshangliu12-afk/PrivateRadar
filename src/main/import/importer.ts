@@ -23,6 +23,7 @@ export interface ImportChatOptions {
   metadataDefaultSource?: MetadataProvenance
   contentDefaultSource?: MetadataProvenance
   sourceBatchId?: string
+  batchItemId?: string
   identityScopedFingerprint?: boolean
   useLegacyFingerprintDedup?: boolean
   messageSource?: string
@@ -51,7 +52,7 @@ export function importChatContent(
   const jobId = randomUUID()
   const startedAt = new Date().toISOString()
   const createJobStarted = performance.now()
-  createJob(db, jobId, fileName, fileType, startedAt, options.adapter ?? 'file')
+  createJob(db, jobId, fileName, fileType, startedAt, options.adapter ?? 'file', options.batchItemId)
   let importJobMs = performance.now() - createJobStarted
 
   try {
@@ -170,11 +171,11 @@ export function importChatContent(
   }
 }
 
-function createJob(db: DatabaseSync, jobId: string, fileName: string, fileType: FileType, startedAt: string, adapter: string): void {
+function createJob(db: DatabaseSync, jobId: string, fileName: string, fileType: FileType, startedAt: string, adapter: string, batchItemId?: string): void {
   db.prepare(`
-    INSERT INTO import_jobs (id, adapter, source_name, file_type, status, started_at)
-    VALUES (?, ?, ?, ?, 'running', ?)
-  `).run(jobId, adapter, fileName, fileType, startedAt)
+    INSERT INTO import_jobs (id, adapter, source_name, file_type, status, started_at, batch_item_id)
+    VALUES (?, ?, ?, ?, 'running', ?, ?)
+  `).run(jobId, adapter, fileName, fileType, startedAt, batchItemId ?? null)
 }
 
 function finishJob(db: DatabaseSync, result: ImportResult, totalCount: number): void {

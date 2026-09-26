@@ -28,13 +28,18 @@ export interface WorkBuddyIngestResult extends ImportResult, WorkBuddyBatchSumma
   timingMs: WorkBuddyTiming
 }
 
+export interface WorkBuddyImportContext {
+  batchItemId?: string
+  sourceBatchId?: string
+}
+
 export class WorkBuddyAdapter {
   constructor(private readonly db: DatabaseSync) {}
 
-  ingest(input: WorkBuddyIngestInput, validationMs = 0): WorkBuddyIngestResult {
+  ingest(input: WorkBuddyIngestInput, validationMs = 0, context: WorkBuddyImportContext = {}): WorkBuddyIngestResult {
     const handlerStarted = performance.now()
     const prepareStarted = performance.now()
-    const sourceBatchId = resolveSourceBatchId(input)
+    const sourceBatchId = context.sourceBatchId ?? resolveSourceBatchId(input)
     const messages = input.messages.map((message, index) => applyBatchMetadata(message, index, input))
     const serialized = JSON.stringify({ messages })
     const adapterPrepareMs = performance.now() - prepareStarted
@@ -51,6 +56,7 @@ export class WorkBuddyAdapter {
         metadataDefaultSource: 'user_supplied',
         contentDefaultSource: 'source_native',
         sourceBatchId,
+        batchItemId: context.batchItemId,
         identityScopedFingerprint: true,
         useLegacyFingerprintDedup: false,
         messageSource: 'workbuddy',
@@ -84,8 +90,13 @@ export class WorkBuddyAdapter {
   }
 }
 
-export function ingestWorkBuddyMessages(db: DatabaseSync, input: WorkBuddyIngestInput, validationMs = 0): WorkBuddyIngestResult {
-  return new WorkBuddyAdapter(db).ingest(input, validationMs)
+export function ingestWorkBuddyMessages(
+  db: DatabaseSync,
+  input: WorkBuddyIngestInput,
+  validationMs = 0,
+  context: WorkBuddyImportContext = {}
+): WorkBuddyIngestResult {
+  return new WorkBuddyAdapter(db).ingest(input, validationMs, context)
 }
 
 function emptyPipelineTiming(): ImportPipelineTiming {
