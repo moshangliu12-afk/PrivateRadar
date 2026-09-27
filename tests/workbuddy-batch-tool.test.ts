@@ -142,6 +142,41 @@ describe('alpha.15 WorkBuddy 双附件批量 Tool', () => {
     }
   })
 
+  it('当前卡片元数据分别给出真实前缀路径时，显示名不同也只按各自路径保存证据', async () => {
+    const f = fixture()
+    const cardA = {
+      chipId: '当前卡片-A', displayName: '聊天记录_A.zip',
+      copiedPath: join(f.chatHistoryRoot, '唯一前缀-A-聊天记录_A.zip')
+    }
+    const cardB = {
+      chipId: '当前卡片-B', displayName: '聊天记录_B.zip',
+      copiedPath: join(f.chatHistoryRoot, '唯一前缀-B-聊天记录_B.zip')
+    }
+    writeZip(cardA.copiedPath, 3)
+    writeZip(cardB.copiedPath, 4)
+    const input = { attachments: [cardA, cardB].map((card, index) => ({
+      ...attachment(card.copiedPath, index === 0 ? '甲' : '乙', index + 1),
+      display_name: card.displayName,
+      source_hint: card.chipId
+    })) }
+    const result = await ingestWorkBuddyBatch(f.db, f.options, input)
+    expect(result.status).toBe('success')
+    expect(result.items.map((item) => item.imported)).toEqual([1, 2])
+    expect(result.items.map((item) => item.attachment_identity)).toEqual([
+      createHash('sha256').update(readFileSync(cardA.copiedPath)).digest('hex'),
+      createHash('sha256').update(readFileSync(cardB.copiedPath)).digest('hex')
+    ])
+    expect(f.db.prepare('SELECT attachment_name, source_hint FROM batch_import_items ORDER BY ordinal').all()).toEqual([
+      { attachment_name: cardA.displayName, source_hint: cardA.chipId },
+      { attachment_name: cardB.displayName, source_hint: cardB.chipId }
+    ])
+    for (const [index, item] of result.items.entries()) {
+      const rows = f.db.prepare('SELECT content FROM messages WHERE source_batch_id = ? ORDER BY source_position')
+        .all(item.source_batch_id) as Array<{ content: string }>
+      expect(rows.map((row) => row.content)).toEqual(index === 0 ? ['甲 原文 0'] : ['乙 原文 0', '乙 原文 1'])
+    }
+  })
+
   it('源文本未提供逐条时间时，批量消息时间保持空值与未知来源', async () => {
     const f = fixture()
     const result = await ingestWorkBuddyBatch(f.db, f.options, { attachments: [
