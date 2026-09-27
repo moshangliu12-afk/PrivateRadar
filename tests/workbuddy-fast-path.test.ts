@@ -31,6 +31,19 @@ describe('WorkBuddy 微信导入最短路径', () => {
     expect(content).toContain('chat-history')
   })
 
+  it.each([['Connector Skill', skill], ['Skill 包', packagedSkill]] as const)('%s 禁止路径缺失时发现文件及导入后写记忆', (_label, content) => {
+    expect(content).toContain('当前附件真实路径不可用')
+    expect(content).toContain('停止导入')
+    expect(content).toMatch(/(?:禁止|不得)列举或扫描 `chat-history`/)
+    expect(content).toContain('搜索相似文件名')
+    expect(content).toContain('寻找最新 ZIP')
+    expect(content).toContain('按时间戳推断路径')
+    expect(content).toContain('读取历史附件补救')
+    expect(content).toContain('`MEMORY.md`')
+    expect(content).toContain('WorkBuddy memory')
+    expect(content).toContain('当日记忆文件')
+  })
+
   it.each([['Connector Skill', skill], ['Skill 包', packagedSkill]] as const)('%s 要求先检查逐条时间且不伪造', (_label, content) => {
     expect(content).toContain('调用前的逐条时间检查（必须）')
     expect(content).toContain('快速导入表示少交互、快速完成，不表示忽略材料中已经存在的时间')

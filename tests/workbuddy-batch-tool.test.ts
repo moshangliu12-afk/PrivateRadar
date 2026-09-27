@@ -165,18 +165,33 @@ describe('alpha.15 WorkBuddy 双附件批量 Tool', () => {
     expect(count(f.db, 'batch_import_sessions')).toBe(0)
   })
 
-  it('第二附件 ZIP 缺失时保留两项，第一附件仍导入且会话部分成功', async () => {
+  it.each([0, 1])('附件 %i 路径不存在时先拒绝，不能登记任何会话、附件项或任务', async (missingIndex) => {
     const f = fixture()
-    rmSync(f.secondZip)
-    const result = await ingestWorkBuddyBatch(f.db, f.options, { attachments: [
+    rmSync(missingIndex === 0 ? f.firstZip : f.secondZip)
+    await expect(ingestWorkBuddyBatch(f.db, f.options, { attachments: [
       attachment(f.firstZip, '甲', 3), attachment(f.secondZip, '乙', 6)
+    ] })).rejects.toThrow('当前附件真实路径不可用')
+    expect(count(f.db, 'batch_import_sessions')).toBe(0)
+    expect(count(f.db, 'batch_import_items')).toBe(0)
+    expect(count(f.db, 'import_jobs')).toBe(0)
+    expect(count(f.db, 'messages')).toBe(0)
+  })
+
+  it('两路径均存在但第二附件快照保存失败时，保留部分成功会话', async () => {
+    const f = fixture()
+    const second = attachment(f.secondZip, '乙', 6)
+    // 仅在隔离测试中注入无法序列化的值，使故障发生在路径预检与原 ZIP 保存之后。
+    Object.assign(second.messages[0], { snapshot_fault: BigInt(1) })
+    const result = await ingestWorkBuddyBatch(f.db, f.options, { attachments: [
+      attachment(f.firstZip, '甲', 3), second
     ] })
     expect(result).toMatchObject({ status: 'partial_success', summary: {
       attachments_total: 2, attachments_completed: 2, imported_total: 3, failed_attachments: 1
     } })
     expect(result.items[0]).toMatchObject({ outcome: 'success', imported: 3 })
     expect(result.items[1]).toMatchObject({ outcome: 'failed_zero_write', effective_job_id: null, imported: 0 })
-    expect(result.items[1].error_summary).toContain('原始 ZIP 保存失败')
+    expect(result.items[1].error_summary).toContain('快照保存失败')
+    expect(count(f.db, 'batch_import_sessions')).toBe(1)
     expect(count(f.db, 'batch_import_items')).toBe(2)
     expect(count(f.db, 'import_jobs')).toBe(1)
     expect(count(f.db, 'messages')).toBe(3)

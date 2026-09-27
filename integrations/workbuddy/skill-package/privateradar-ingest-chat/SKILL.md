@@ -5,7 +5,7 @@ display_name_en: PrivateRadar Chat Import
 description: 将当前分享的微信聊天以最短路径导入 PrivateRadar。
 description_zh: 将当前分享的微信聊天以最短路径导入 PrivateRadar。
 description_en: Import the currently shared chat into PrivateRadar using the shortest safe path.
-version: 0.2.0-alpha.15-skill.1
+version: 0.2.0-alpha.15-skill.2
 author: PrivateRadar
 ---
 
@@ -27,10 +27,11 @@ author: PrivateRadar
 6. 只有一个当前聊天附件时继续调用 `privateradar_ingest_messages`；恰有两个时只调用一次 `privateradar_ingest_batch`，不调用两次旧 Tool。
 7. 超过两个当前聊天附件时明确回复“当前 alpha.15 批量入口只支持同次两个聊天附件”，不只取前两个，也不自动拆批；没有附件时不创建批量会话。
 8. 两附件各自读取当前输入明确提供的 ZIP 路径和聊天文本，各自建立原顺序的 `messages`；ZIP A 与消息 A、ZIP B 与消息 B 一一对应，不合并、不按时间重排。
-9. 两附件调用中的 `source_zip_path` 必须是当前输入明确提供的原始 ZIP 绝对路径；没有路径时说明无法提交批量导入，不扫描 `chat-history`，不猜最新文件，不使用历史附件。
+9. 两附件调用中的 `source_zip_path` 必须是当前输入明确提供、与各卡片一一对应的真实 ZIP 绝对路径。只有展示文件名、拼接临时根目录后的路径、或不能确认存在的路径，都不算真实路径。路径缺失或 Tool 报“当前附件真实路径不可用”时，停止导入并返回“当前附件真实路径不可用”；不得列举或扫描 `chat-history`，不得搜索相似文件名、寻找最新 ZIP、按时间戳推断路径或读取历史附件补救。只有当前输入已明确给出真实路径字段时才可使用它。
 10. 快速导入是默认模式。群名缺失时直接省略 `conversation_name` 和相关来源字段，不阻塞导入、不要求用户猜测。
 11. `sender_name` 和 `timestamp` 缺失时直接省略对应字段：不主动询问、不推测、不补造，也绝不传字符串 `"unknown"`。
 12. Tool 成功后只回复整次导入与每个附件的真实计数；不要重复调用 Tool 做重复校验，不做额外分析。
+13. 本次 PrivateRadar 导入期间及导入后，除非用户明确要求记录记忆，否则不得创建或修改 `MEMORY.md`、WorkBuddy memory 日志或当日记忆文件；不得总结导入经验写入全局或用户记忆，尤其不得记录“下次扫描目录寻找 ZIP”之类的路径补救经验。
 
 ## 调用前的逐条时间检查（必须）
 

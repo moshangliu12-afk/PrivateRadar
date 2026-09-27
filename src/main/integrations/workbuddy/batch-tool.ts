@@ -1,6 +1,6 @@
 import { lstat, realpath, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import { McpServer } from '@modelcontextprotocol/server'
 import { createBatchImportItem, createBatchImportSession, listBatchImportItems } from '../../batch-import/repository'
@@ -24,7 +24,7 @@ export function registerWorkBuddyBatchTool(
     'privateradar_ingest_batch',
     {
       title: '批量写入 PrivateRadar 两个微信聊天附件',
-      description: '仅接收当前同一次输入明确提供的两个聊天 ZIP 路径及各自的消息数组；每个附件最多 500 条。群名与逐条时间缺失时省略，不得猜测。',
+      description: '仅接收当前同一次输入明确提供的两个真实聊天 ZIP 绝对路径及各自的消息数组；路径必须存在，不得扫描目录寻找文件。每个附件最多 500 条。群名与逐条时间缺失时省略，不得猜测。',
       inputSchema: workBuddyBatchIngestSchema,
       outputSchema: workBuddyBatchResultSchema
     },
@@ -153,10 +153,10 @@ async function validateWorkBuddyZipPath(sourcePath: string, rootPath: string): P
   try {
     info = await lstat(candidate)
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
-    // 根目录内明确给出的文件暂时缺失，保留为该附件的零写入证据失败。
-    assertInside(canonicalRoot, await realpath(dirname(candidate)), true)
-    return candidate
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new Error('当前附件真实路径不可用：原始 ZIP 不存在')
+    }
+    throw error
   }
   if (!info.isFile() || info.isSymbolicLink()) throw new Error('原始 ZIP 路径不是普通文件')
   assertInside(canonicalRoot, await realpath(candidate))
