@@ -55,15 +55,16 @@ export function createBatchImportItem(
   batchSessionId: string,
   ordinal: number,
   attachmentName: string | null = null,
-  attachmentIdentity: string | null = null
+  attachmentIdentity: string | null = null,
+  sourceHint: string | null = null
 ): BatchImportItem {
   const id = randomUUID()
   const now = new Date().toISOString()
   db.prepare(`
     INSERT INTO batch_import_items (
-      id, batch_session_id, ordinal, attachment_name, attachment_identity, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(id, batchSessionId, ordinal, attachmentName, attachmentIdentity, now, now)
+      id, batch_session_id, ordinal, attachment_name, attachment_identity, source_hint, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, batchSessionId, ordinal, attachmentName, attachmentIdentity, sourceHint, now, now)
   return db.prepare('SELECT * FROM batch_import_items WHERE id = ?').get(id) as unknown as BatchImportItem
 }
 

@@ -1,12 +1,15 @@
 # WorkBuddyAdapter
 
-正式接入只通过 WorkBuddy 官方本地 stdio MCP Connector 调用 `privateradar_ingest_messages`。运行时代码由以下部分组成：
+正式接入通过 WorkBuddy 官方本地 stdio MCP Connector。单附件保留 `privateradar_ingest_messages`；同次恰好两个附件使用 `privateradar_ingest_batch`。运行时代码由以下部分组成：
 
 - `server.ts`：stdio 进程生命周期与不含正文的生命周期日志。
 - `tool.ts`：MCP Tool 注册及结构化输入、输出。
 - `validation.ts`：字段、来源标记及批量上限。
 - `ingest.ts`：WorkBuddy 输入到既有导入、标准化、身份、去重和 SQLite 流程的适配。
 - `batch-metadata.ts`：批次元数据、完整度计算和能力降级提示。
+- `batch-tool.ts`：两附件输入、临时 ZIP 路径边界、证据保存及现有会话编排的接线。
+
+批量 Tool 要求调用方明确传入两个附件各自的 ZIP 绝对路径和消息数组，单项最多 500 条。默认允许根目录由当前用户主目录定位到 `.workbuddy/app/tmp/chat-history`；测试可注入独立临时根目录。越界、目录和符号链接路径在创建会话前拒绝；根目录内已明确给出的 ZIP 若缺失，则保留该附件的零写入失败记录。临时文件名仅用于展示，稳定身份由附件项编号和 ZIP SHA-256 承担。连接器不会扫描目录，也不会根据文件名或文件时间配对消息。
 
 ## 两种导入模式
 

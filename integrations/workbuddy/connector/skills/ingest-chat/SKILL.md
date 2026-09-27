@@ -7,36 +7,39 @@ description: 当用户要求把微信分享或当前上下文中的聊天记录�
 
 用户明确要求导入时，正常路径必须收敛为：
 
-`解析分享 → 必要时只确认群名 → 立即调用 privateradar_ingest_messages → 简短确认`
+`识别当前附件数 → 逐附件解析分享 → 调用对应导入 Tool → 简短确认`
 
 ## 最短路径（必须遵守）
 
 1. 只读取用户分享的聊天内容，只提取原始顺序、正文、可见 URL，以及来源真实提供的群名、发送人和时间。
 2. 不做话题分析、摘要或内容评价，不浏览项目代码，不检查数据库，不扫描脚本，不写工作日志或记忆文件。
-3. 快速导入是默认模式。若群名已经存在于分享或用户消息中，直接调用 Tool，不再询问导入模式。
-4. 若群名缺失，只问一次：“这份聊天的群名/会话名是什么？默认按快速导入，发送人和时间缺失可直接省略。”不要逐条追问。
+3. 快速导入是默认模式。群名缺失时省略 `conversation_name`，不阻塞导入，不要求用户猜测。
+4. 当前输入只有一个聊天附件时沿用 `privateradar_ingest_messages`；恰有两个时各自读取当前明确提供的 ZIP 路径与聊天文本，各自建立消息数组，只调用一次 `privateradar_ingest_batch`。
 5. 用户明确说发送人或时间未知、允许按 `unknown` 处理时，调用参数中直接省略对应字段；绝不能传字符串 `"unknown"`，也不再尝试推测。
-6. Tool 可用时只能调用 `privateradar_ingest_messages`。禁止寻找或使用脚本、Harness、stdio、JSON-RPC、手动 `server.mjs` 等替代方案。
-7. Tool 成功后只回复一到两句：导入是否成功，以及新增/重复/更新/无效数量。除非存在数据完整度降级，否则不要追加分析。
+6. 超过两个聊天附件时明确回复“当前 alpha.15 批量入口只支持同次两个聊天附件”；不得只取前两个或自动拆批。没有附件时不创建批量会话。
+7. ZIP 必须来自当前输入明确给出的绝对路径；禁止列举或扫描 `chat-history`、猜最新 ZIP、使用历史附件。ZIP A 只配消息 A，ZIP B 只配消息 B，不合并数组、不按时间重排。
+8. 只能调用对应的正式 MCP Tool。禁止寻找或使用脚本、Harness、stdio、JSON-RPC、手动 `server.mjs` 等替代方案。
+9. Tool 成功后只回复整次导入和各附件的真实新增/重复/更新/无效数量。除非存在数据完整度降级，否则不要追加分析。
 
 ## 调用前的逐条时间检查（必须）
 
-在调用 `privateradar_ingest_messages` 之前，必须先检查当前材料是否包含能够与每条消息可靠对应的原始时间。快速导入表示少交互、快速完成，不表示忽略材料中已经存在的时间。
+在调用导入 Tool 之前，必须逐附件检查当前材料是否包含能够与每条消息可靠对应的原始时间。快速导入表示少交互、快速完成，不表示忽略材料中已经存在的时间。
 
 - 原始微信或源材料直接显示了某条消息的时间：为该条填写 `timestamp`，并标记 `timestamp_source: source_native`。
 - 用户明确提供了某条消息的时间：为该条填写 `timestamp`，并标记 `timestamp_source: user_supplied`。
 - 没有时间或无法可靠对应到具体消息：省略该条的 `timestamp` 和 `timestamp_source`；快速模式不以追问用户补时间为前置条件。
 - 禁止用 `approximate_date`、`imported_at`、当前时间、消息顺序或正文中的“下午”“昨天”等措辞生成时间，也禁止人工生成等间隔时间。
+- 原文未写时区时，`+08:00` 只是系统解释，不是原文原生字段。
 
 ## 快速导入
 
-只确认群名。调用 Tool 时传递 `import_mode: quick`，在 `batch_metadata` 中传群名及 `conversation_name_source: user_supplied`。发送人和时间缺失时省略字段，不得补造，不得再次确认。
+调用对应 Tool 时使用 `import_mode: quick`。只有原文或用户明确提供群名时才传群名和相应来源；缺失时直接省略。发送人和时间缺失时也省略，不得补造。
 
 ## 完整导入
 
-仅当用户主动要求提高精度时使用。一次性确认群名、大致日期，以及来源能够区分发送人时的标记映射；不要逐条询问。调用 Tool 时传递 `import_mode: complete`：
+仅当用户主动要求提高精度时使用。可一次性确认用户愿意提供的群名、大致日期，以及来源能够区分发送人时的标记映射；群名缺失仍可导入，不要逐条询问。调用对应 Tool 时传递 `import_mode: complete`：
 
-- 群名写入 `batch_metadata.conversation_name`，来源为 `user_supplied`。
+- 仅在用户明确确认群名时写入 `batch_metadata.conversation_name`，来源为 `user_supplied`；缺失不阻塞导入。
 - 大致日期写入 `batch_metadata.approximate_date`，来源为 `user_supplied`。它不是原始消息时间，不得复制到各条 `timestamp`。
 - 发送人规则写入 `batch_metadata.sender_mapping`。每条消息只传来源中真实存在的 `sender_marker`，由 Adapter 一次性映射。
 
@@ -44,9 +47,9 @@ description: 当用户要求把微信分享或当前上下文中的聊天记录�
 
 ## 必要字段规则
 
-从当前分享中提取消息并保持原始顺序：
+从当前分享中按附件分别提取消息并保持各自原始顺序。两附件调用参数使用 `attachments`，每项包含当前输入明确给出的 `source_zip_path` 和自己的 `messages`，可选 `display_name`、`source_hint`、`batch_metadata` 与 `import_mode`：
 
-- `source_batch_id`：来源有稳定分享 ID 时填写；没有则省略。
+- `source_batch_id`：仅旧单附件 Tool 在来源有稳定分享 ID 时填写；新批量 Tool 不传此字段，附件项会持久生成自己的稳定来源编号。
 
 - `platform`：已知时填写来源平台；本次测试微信内容填写 `wechat`。
 - `conversation_name`：原文能够确认时填写群名或会话名。
@@ -60,7 +63,7 @@ description: 当用户要求把微信分享或当前上下文中的聊天记录�
 - `source_message_id`：只有来源提供可靠 ID 时才填写。
 - `source_position`：按原始顺序从 0 开始填写；补全元数据时不得改变。
 
-禁止猜测缺失字段。正文缺失的单条消息可以作为无效记录交给 Tool，其余消息继续导入。一次最多提交 500 条。失败时只说明 Tool 返回的错误和可执行的重试建议，不寻找替代通道。
+禁止猜测缺失字段。正文缺失的单条消息可以作为无效记录交给 Tool，其余消息继续导入。每附件最多提交 500 条。失败时只说明 Tool 返回的真实错误，不寻找替代通道。
 
 ## 正式调用示例
 

@@ -33,6 +33,53 @@ export const workBuddyIngestSchema = z.object({
   messages: z.array(workBuddyMessageSchema).min(1).max(500).describe('按原始顺序排列的聊天消息，最多 500 条')
 })
 
+export const workBuddyBatchAttachmentSchema = z.object({
+  source_zip_path: z.string().min(1).describe('本次输入明确提供的原始聊天 ZIP 绝对路径'),
+  display_name: z.string().trim().min(1).max(255).optional(),
+  source_hint: z.string().trim().min(1).max(500).optional(),
+  import_mode: z.enum(['quick', 'complete']).optional(),
+  batch_metadata: workBuddyBatchMetadataSchema.optional(),
+  messages: z.array(workBuddyMessageSchema).min(1).max(500).describe('此附件自己的聊天消息，保持原始顺序')
+})
+
+export const workBuddyBatchIngestSchema = z.object({
+  attachments: z.array(workBuddyBatchAttachmentSchema).length(2).describe('同一次输入的两个独立聊天附件')
+})
+
+export const workBuddyBatchResultSchema = z.object({
+  batch_session_id: z.string(),
+  status: z.enum(['pending', 'preparing', 'in_progress', 'success', 'partial_success', 'failed']),
+  summary: z.object({
+    attachments_total: z.number().int(),
+    attachments_completed: z.number().int(),
+    input_messages_total: z.number().int().nullable(),
+    imported_total: z.number().int(),
+    duplicate_total: z.number().int(),
+    updated_total: z.number().int(),
+    invalid_total: z.number().int(),
+    failed_attachments: z.number().int(),
+    attention_required_attachments: z.number().int()
+  }),
+  items: z.array(z.object({
+    item_id: z.string(),
+    ordinal: z.number().int(),
+    status: z.enum(['pending', 'preparing', 'in_progress', 'success', 'partial_success', 'failed']),
+    outcome: z.enum(['success', 'failed_zero_write', 'needs_attention', 'pending', 'processing']),
+    attachment_identity: z.string().nullable(),
+    evidence_relative_path: z.string().nullable(),
+    snapshot_relative_path: z.string().nullable(),
+    source_batch_id: z.string().nullable(),
+    effective_job_id: z.string().nullable(),
+    job_status: z.string().nullable(),
+    imported: z.number().int(),
+    duplicate: z.number().int(),
+    updated: z.number().int(),
+    invalid: z.number().int(),
+    error_summary: z.string().nullable(),
+    errors: z.array(z.string())
+  })).length(2)
+})
+
 export const workBuddyResultSchema = z.object({
   job_id: z.string(),
   status: z.enum(['success', 'partial', 'failed', 'cancelled']),
@@ -68,5 +115,7 @@ export const workBuddyResultSchema = z.object({
 
 export type WorkBuddyMessageInput = z.infer<typeof workBuddyMessageSchema>
 export type WorkBuddyIngestInput = z.infer<typeof workBuddyIngestSchema>
+export type WorkBuddyBatchIngestInput = z.infer<typeof workBuddyBatchIngestSchema>
+export type WorkBuddyBatchResult = z.infer<typeof workBuddyBatchResultSchema>
 export type WorkBuddyBatchMetadataInput = z.infer<typeof workBuddyBatchMetadataSchema>
 export type WorkBuddyCompletenessLevel = z.infer<typeof workBuddyResultSchema>['completeness_level']

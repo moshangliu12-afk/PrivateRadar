@@ -77,7 +77,10 @@ export async function executeBatchImportSession(
     if (items.length !== 2) throw new Error('当前批量会话首次执行要求正好两个附件项')
     if (session.status !== 'pending') throw new BatchSessionClaimError(session.status === 'in_progress' ? 'already_running' : 'not_pending')
     for (const item of items) {
-      if (item.status !== 'pending' || item.effective_job_id || jobIds(db, item.id).length > 0 || linkedMessageCount(db, item) > 0) {
+      const unstarted = item.status === 'pending' || item.status === 'preparing'
+      const evidenceFailedWithoutWrite = item.status === 'failed' &&
+        (item.evidence_status === 'error' || item.error_summary?.startsWith('快照保存失败：'))
+      if ((!unstarted && !evidenceFailedWithoutWrite) || item.effective_job_id || jobIds(db, item.id).length > 0 || linkedMessageCount(db, item) > 0) {
         throw new Error('附件项已有导入记录，不能作为首次会话执行')
       }
     }
@@ -87,7 +90,10 @@ export async function executeBatchImportSession(
     const claim = claimBatchSessionForFirstExecution(db, sessionId)
     if (claim !== 'claimed') throw new BatchSessionClaimError(claim)
 
-    for (const item of items) await runItem(db, databasePath, item)
+    for (const item of items) {
+      if (item.status === 'failed') continue
+      await runItem(db, databasePath, item)
+    }
     return finalizeSession(db, databasePath, sessionId)
   } finally {
     activeSessionIds.get(db)?.delete(sessionId)

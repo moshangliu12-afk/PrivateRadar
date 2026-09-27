@@ -3,14 +3,19 @@ import type { DatabaseSync } from 'node:sqlite'
 import { performance } from 'node:perf_hooks'
 import { ingestWorkBuddyMessages } from './ingest'
 import { workBuddyIngestSchema, workBuddyResultSchema } from './validation'
+import { registerWorkBuddyBatchTool, type WorkBuddyBatchToolOptions } from './batch-tool'
 
-export function createWorkBuddyMcpServer(db: DatabaseSync, log?: (event: string, detail?: string) => void): McpServer {
+export function createWorkBuddyMcpServer(
+  db: DatabaseSync,
+  log?: (event: string, detail?: string) => void,
+  batchOptions?: WorkBuddyBatchToolOptions
+): McpServer {
   const server = new McpServer({ name: 'privateradar-workbuddy-adapter', version: '0.2.0-alpha.4' })
   server.registerTool(
     'privateradar_ingest_messages',
     {
       title: '写入 PrivateRadar 聊天消息',
-      description: '微信聊天导入专用。调用前先检查源材料是否包含可逐条对应的原始时间；有则传 timestamp，无可靠时间才省略，不得猜测。用户要求导入且群名已确认时立即调用，不要扫描代码或寻找脚本替代方案。成功后只需简短确认统计。',
+      description: '微信聊天导入专用。调用前先检查源材料是否包含可逐条对应的原始时间；有则传 timestamp，无可靠时间才省略，不得猜测。用户要求导入时即可调用，群名缺失则省略，不要扫描代码或寻找脚本替代方案。成功后只需简短确认统计。',
       inputSchema: workBuddyIngestSchema,
       outputSchema: workBuddyResultSchema
     },
@@ -58,6 +63,7 @@ export function createWorkBuddyMcpServer(db: DatabaseSync, log?: (event: string,
       }
     }
   )
+  if (batchOptions) registerWorkBuddyBatchTool(server, db, batchOptions, log)
   return server
 }
 

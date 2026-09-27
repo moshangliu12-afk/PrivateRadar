@@ -43,7 +43,7 @@ async function main(): Promise<void> {
 
   const handle = serveStdio(() => {
     log('SERVER_INSTANCE_CREATED')
-    return createWorkBuddyMcpServer(db, log)
+    return createWorkBuddyMcpServer(db, log, { databasePath })
   }, {
     legacy: 'serve',
     onerror: (error) => log('TRANSPORT_ERROR', error.message)

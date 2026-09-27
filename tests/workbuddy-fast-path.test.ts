@@ -13,12 +13,22 @@ const metadata = JSON.parse(readFileSync(join(root, 'integrations', 'workbuddy',
 const mcpConfig = readFileSync(join(root, 'integrations', 'workbuddy', 'connector', 'mcp.json'), 'utf8')
 
 describe('WorkBuddy 微信导入最短路径', () => {
-  it('Skill 明确默认快速导入、未知字段省略且禁止脚本兜底', () => {
+  it('Skill 明确默认快速导入、缺失群名不阻塞且禁止脚本兜底', () => {
     expect(skill).toContain('快速导入是默认模式')
-    expect(skill).toContain('若群名缺失，只问一次')
+    expect(skill).toContain('群名缺失时省略')
     expect(skill).toContain('直接省略对应字段')
     expect(skill).toContain('禁止寻找或使用脚本、Harness、stdio、JSON-RPC')
-    expect(skill).toContain('Tool 成功后只回复一到两句')
+    expect(skill).toContain('Tool 成功后只回复整次导入')
+  })
+
+  it.each([['Connector Skill', skill], ['Skill 包', packagedSkill]] as const)('%s 明确单附件、双附件和超量边界', (_label, content) => {
+    expect(content).toContain('privateradar_ingest_messages')
+    expect(content).toContain('privateradar_ingest_batch')
+    expect(content).toContain('超过两个')
+    expect(content).toContain('当前 alpha.15 批量入口只支持同次两个聊天附件')
+    expect(content).toContain('群名缺失')
+    expect(content).toContain('不合并')
+    expect(content).toContain('chat-history')
   })
 
   it.each([['Connector Skill', skill], ['Skill 包', packagedSkill]] as const)('%s 要求先检查逐条时间且不伪造', (_label, content) => {
