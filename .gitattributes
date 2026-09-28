@@ -1,0 +1,4 @@
+# 真实来源 fixture 有字节哈希验收，禁止检出时自动转换换行。
+tests/fixtures/workbuddy-chat-history/*.txt -text
+# 当前真实 inline 原文使用 CRLF；允许源回车符，继续检查其他尾随空白。
+tests/fixtures/workbuddy-chat-history/current-inline-seven.txt whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
