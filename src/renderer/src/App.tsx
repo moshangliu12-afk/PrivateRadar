@@ -314,14 +314,14 @@ export function App(): React.JSX.Element {
                   <button type="button" aria-label="下一天" onClick={() => void loadSelectedDate(shiftLocalDateKey(selectedDate, 1))} disabled={dailyLoading || !canNavigateToNextDate(selectedDate, latestDate)}>›</button>
                   {shouldShowReturnToLatest(selectedDate, latestDate) && <button className="return-latest-button" type="button" onClick={() => void goToLatestDate()} disabled={dailyLoading}>回到最新</button>}
                 </div>
-              : <div className="eyebrow">{page === 'settings' ? '数据与隐私' : (page === 'radar' ? radar?.date : summary?.date) ?? '正在读取日期'}</div>}
+              : <div className="eyebrow">{page === 'settings' ? '数据与隐私' : page === 'radar' ? (radar ? radar.date ?? '无可靠聊天日期' : '正在读取日期') : (summary ? summary.date ?? '无可靠聊天日期' : '正在读取日期')}</div>}
             <h1>{page === 'daily' ? '今日情报' : page === 'radar' ? '话题雷达' : page === 'search' ? '问我的聊天' : '设置'}</h1>
             <p>{page === 'daily' ? '从噪音里，找到今天真正值得看的信息。' : page === 'radar' ? '识别相对过去七天正在突然升温的跨群话题。' : page === 'search' ? '先检索本地证据，再基于证据回答。' : '查看数据来源、存储状态与隐私说明。'}</p>
           </div>
           <div className="header-actions">
-            {page === 'daily' && summary && <span className={`mode-badge ${summary.mode}`}>{modeLabel(summary)}</span>}
+            {page === 'daily' && summary?.date && <span className={`mode-badge ${summary.mode}`}>{modeLabel(summary)}</span>}
             {summary?.demoMode && <span className="demo-badge">当前为演示数据</span>}
-            {page === 'daily' && summary?.mode === 'ai' && <button className="regenerate-button" type="button" onClick={() => void regenerate()} disabled={regenerating || dailyLoading}>{regenerating ? '正在整理…' : '重新生成'}</button>}
+            {page === 'daily' && summary?.date && summary.mode === 'ai' && <button className="regenerate-button" type="button" onClick={() => void regenerate()} disabled={regenerating || dailyLoading}>{regenerating ? '正在整理…' : '重新生成'}</button>}
             <button className="import-button" type="button" onClick={() => void beginWechatImport()}>
               开始导入我的聊天
             </button>
@@ -334,8 +334,9 @@ export function App(): React.JSX.Element {
 
         {importResult && <ImportReport result={importResult} />}
 
-        {page === 'daily' && summary && !dailyLoading && (
-          <>
+        {page === 'daily' && summary && !dailyLoading && (summary.date === null
+          ? <div className="empty-candidates">无可靠聊天日期。时间未知的消息仍可通过搜索查找。</div>
+          : <>
             <section className="stats">
               <Stat label="当日分析群" value={summary.conversationCount} suffix="个" />
               <Stat label="当日消息" value={summary.messageCount} suffix="条" />
@@ -388,13 +389,14 @@ export function App(): React.JSX.Element {
               {summary.items.length === 0 && <div className="empty-candidates">{summary.messageCount === 0 ? '当天没有聊天记录' : '当天没有值得关注的情报。'}</div>}
             </section>
             {summary.messageCount > 0 && <MissingImportantFeedback dateKey={summary.date} />}
-          </>
-        )}
+          </>)}
         {page === 'radar' && !radar && !error && <div className="loading">正在计算过去 7 天历史基线……</div>}
         {page === 'radar' && radar && (
           <>
             {radar.dataQualityNotice && <div className="data-quality-notice">{radar.dataQualityNotice}</div>}
-            <RadarPage radar={radar} openTopicId={openTopicId} evidence={topicEvidence} onToggleEvidence={toggleTopicEvidence} />
+            {radar.date === null
+              ? <div className="empty-candidates">无可靠聊天日期，暂无法按日期分析话题。时间未知的消息仍可通过搜索查找。</div>
+              : <RadarPage radar={radar} openTopicId={openTopicId} evidence={topicEvidence} onToggleEvidence={toggleTopicEvidence} />}
           </>
         )}
         {page === 'search' && (
@@ -647,7 +649,7 @@ function DataStatusCard({ status }: { status: FirstUseStatus }): React.JSX.Eleme
     <div className="data-status-heading"><span>数据状态</span><div className="data-status-recent"><strong>最近一次导入</strong><span>{latestAttempt.source} · {formatDateTime(latestAttempt.completedAt)}</span></div><b className={`import-status ${latestAttempt.status}`}>{importStatusLabel(latestAttempt.status)}</b></div>
     <div className="data-status-metrics"><span>新增 <strong>{latestAttempt.importedCount}</strong></span><span>重复 <strong>{latestAttempt.duplicateCount}</strong></span><span>更新 <strong>{latestAttempt.updatedCount}</strong></span><span>错误 <strong>{latestAttempt.errorCount}</strong></span></div>
     {!successfulLatest && lastSuccessfulImport && <div className="data-status-last-success"><span>最近成功导入</span><strong>{lastSuccessfulImport.source} · {formatDateTime(lastSuccessfulImport.completedAt)}</strong></div>}
-    <div className="data-status-facts"><div className="data-status-summary"><span>数据最新至</span><strong>{latestMessageDate ?? '暂无消息'}</strong></div><div className="data-status-summary"><span>累计</span><strong>{status.totalMessageCount.toLocaleString()} 条消息 · {status.importBatchCount.toLocaleString()} 个聊天批次</strong></div><div className="data-status-summary"><span>WorkBuddy</span><strong>{status.workBuddyConnected ? '已连接' : '未连接'}</strong></div></div>
+    <div className="data-status-facts"><div className="data-status-summary"><span>数据最新至</span><strong>{latestMessageDate ?? '时间未知'}</strong></div><div className="data-status-summary"><span>累计</span><strong>{status.totalMessageCount.toLocaleString()} 条消息 · {status.importBatchCount.toLocaleString()} 个聊天批次</strong></div><div className="data-status-summary"><span>WorkBuddy</span><strong>{status.workBuddyConnected ? '已连接' : '未连接'}</strong></div></div>
   </section>
 }
 

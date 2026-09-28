@@ -1,4 +1,5 @@
 import { DatabaseSync } from 'node:sqlite'
+import { createHash } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MockAIProvider } from '../src/main/ai/mock-provider'
 import { ingestWorkBuddyMessages } from '../src/main/integrations/workbuddy/ingest'
@@ -111,12 +112,23 @@ describe('Alpha.3 未知发送者语义', () => {
     const first = runDailyIntelligence(db, '2026-09-14')
     expect(loadSavedDailyCandidates(db, '2026-09-14')).toEqual(first.candidates)
 
-    db.prepare(`UPDATE daily_intelligence_candidates SET algorithm_version = 'daily-candidate-v1.2-daily-value'`).run()
+    const oldVersion = 'daily-candidate-v1.2-daily-value'
+    for (const candidate of first.candidates) {
+      // 模拟旧算法实际生成的版本隔离标识，不能沿用当前算法标识。
+      const digest = createHash('sha256').update([oldVersion, candidate.date, ...candidate.sourceMessageIds.slice().sort()].join('\u001f')).digest('hex').slice(0, 32)
+      const oldId = `daily:${candidate.date}:${digest}`
+      db.prepare('DELETE FROM daily_candidate_sources WHERE candidate_id = ?').run(candidate.candidateId)
+      db.prepare('UPDATE daily_intelligence_candidates SET id = ?, algorithm_version = ? WHERE id = ?').run(oldId, oldVersion, candidate.candidateId)
+      candidate.sourceMessageIds.forEach((id, order) => {
+        db.prepare('INSERT INTO daily_candidate_sources (candidate_id, message_id, source_order) VALUES (?, ?, ?)').run(oldId, id, order)
+      })
+    }
     expect(loadSavedDailyCandidates(db, '2026-09-14')).toEqual([])
 
     const recomputed = runDailyIntelligence(db, '2026-09-14')
     expect(loadSavedDailyCandidates(db, '2026-09-14')).toEqual(recomputed.candidates)
-    expect(db.prepare(`SELECT DISTINCT algorithm_version AS version FROM daily_intelligence_candidates`).all()).toEqual([{ version: DAILY_ALGORITHM_VERSION }])
+    expect(db.prepare(`SELECT DISTINCT algorithm_version AS version FROM daily_intelligence_candidates WHERE algorithm_version = ?`).all(DAILY_ALGORITHM_VERSION)).toEqual([{ version: DAILY_ALGORITHM_VERSION }])
+    expect(db.prepare(`SELECT COUNT(*) AS count FROM daily_intelligence_candidates WHERE algorithm_version = 'daily-candidate-v1.2-daily-value'`).get()).toMatchObject({ count: first.candidates.length })
     expect((db.prepare(`SELECT COUNT(*) AS count FROM messages`).get() as { count: number }).count).toBe(beforeMessageCount)
   })
 

@@ -1,3 +1,4 @@
+import { reliableTimestampSql } from '../time-semantics'
 import { createHash, randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import type { ChatQueryResponse, EvidenceMessage, MessageContext } from '../../shared/models'
@@ -216,8 +217,10 @@ function saveAnswerRun(db: DatabaseSync, question: string, provider: AIProvider,
 }
 
 function latestMessageDate(db: DatabaseSync): string {
-  const row = db.prepare(`SELECT MAX(COALESCE(date(NULLIF(timestamp, ''), 'localtime'), date(imported_at, 'localtime'))) AS date FROM messages`).get() as { date: string | null }
-  return row.date ?? new Date().toISOString().slice(0, 10)
+  const row = db.prepare(`SELECT MAX(date(timestamp, 'localtime')) AS date FROM messages WHERE ${reliableTimestampSql()}`).get() as { date: string | null }
+  if (row.date) return row.date
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 }
 
 function loadMessage(db: DatabaseSync, id: string): ContextRow | null {

@@ -1,3 +1,4 @@
+import { reliableTimestampSql } from '../time-semantics'
 import type { DatabaseSync } from 'node:sqlite'
 import type { ChatSearchResult, MetadataProvenance, QueryUnderstanding } from '../../shared/models'
 import { DEFAULT_DAILY_CONFIG } from '../intelligence/daily/config'
@@ -17,6 +18,7 @@ interface MessageRow {
   sender_name: string
   sender_name_source: MetadataProvenance
   timestamp: string
+  timestamp_reliable: number
   content: string
   links_json: string
 }
@@ -123,7 +125,7 @@ async function rankRows(
       senderName: row.sender_name,
       senderNameSource: row.sender_name_source,
       timestamp: row.timestamp,
-      timeVerification: row.timestamp ? 'verified' : 'unknown',
+      timeVerification: row.timestamp_reliable ? 'verified' : 'unknown',
       content: row.content,
       links: safeStringArray(row.links_json),
       relevanceScore: Number(score.toFixed(5)),
@@ -134,7 +136,10 @@ async function rankRows(
     : right.relevanceScore - left.relevanceScore || right.timestamp.localeCompare(left.timestamp) || left.messageId.localeCompare(right.messageId)
   )
 
-  return { results: deduplicateResults(ranked).slice(0, MAX_RESULTS), embeddingCandidateCount, usedEmbedding }
+  // 完成原有排序和去重后，再清除展示值；不可靠时间不作为聊天证据提交给 AI。
+  const results = deduplicateResults(ranked).slice(0, MAX_RESULTS)
+    .map((result) => result.timeVerification === 'verified' ? result : { ...result, timestamp: '' })
+  return { results, embeddingCandidateCount, usedEmbedding }
 }
 
 function matchesStrictEntities(row: MessageRow, queryEntities: string[]): boolean {
@@ -173,6 +178,7 @@ function loadFilteredRows(db: DatabaseSync, understanding: QueryUnderstanding, t
   const conditions: string[] = []
   const params: Array<string | number> = []
   const hasExplicitDateFilter = understanding.dateRange.label !== '全部时间'
+  if (hasExplicitDateFilter && timeGroup === 'verified') conditions.push(reliableTimestampSql())
   if (hasExplicitDateFilter && understanding.dateRange.start) {
     if (timeGroup === 'verified') {
       conditions.push("date(timestamp, 'localtime') >= ?")
@@ -186,7 +192,7 @@ function loadFilteredRows(db: DatabaseSync, understanding: QueryUnderstanding, t
     }
   }
   if (understanding.timeIntent === 'recent' && timeGroup === 'unverified') {
-    conditions.push("(timestamp IS NULL OR timestamp = '')")
+    conditions.push(`NOT ${reliableTimestampSql()}`)
   }
   if (understanding.conversationIds.length > 0) {
     conditions.push(`conversation_id IN (${understanding.conversationIds.map(() => '?').join(',')})`)
@@ -200,7 +206,7 @@ function loadFilteredRows(db: DatabaseSync, understanding: QueryUnderstanding, t
   return db.prepare(`
     SELECT id, conversation_id, COALESCE(conversation_name, '') AS conversation_name,
            sender_id, COALESCE(sender_name, '') AS sender_name, sender_name_source,
-           COALESCE(timestamp, '') AS timestamp, content, links_json
+           COALESCE(timestamp, '') AS timestamp, CASE WHEN ${reliableTimestampSql()} THEN 1 ELSE 0 END AS timestamp_reliable, content, links_json
     FROM messages
     ${conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''}
     ORDER BY COALESCE(NULLIF(timestamp, ''), imported_at) DESC, id DESC LIMIT ?

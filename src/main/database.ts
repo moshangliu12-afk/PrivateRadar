@@ -1,8 +1,9 @@
+import { reliableTimestampSql } from './time-semantics'
 import { DatabaseSync } from 'node:sqlite'
 import { initializeDatabase } from './schema'
 import { seedDemoData } from './demo'
 import type { DashboardSummary, TopicRadarSummary } from '../shared/models'
-import { loadSavedDailyCandidates, runDailyIntelligence } from './intelligence/daily/repository'
+import { loadDailyCandidateCache, runDailyIntelligence } from './intelligence/daily/repository'
 import { buildDailyBrief } from './intelligence/daily/brief'
 import { resolveAIProvider } from './ai/config'
 import { loadSavedTopicRadar, runTopicRadar } from './intelligence/topics/repository'
@@ -15,21 +16,27 @@ export function openDatabase(path: string, seedDemo = false): DatabaseSync {
 }
 
 export function getTopicRadarSummary(db: DatabaseSync, forceRecompute = false): TopicRadarSummary {
-  const latest = db.prepare(`SELECT MAX(COALESCE(date(NULLIF(timestamp, ''), 'localtime'), date(imported_at, 'localtime'))) AS date FROM messages`).get() as { date: string | null }
-  const date = latest.date ?? new Date().toISOString().slice(0, 10)
+  const latest = db.prepare(`SELECT MAX(date(timestamp, 'localtime')) AS date FROM messages WHERE ${reliableTimestampSql()}`).get() as { date: string | null }
+  const date = latest.date
+  if (!date) {
+    return withTopicDataQuality(db, {
+      date: null, historyDays: 0, historySufficient: false,
+      topics: [], newTopics: [], warmingTopics: []
+    })
+  }
   if (!forceRecompute) {
     const cached = loadSavedTopicRadar(db, date)
     if (cached) return withTopicDataQuality(db, cached)
   }
-  const savedCandidates = loadSavedDailyCandidates(db, date)
-  const candidates = savedCandidates.length > 0 ? savedCandidates : runDailyIntelligence(db, date).candidates
+  const savedCandidates = loadDailyCandidateCache(db, date)
+  const candidates = savedCandidates ?? runDailyIntelligence(db, date).candidates
   return withTopicDataQuality(db, runTopicRadar(db, date, candidates))
 }
 
 function withTopicDataQuality(db: DatabaseSync, summary: TopicRadarSummary): TopicRadarSummary {
   const row = db.prepare(`
     SELECT COUNT(*) AS count FROM messages
-    WHERE source = 'workbuddy' AND (timestamp IS NULL OR timestamp_source = 'unknown')
+    WHERE source = 'workbuddy' AND NOT ${reliableTimestampSql()}
   `).get() as { count: number }
   return {
     ...summary,
@@ -46,20 +53,29 @@ export async function getDashboardSummary(
   refreshLocal = false,
   requestedDate?: string
 ): Promise<DashboardSummary> {
-  const latest = db.prepare(`SELECT MAX(COALESCE(date(NULLIF(timestamp, ''), 'localtime'), date(imported_at, 'localtime'))) AS date FROM messages`).get() as { date: string | null }
-  const date = requestedDate ?? latest.date ?? localDateKey()
+  const latest = db.prepare(`SELECT MAX(date(timestamp, 'localtime')) AS date FROM messages WHERE ${reliableTimestampSql()}`).get() as { date: string | null }
+  const date = requestedDate ?? latest.date
+  const total = db.prepare(`SELECT COUNT(*) AS count FROM messages`).get() as { count: number }
+  const demoSetting = db.prepare(`SELECT value_json FROM app_settings WHERE key = 'demo_mode'`).get() as { value_json: string } | undefined
+  if (!date) {
+    return {
+      demoMode: demoSetting?.value_json === 'true',
+      date: null,
+      conversationCount: 0, messageCount: 0, candidateCount: 0,
+      finalIntelligenceCount: 0, mode: 'rule', modeNotice: null,
+      telemetry: null, totalMessageCount: total.count, databasePath, items: []
+    }
+  }
   const stats = db.prepare(`
     SELECT COUNT(*) AS message_count,
            COUNT(DISTINCT CASE WHEN conversation_name_source <> 'unknown' AND conversation_name IS NOT NULL AND conversation_name <> '' THEN conversation_id END) AS conversation_count
     FROM messages
     WHERE date(timestamp, 'localtime') = ?
-       OR ((timestamp IS NULL OR timestamp = '') AND date(imported_at, 'localtime') = ?)
-  `).get(date, date) as { message_count: number; conversation_count: number }
-  const total = db.prepare(`SELECT COUNT(*) AS count FROM messages`).get() as { count: number }
-  const demoSetting = db.prepare(`SELECT value_json FROM app_settings WHERE key = 'demo_mode'`).get() as { value_json: string } | undefined
+      AND ${reliableTimestampSql()}
+  `).get(date) as { message_count: number; conversation_count: number }
 
-  const savedCandidates = refreshLocal ? [] : loadSavedDailyCandidates(db, date)
-  const candidates = savedCandidates.length > 0 ? savedCandidates : runDailyIntelligence(db, date).candidates
+  const savedCandidates = refreshLocal ? null : loadDailyCandidateCache(db, date)
+  const candidates = savedCandidates ?? runDailyIntelligence(db, date).candidates
   const brief = await buildDailyBrief(db, date, candidates, resolveAIProvider(), forceRegenerate)
 
   return {
@@ -76,10 +92,6 @@ export async function getDashboardSummary(
     databasePath,
     items: brief.items
   }
-}
-
-function localDateKey(now = new Date()): string {
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 }
 
 export function validateDashboardDateKey(value: unknown): string | undefined {

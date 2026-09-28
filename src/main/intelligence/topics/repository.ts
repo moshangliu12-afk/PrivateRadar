@@ -1,3 +1,4 @@
+import { reliableTimestampSql } from '../../time-semantics'
 import type { DatabaseSync } from 'node:sqlite'
 import type { DailyCandidate, EvidenceMessage, TopicEvidence, TopicRadarItem, TopicRadarSummary } from '../../../shared/models'
 import { loadMessagesForDate, runDailyIntelligence } from '../daily/repository'
@@ -10,7 +11,7 @@ export function runTopicRadar(db: DatabaseSync, date: string, d1Candidates?: Dai
   const availableHistoryDates = (db.prepare(`
     SELECT DISTINCT date(timestamp, 'localtime') AS date
     FROM messages
-    WHERE date(timestamp, 'localtime') < ? AND date(timestamp, 'localtime') >= date(?, '-7 days')
+    WHERE ${reliableTimestampSql()} AND date(timestamp, 'localtime') < ? AND date(timestamp, 'localtime') >= date(?, '-7 days')
     ORDER BY date
   `).all(date, date) as Array<{ date: string }>).map((row) => row.date)
   const result = buildTopicRadar({ messages, date, d1Candidates: candidates, availableHistoryDates })
@@ -35,7 +36,7 @@ export function loadSavedTopicRadar(db: DatabaseSync, date: string): TopicRadarS
   const historyDays = Number((db.prepare(`
     SELECT COUNT(DISTINCT date(timestamp, 'localtime')) AS count
     FROM messages
-    WHERE date(timestamp, 'localtime') < ? AND date(timestamp, 'localtime') >= date(?, '-7 days')
+    WHERE ${reliableTimestampSql()} AND date(timestamp, 'localtime') < ? AND date(timestamp, 'localtime') >= date(?, '-7 days')
   `).get(date, date) as { count: number }).count)
   const historySufficient = historyDays >= MINIMUM_TREND_HISTORY_DAYS
   const topics = rows.map((row) => ({

@@ -143,7 +143,7 @@ export interface DailyBriefTelemetry {
 
 export interface DashboardSummary {
   demoMode: boolean
-  date: string
+  date: string | null
   conversationCount: number
   messageCount: number
   candidateCount: number
@@ -195,7 +195,7 @@ export interface TopicRadarItem {
 }
 
 export interface TopicRadarSummary {
-  date: string
+  date: string | null
   historyDays: number
   historySufficient: boolean
   topics: TopicRadarItem[]
