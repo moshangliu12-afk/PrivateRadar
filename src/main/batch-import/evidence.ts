@@ -6,11 +6,14 @@ import { dirname, join, resolve, sep } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import { workBuddyIngestSchema, type WorkBuddyIngestInput } from '../integrations/workbuddy/validation'
 import type { BatchImportItem } from './repository'
+import { inspectDirectoryEvidence } from './directory-evidence'
+import { WindowsPathLease } from './windows-path-lease'
 
 const ITEM_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const ZIP_NAME = 'original.zip'
 const SNAPSHOT_NAME = 'messages.json'
 const SNAPSHOT_VERSION = 1
+const DIRECTORY_SNAPSHOT_MAX_BYTES = 8 * 1024 * 1024
 
 export type EvidenceState = 'pending' | 'available' | 'missing' | 'corrupt' | 'error'
 
@@ -28,6 +31,9 @@ export interface EvidenceVerification {
   status: EvidenceState
   zip: EvidencePartResult
   snapshot: EvidencePartResult
+  sourceKind: 'zip' | 'directory'
+  source: EvidencePartResult
+  directory?: EvidencePartResult
 }
 
 export interface StoredEvidenceFile {
@@ -46,6 +52,7 @@ export async function saveOriginalZip(
   let temporaryPath: string | null = null
   let published = false
   try {
+    if (item.evidence_source_kind !== 'zip') throw new EvidenceConflictError('目录证据不能被 ZIP 替换')
     const source = await lstat(sourceZipPath)
     if (!source.isFile()) throw new Error('源 ZIP 不是普通文件')
     const sourceHash = await sha256File(sourceZipPath)
@@ -79,7 +86,7 @@ export async function saveOriginalZip(
           status = CASE WHEN status = 'failed' AND error_summary LIKE '原始 ZIP 保存失败：%'
             THEN 'pending' ELSE status END,
           error_summary = NULL, updated_at = ?
-      WHERE id = ? AND evidence_relative_path IS NULL
+      WHERE id = ? AND evidence_source_kind = 'zip' AND evidence_relative_path IS NULL
         AND (attachment_identity IS NULL OR attachment_identity = ?)
     `).run(sourceHash, paths.zipRelative, new Date().toISOString(), batchItemId, sourceHash)
     if (updated.changes !== 1) throw new EvidenceConflictError('附件项原始 ZIP 记录已被其他操作更新')
@@ -109,12 +116,18 @@ export async function saveStructuredSnapshot(
   const paths = itemPaths(databasePath, batchItemId)
   let temporaryPath: string | null = null
   let published = false
+  let lease: WindowsPathLease | null = null
   try {
-    const zip = await inspectRecordedZip(item, paths)
-    if (zip.status !== 'available') throw new Error('原始 ZIP 尚未通过校验，不能保存消息快照')
+    if (item.evidence_source_kind === 'directory') {
+      lease = new WindowsPathLease()
+      await lease.lock(paths.itemDirectory, true)
+    }
+    const source = await inspectRecordedSource(item, paths, databasePath)
+    if (source.status !== 'available') throw new Error('原始证据尚未通过校验，不能保存消息快照')
     const serializableInput = jsonValue(input)
     const payload = { schema_version: SNAPSHOT_VERSION, input: serializableInput }
     const serialized = `${JSON.stringify(payload)}\n`
+    if (lease && Buffer.byteLength(serialized, 'utf8') > DIRECTORY_SNAPSHOT_MAX_BYTES) throw new Error('目录消息快照容量超限')
     const expectedHash = sha256Bytes(Buffer.from(serialized, 'utf8'))
     validateSnapshot(serialized, input.messages.length)
 
@@ -122,7 +135,8 @@ export async function saveStructuredSnapshot(
       if (item.snapshot_relative_path !== paths.snapshotRelative || item.snapshot_sha256 !== expectedHash) {
         throw new EvidenceConflictError('附件项已有不同的结构化快照记录')
       }
-      const existing = await inspectSnapshot(paths.snapshotPath, expectedHash, paths)
+      if (lease) await lease.lock(paths.snapshotPath, false)
+      const existing = await inspectSnapshot(paths.snapshotPath, expectedHash, paths, lease)
       if (existing.status !== 'available') throw new EvidenceConflictError('已有结构化快照不可验证，禁止静默替换')
       return { relativePath: paths.snapshotRelative, sha256: expectedHash }
     }
@@ -138,7 +152,8 @@ export async function saveStructuredSnapshot(
     await rename(temporaryPath, paths.snapshotPath)
     temporaryPath = null
     published = true
-    const verified = await inspectSnapshot(paths.snapshotPath, expectedHash, paths)
+    if (lease) await lease.lock(paths.snapshotPath, false)
+    const verified = await inspectSnapshot(paths.snapshotPath, expectedHash, paths, lease)
     if (verified.status !== 'available' || verified.messageCount !== input.messages.length) {
       throw new Error('发布后的结构化快照未通过校验')
     }
@@ -156,6 +171,8 @@ export async function saveStructuredSnapshot(
     published = false
     return { relativePath: paths.snapshotRelative, sha256: expectedHash }
   } catch (error) {
+    await lease?.close()
+    lease = null
     if (published) await rm(paths.snapshotPath, { force: true }).catch(() => undefined)
     if (!(error instanceof EvidenceConflictError) && item.snapshot_relative_path === null) {
       db.prepare(`
@@ -165,6 +182,7 @@ export async function saveStructuredSnapshot(
     }
     throw error
   } finally {
+    await lease?.close()
     if (temporaryPath) await rm(temporaryPath, { force: true }).catch(() => undefined)
   }
 }
@@ -176,17 +194,33 @@ export async function verifyBatchEvidence(
 ): Promise<EvidenceVerification> {
   const item = loadItem(db, batchItemId)
   const paths = itemPaths(databasePath, batchItemId)
-  const zip = await inspectRecordedZip(item, paths)
-  const unregisteredSnapshot = item.snapshot_relative_path === null ? await lstatOrNull(paths.snapshotPath) : null
-  const snapshot = item.snapshot_relative_path === null
-    ? { status: unregisteredSnapshot || item.error_summary?.startsWith('快照保存失败：') ? 'error' : 'pending',
-        relativePath: null, expectedSha256: null, actualSha256: null } as EvidencePartResult
-    : item.snapshot_relative_path !== paths.snapshotRelative || !item.snapshot_sha256
-      ? { status: 'corrupt', relativePath: item.snapshot_relative_path,
-          expectedSha256: item.snapshot_sha256, actualSha256: null, error: '结构化快照记录不完整或路径无效' } as EvidencePartResult
-      : await inspectSnapshot(paths.snapshotPath, item.snapshot_sha256, paths)
-  const status = ['corrupt', 'missing', 'error', 'pending'].find((state) => zip.status === state || snapshot.status === state) as EvidenceState | undefined
-  return { itemId: batchItemId, status: status ?? 'available', zip, snapshot }
+  const source = await inspectRecordedSource(item, paths, databasePath)
+  const zip: EvidencePartResult = item.evidence_source_kind === 'zip' ? source
+    : { status: 'pending', relativePath: null, expectedSha256: null, actualSha256: null }
+  let lease: WindowsPathLease | null = null
+  try {
+    if (item.evidence_source_kind === 'directory' && item.snapshot_relative_path !== null) {
+      lease = new WindowsPathLease()
+      await lease.lock(paths.snapshotPath, false)
+    }
+    const unregisteredSnapshot = item.snapshot_relative_path === null ? await lstatOrNull(paths.snapshotPath) : null
+    const snapshot = item.snapshot_relative_path === null
+      ? { status: unregisteredSnapshot || item.error_summary?.startsWith('快照保存失败：') ? 'error' : 'pending',
+          relativePath: null, expectedSha256: null, actualSha256: null } as EvidencePartResult
+      : item.snapshot_relative_path !== paths.snapshotRelative || !item.snapshot_sha256
+        ? { status: 'corrupt', relativePath: item.snapshot_relative_path,
+            expectedSha256: item.snapshot_sha256, actualSha256: null, error: '结构化快照记录不完整或路径无效' } as EvidencePartResult
+        : await inspectSnapshot(paths.snapshotPath, item.snapshot_sha256, paths, lease)
+    const status = ['corrupt', 'missing', 'error', 'pending'].find((state) => source.status === state || snapshot.status === state) as EvidenceState | undefined
+    return { itemId: batchItemId, status: status ?? 'available', zip, snapshot,
+      sourceKind: item.evidence_source_kind, source,
+      ...(item.evidence_source_kind === 'directory' ? { directory: source } : {}) }
+  } catch (error) {
+    const snapshot: EvidencePartResult = { status: 'corrupt', relativePath: item.snapshot_relative_path,
+      expectedSha256: item.snapshot_sha256, actualSha256: null, error: errorMessage(error) }
+    return { itemId: batchItemId, status: 'corrupt', zip, snapshot,
+      sourceKind: item.evidence_source_kind, source, directory: source }
+  } finally { await lease?.close() }
 }
 
 export async function loadStructuredSnapshot(
@@ -198,9 +232,21 @@ export async function loadStructuredSnapshot(
   if (verified.status !== 'available') throw new Error(`附件证据不可用：${verified.status}`)
   const item = loadItem(db, batchItemId)
   const paths = itemPaths(databasePath, batchItemId)
-  const bytes = await readFile(paths.snapshotPath)
-  if (sha256Bytes(bytes) !== item.snapshot_sha256) throw new Error('读取结构化快照时哈希发生变化')
-  return validateSnapshot(bytes.toString('utf8')).input
+  let lease: WindowsPathLease | null = null
+  try {
+    if (item.evidence_source_kind === 'directory') {
+      lease = new WindowsPathLease()
+      await lease.lock(paths.snapshotPath, false)
+    }
+    const bytes = lease ? await lease.readFile(paths.snapshotPath, DIRECTORY_SNAPSHOT_MAX_BYTES) : await readFile(paths.snapshotPath)
+    if (sha256Bytes(bytes) !== item.snapshot_sha256) throw new Error('读取结构化快照时哈希发生变化')
+    return validateSnapshot(bytes.toString('utf8')).input
+  } finally { await lease?.close() }
+}
+
+async function inspectRecordedSource(item: BatchImportItem, paths: EvidencePaths, databasePath: string): Promise<EvidencePartResult> {
+  return item.evidence_source_kind === 'directory'
+    ? inspectDirectoryEvidence(item, databasePath) : inspectRecordedZip(item, paths)
 }
 
 class EvidenceConflictError extends Error {}
@@ -258,11 +304,16 @@ async function inspectRecordedZip(item: BatchImportItem, paths: EvidencePaths): 
   return inspectFile(paths.zipPath, item.attachment_identity, paths)
 }
 
-async function inspectSnapshot(path: string, expectedHash: string, paths: EvidencePaths): Promise<EvidencePartResult> {
-  const file = await inspectFile(path, expectedHash, paths)
+async function inspectSnapshot(path: string, expectedHash: string, paths: EvidencePaths, lease: WindowsPathLease | null = null): Promise<EvidencePartResult> {
+  const actualSha256 = lease ? await lease.hashFile(path) : null
+  const file = lease
+    ? { status: actualSha256 === expectedHash ? 'available' : 'corrupt', relativePath: paths.snapshotRelative,
+        expectedSha256: expectedHash, actualSha256 } as EvidencePartResult
+    : await inspectFile(path, expectedHash, paths)
   if (file.status !== 'available') return file
   try {
-    const snapshot = validateSnapshot(await readFile(path, 'utf8'))
+    const text = lease ? (await lease.readFile(path, DIRECTORY_SNAPSHOT_MAX_BYTES)).toString('utf8') : await readFile(path, 'utf8')
+    const snapshot = validateSnapshot(text)
     return { ...file, messageCount: snapshot.input.messages.length }
   } catch (error) {
     return { ...file, status: 'corrupt', error: `结构化快照无效：${errorMessage(error)}` }

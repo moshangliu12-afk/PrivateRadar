@@ -20,6 +20,7 @@ export interface BatchImportItem {
   source_hint: string | null
   attachment_identity: string | null
   evidence_relative_path: string | null
+  evidence_source_kind: 'zip' | 'directory'
   evidence_status: 'pending' | 'available' | 'missing' | 'corrupt' | 'error'
   snapshot_relative_path: string | null
   snapshot_sha256: string | null

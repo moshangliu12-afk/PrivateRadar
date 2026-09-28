@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite'
 
 // 旧版数据库没有显式版本号，user_version = 0 对应本次迁移前的结构。
-const BATCH_IMPORT_SCHEMA_VERSION = 3
+const BATCH_IMPORT_SCHEMA_VERSION = 4
 
 export function migrateBatchImportSchema(db: DatabaseSync): void {
   const row = db.prepare('PRAGMA user_version').get() as { user_version: number }
@@ -9,6 +9,22 @@ export function migrateBatchImportSchema(db: DatabaseSync): void {
   if (row.user_version < 1) migrateInitialBatchSchema(db)
   if (row.user_version < 2) migrateEvidenceErrorState(db)
   if (row.user_version < 3) migrateEffectiveJob(db)
+  if (row.user_version < 4) migrateEvidenceSourceKind(db)
+}
+
+function migrateEvidenceSourceKind(db: DatabaseSync): void {
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    const columns = db.prepare('PRAGMA table_info(batch_import_items)').all() as Array<{ name: string }>
+    if (!columns.some((column) => column.name === 'evidence_source_kind')) {
+      db.exec(`ALTER TABLE batch_import_items ADD COLUMN evidence_source_kind TEXT NOT NULL DEFAULT 'zip'
+        CHECK (evidence_source_kind IN ('zip', 'directory'))`)
+    }
+    db.exec('PRAGMA user_version = 4; COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
 }
 
 function migrateEffectiveJob(db: DatabaseSync): void {

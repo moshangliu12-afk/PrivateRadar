@@ -45,7 +45,7 @@ export async function verifyBatchItemReadyForImport(
 ): Promise<ReadyBatchItem> {
   const item = loadItem(db, batchItemId)
   if (!item.source_batch_id?.trim()) throw new Error('附件项尚无稳定来源批次编号')
-  if (item.evidence_status !== 'available') throw new Error('原始 ZIP 尚未登记为可用')
+  if (item.evidence_status !== 'available') throw new Error('原始证据尚未登记为可用')
   const verification = await verifyBatchEvidence(db, databasePath, batchItemId)
   if (verification.status !== 'available') throw new Error(`附件证据未准备好：${verification.status}`)
   const input = await loadStructuredSnapshot(db, databasePath, batchItemId)
@@ -80,7 +80,7 @@ export async function importSavedBatchItem(
   }
   try {
     // 先校验证据，缺失或损坏时不分配身份，也不创建导入任务。
-    if (initialItem.evidence_status !== 'available') throw new Error('原始 ZIP 尚未登记为可用')
+    if (initialItem.evidence_status !== 'available') throw new Error('原始证据尚未登记为可用')
     const verification = await verifyBatchEvidence(db, databasePath, batchItemId)
     if (verification.status !== 'available') throw new Error(`附件证据未准备好：${verification.status}`)
     ensureSourceBatchId(db, batchItemId)
