@@ -17,7 +17,7 @@ export function understandQuery(db: DatabaseSync, question: string, anchorDate: 
     ORDER BY length(name) DESC, name
   `).all() as unknown as SenderRow[]
   const matchedConversations = conversations.filter((item) => matchesConversation(question, item.name))
-  const matchedSenders = senders.filter((item) => question.includes(item.name))
+  const matchedSenders = senders.filter((item) => isUsableName(item.name) && question.includes(item.name))
   const dateRange = parseDateRange(question, anchorDate)
   const timeIntent = inferTimeIntent(question, dateRange)
   const personIntent = /谁在|谁提到|谁发|谁分享|谁推荐|哪个人|哪位/.test(question) ? 'who' : 'none'
@@ -77,7 +77,8 @@ export function parseDateRange(question: string, anchorDate: string): QueryDateR
 
 function extractSearchTerms(question: string, entityKeys: string[], conversationNames: string[], senderNames: string[]): string[] {
   const terms = new Set<string>()
-  const contentQuestion = [...conversationNames, ...senderNames].reduce((value, name) => value.replaceAll(name, ' '), question)
+  const names = [...conversationNames, ...senderNames].filter(isUsableName)
+  const contentQuestion = names.reduce((value, name) => value.replaceAll(name, ' '), question)
   const expansions: Record<string, string[]> = {
     'claude-code': ['Claude Code', 'Claude', 'Anthropic coding agent'],
     'wechat-layout': ['公众号排版', '公众号', 'Markdown'],
@@ -101,7 +102,7 @@ function extractSearchTerms(question: string, entityKeys: string[], conversation
   ]
   for (const term of dictionary) if (contentQuestion.toLowerCase().includes(term.toLowerCase())) terms.add(term)
   for (const version of contentQuestion.match(/\bv?\d+(?:\.\d+){1,3}\b/gi) ?? []) terms.add(version)
-  for (const name of [...conversationNames, ...senderNames]) terms.delete(name)
+  for (const name of names) terms.delete(name)
   if (terms.size === 0) {
     const literal = contentQuestion.replace(/[？?!！。]+$/g, '').trim()
     if (literal.length >= 2) terms.add(literal)
@@ -110,7 +111,7 @@ function extractSearchTerms(question: string, entityKeys: string[], conversation
 }
 
 function stripQuestionShell(question: string, knownNames: string[]): string {
-  let value = knownNames.reduce((current, name) => current.replaceAll(name, ' '), question)
+  let value = knownNames.filter(isUsableName).reduce((current, name) => current.replaceAll(name, ' '), question)
     .replace(/^\s*(最近|近期|之前|以前|今天|昨天|本周|上周|本月|上个月|最近\s*\d+\s*天)?\s*/u, '')
     .replace(/^\s*(谁在找|谁提到过|谁提到|谁发过|谁发|谁分享过|谁分享|谁推荐过|谁推荐|有没有人讨论|大家有没有讨论|最近有人提到什么|有人提到什么|哪个群说过|我之前看过)\s*/u, '')
     .replace(/[？?！!。]+$/gu, '')
@@ -189,7 +190,12 @@ function extractQueryEntityKeys(question: string): string[] {
   return [...keys].sort()
 }
 
-function matchesConversation(question: string, name: string): boolean {
+function isUsableName(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0
+}
+
+function matchesConversation(question: string, name: unknown): boolean {
+  if (!isUsableName(name)) return false
   if (question.includes(name)) return true
   const groupHint = question.match(/([A-Za-z\p{Script=Han}]{1,12})\s*群/u)?.[1]
   if (!groupHint) return false
