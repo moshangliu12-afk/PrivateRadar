@@ -191,7 +191,9 @@ function extractQueryEntityKeys(question: string): string[] {
 }
 
 function isUsableName(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0
+  if (typeof value !== 'string') return false
+  const name = value.trim()
+  return name.length > 0 && /[\p{L}\p{N}]/u.test(name)
 }
 
 function matchesConversation(question: string, name: unknown): boolean {

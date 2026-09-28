@@ -172,3 +172,82 @@ describe('空名称消息的检索与时间语义', () => {
     expect(response.unverifiedTimeResults).toEqual([])
   })
 })
+
+function namedDatabase(): DatabaseSync {
+  const db = database()
+  addConversation(db, 'names-group', '名称测试群')
+  return db
+}
+
+function addNamedSender(db: DatabaseSync, id: string, name: string): void {
+  addMessage(db, id, 'names-group', '名称测试群')
+  db.prepare("UPDATE messages SET sender_id = ?, sender_name = ?, sender_name_source = 'source_native' WHERE id = ?")
+    .run(id, name, id)
+}
+
+describe('纯符号名称不参与查询理解', () => {
+  it.each(['-', '/', '.', '_', '·', '---', '...', '🚀'])('发送人 %s 不生成过滤或改写查询', (name) => {
+    const db = namedDatabase()
+    addNamedSender(db, 'symbol-sender', name)
+    const query = `${name} 资格认证`
+    const understanding = understandQuery(db, query, anchorDate)
+    expect(understanding.senderIds).toEqual([])
+    expect(understanding.senderNames).toEqual([])
+    expect(understanding.conversationIds).toEqual([])
+    expect(understanding.coreTopics).toEqual([query])
+    expect(db.prepare("SELECT sender_name FROM messages WHERE id = 'symbol-sender'").get())
+      .toMatchObject({ sender_name: name })
+  })
+
+  it.each(['-', '/', '·'])('会话 %s 不生成过滤或改写查询', (name) => {
+    const db = database()
+    addConversation(db, 'symbol-group', name)
+    const query = `${name} 资格认证`
+    const understanding = understandQuery(db, query, anchorDate)
+    expect(understanding.conversationIds).toEqual([])
+    expect(understanding.conversationNames).toEqual([])
+    expect(understanding.coreTopics).toEqual([query])
+    expect(db.prepare("SELECT name FROM conversations WHERE id = 'symbol-group'").get()).toMatchObject({ name })
+  })
+
+  it.each(['A', '李', '虚构用户4', '·虚构用户4', 'Claude', 'user_01', '5', 'Ж'])('合法发送人 %s 仍生成过滤', (name) => {
+    const db = namedDatabase()
+    addNamedSender(db, 'valid-sender', name)
+    const understanding = understandQuery(db, `${name} 资格认证`, anchorDate)
+    expect(understanding.senderIds).toEqual(['valid-sender'])
+    expect(understanding.senderNames).toEqual([name])
+    expect(understanding.coreTopics).toEqual(['资格认证'])
+  })
+
+  it('连字符产品查询保持完整并召回另一发送人的正文', async () => {
+    const db = namedDatabase()
+    addNamedSender(db, 'hyphen-sender', '-')
+    addMessage(db, 'product', 'names-group', '名称测试群', '2026-09-20T04:00:00.000Z')
+    db.prepare("UPDATE messages SET content = '文字模型换成了 Claude-Sonnet-5，生成的效果会更好一些。' WHERE id = 'product'").run()
+    const response = await askChat(db, 'Claude-Sonnet-5', searchOptions)
+    expect(response.understanding.senderIds).toEqual([])
+    expect(response.understanding.senderNames).toEqual([])
+    expect(response.understanding.coreTopics).toEqual(['Claude-Sonnet-5'])
+    expect(response.understanding.searchTerms).toContain('Claude-Sonnet-5')
+    expect(response.understanding.expandedTerms).not.toContain('Claude Sonnet 5')
+    expect(response.results).toContainEqual(expect.objectContaining({ messageId: 'product', timeVerification: 'verified' }))
+  })
+
+  it('ISO 日期不触发连字符发送人过滤，可靠消息保留且未知时间仍排除', async () => {
+    const db = namedDatabase()
+    addNamedSender(db, 'hyphen-sender', '-')
+    addMessage(db, 'github-known', 'names-group', '名称测试群', '2026-09-20T03:39:00.000Z')
+    addMessage(db, 'github-unknown', 'names-group', '名称测试群')
+    db.prepare("UPDATE messages SET content = '我已经把我这个工具传到GitHub上面去了' WHERE id IN ('github-known', 'github-unknown')").run()
+    const query = '2026-09-20 GitHub'
+    const response = await askChat(db, query, searchOptions)
+    expect(response.understanding.senderIds).toEqual([])
+    expect(response.understanding.senderNames).toEqual([])
+    expect(response.understanding.coreTopics).toEqual([query])
+    expect(response.understanding.dateRange).toMatchObject({ start: '2026-09-20', end: '2026-09-20' })
+    expect(response.understanding.timeIntent).toBe('strict')
+    expect(response.results.map((item) => item.messageId)).toEqual(['github-known'])
+    expect(response.results[0].timeVerification).toBe('verified')
+    expect(response.unverifiedTimeResults).toEqual([])
+  })
+})
