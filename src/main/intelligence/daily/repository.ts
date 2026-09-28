@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+import { isReliableTimestampSource, reliableTimestampSql } from '../../time-semantics'
 import type { DatabaseSync } from 'node:sqlite'
 import type { CandidateEvidence, DailyCandidate, EvidenceMessage } from '../../../shared/models'
 import { assessDailyValue } from './daily-value'
@@ -8,7 +10,9 @@ const HISTORY_LOOKBACK_DAYS = 7
 const HISTORY_LIMIT = 20_000
 
 export function runDailyIntelligence(db: DatabaseSync, date: string): DailyPipelineResult {
-  const today = loadMessagesForDate(db, date, true)
+  // 显式刷新也必须先失效依赖旧时间语义的 AI 缓存。
+  loadDailyCandidateCache(db, date)
+  const today = loadMessagesForDate(db, date)
   const history = loadHistoricalMessages(db, date)
   const result = buildDailyCandidates(today, date, history)
   saveCandidates(db, result.candidates, date)
@@ -16,6 +20,11 @@ export function runDailyIntelligence(db: DatabaseSync, date: string): DailyPipel
 }
 
 export function loadSavedDailyCandidates(db: DatabaseSync, date: string): DailyCandidate[] {
+  return loadDailyCandidateCache(db, date) ?? []
+}
+
+/** null 表示未命中，空数组表示已计算且无候选。 */
+export function loadDailyCandidateCache(db: DatabaseSync, date: string): DailyCandidate[] | null {
   const rows = db.prepare(`
     SELECT id, candidate_date, title, representative_text, importance_score,
            source_message_ids_json, source_conversation_ids_json, source_sender_ids_json,
@@ -24,7 +33,59 @@ export function loadSavedDailyCandidates(db: DatabaseSync, date: string): DailyC
     WHERE candidate_date = ? AND algorithm_version = ?
     ORDER BY importance_score DESC, first_seen_at, id
   `).all(date, DAILY_ALGORITHM_VERSION) as unknown as SavedCandidateRow[]
-  return rows.map(toDailyCandidate)
+  if (rows.length === 0) {
+    const marker = db.prepare('SELECT value_json FROM app_settings WHERE key = ?').get(emptyCacheKey(date)) as { value_json: string } | undefined
+    return marker?.value_json === emptyInputSignature(db, date) ? [] : null
+  }
+  let candidates: DailyCandidate[]
+  try {
+    candidates = rows.map(toDailyCandidate)
+  } catch {
+    invalidateDailyDerivedCache(db, date)
+    return null
+  }
+  for (const candidate of candidates) {
+    if (!Array.isArray(candidate.sourceMessageIds) || candidate.sourceMessageIds.some((id) => typeof id !== 'string')) {
+      invalidateDailyDerivedCache(db, date)
+      return null
+    }
+    const linked = db.prepare('SELECT message_id FROM daily_candidate_sources WHERE candidate_id = ?')
+      .all(candidate.candidateId) as Array<{ message_id: string }>
+    const ids = [...new Set([...candidate.sourceMessageIds, ...linked.map((row) => row.message_id)])]
+    if (candidate.sourceMessageIds.length === 0 || ids.length === 0 ||
+        !sourcesBelongToDate(db, ids, date)) {
+      // 只失效该日派生结果；候选由现有重建事务整体替换。
+      invalidateDailyDerivedCache(db, date)
+      return null
+    }
+  }
+  return candidates
+}
+
+function invalidateDailyDerivedCache(db: DatabaseSync, date: string): void {
+  db.prepare('DELETE FROM daily_ai_briefs WHERE brief_date = ?').run(date)
+  db.prepare('DELETE FROM app_settings WHERE key = ?').run(emptyCacheKey(date))
+}
+
+function sourcesBelongToDate(db: DatabaseSync, ids: string[], date: string): boolean {
+  const row = db.prepare(`
+    SELECT COUNT(*) AS count FROM messages
+    WHERE id IN (SELECT value FROM json_each(?))
+      AND ${reliableTimestampSql()} AND date(timestamp, 'localtime') = ?
+  `).get(JSON.stringify(ids), date) as { count: number }
+  return row.count === ids.length
+}
+
+function emptyCacheKey(date: string): string {
+  return `daily-empty-cache:${DAILY_ALGORITHM_VERSION}:${date}`
+}
+
+function emptyInputSignature(db: DatabaseSync, date: string): string {
+  const rows = db.prepare(`
+    SELECT id, timestamp, timestamp_source, content FROM messages
+    WHERE ${reliableTimestampSql()} AND date(timestamp, 'localtime') = ? ORDER BY id
+  `).all(date)
+  return JSON.stringify(createHash('sha256').update(JSON.stringify(rows)).digest('hex'))
 }
 
 function toDailyCandidate(row: SavedCandidateRow): DailyCandidate {
@@ -45,7 +106,7 @@ function toDailyCandidate(row: SavedCandidateRow): DailyCandidate {
   }
 }
 
-export function loadMessagesForDate(db: DatabaseSync, date: string, includeUndatedImportedOnDate = false): DailyMessage[] {
+export function loadMessagesForDate(db: DatabaseSync, date: string): DailyMessage[] {
   const rows = db.prepare(`
     SELECT id, conversation_id, COALESCE(conversation_name, '') AS conversation_name,
            sender_id, COALESCE(sender_name, '') AS sender_name,
@@ -53,9 +114,9 @@ export function loadMessagesForDate(db: DatabaseSync, date: string, includeUndat
            conversation_name_source, sender_name_source, timestamp_source
     FROM messages
     WHERE date(timestamp, 'localtime') = ?
-       OR (? = 1 AND (timestamp IS NULL OR timestamp = '') AND date(imported_at, 'localtime') = ?)
+      AND ${reliableTimestampSql()}
     ORDER BY timestamp, id
-  `).all(date, includeUndatedImportedOnDate ? 1 : 0, date) as unknown as MessageRow[]
+  `).all(date) as unknown as MessageRow[]
   return rows.map(toDailyMessage)
 }
 
@@ -121,7 +182,7 @@ function loadHistoricalMessages(db: DatabaseSync, date: string): DailyMessage[] 
            COALESCE(timestamp, '') AS timestamp, content, message_type, links_json, reply_to,
            conversation_name_source, sender_name_source, timestamp_source
     FROM messages
-    WHERE date(timestamp, 'localtime') < ?
+    WHERE ${reliableTimestampSql()} AND date(timestamp, 'localtime') < ?
       AND date(timestamp, 'localtime') >= date(?, ?)
     ORDER BY timestamp DESC, id DESC
     LIMIT ?
@@ -144,7 +205,7 @@ function saveCandidates(db: DatabaseSync, candidates: DailyCandidate[], date: st
   `)
   db.exec('BEGIN')
   try {
-    db.prepare('DELETE FROM daily_intelligence_candidates WHERE candidate_date = ?').run(date)
+    db.prepare('DELETE FROM daily_intelligence_candidates WHERE candidate_date = ? AND algorithm_version = ?').run(date, DAILY_ALGORITHM_VERSION)
     const createdAt = new Date().toISOString()
     for (const candidate of candidates) {
       insertCandidate.run(
@@ -165,6 +226,13 @@ function saveCandidates(db: DatabaseSync, candidates: DailyCandidate[], date: st
         createdAt
       )
       candidate.sourceMessageIds.forEach((messageId, index) => insertSource.run(candidate.candidateId, messageId, index))
+    }
+    if (candidates.length === 0) {
+      db.prepare(`INSERT INTO app_settings (key, value_json, updated_at) VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at`)
+        .run(emptyCacheKey(date), emptyInputSignature(db, date), createdAt)
+    } else {
+      db.prepare('DELETE FROM app_settings WHERE key = ?').run(emptyCacheKey(date))
     }
     db.exec('COMMIT')
   } catch (error) {
@@ -225,7 +293,7 @@ function toDailyMessage(row: MessageRow): DailyMessage {
     senderName: row.sender_name,
     senderKnown: ['source_native', 'user_supplied'].includes(row.sender_name_source) && Boolean(row.sender_name),
     timestamp: row.timestamp,
-    timestampKnown: row.timestamp_source !== 'unknown' && Boolean(row.timestamp),
+    timestampKnown: isReliableTimestampSource(row.timestamp_source) && Boolean(row.timestamp),
     content: row.content,
     messageType: row.message_type,
     links: safeStringArray(row.links_json),

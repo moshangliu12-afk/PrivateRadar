@@ -1,3 +1,4 @@
+import { reliableTimestampSql } from './time-semantics'
 import type { DatabaseSync } from 'node:sqlite'
 import { dirname, join } from 'node:path'
 import type { DataStatus, DataStatusImport, FirstUseStatus, LatestGuidedImport } from '../shared/models'
@@ -77,7 +78,7 @@ function latestGuidedImport(db: DatabaseSync): LatestGuidedImport | null {
     SELECT COUNT(*) AS total,
       SUM(CASE WHEN conversation_name_source <> 'unknown' AND conversation_name IS NOT NULL THEN 1 ELSE 0 END) AS conversation_known,
       SUM(CASE WHEN sender_name_source IN ('source_native', 'user_supplied') AND sender_name IS NOT NULL THEN 1 ELSE 0 END) AS sender_known,
-      SUM(CASE WHEN timestamp_source <> 'unknown' AND timestamp IS NOT NULL THEN 1 ELSE 0 END) AS timestamp_known
+      SUM(CASE WHEN ${reliableTimestampSql()} THEN 1 ELSE 0 END) AS timestamp_known
     FROM messages WHERE source_batch_id = ?
   `).get(row.source_batch_id) as unknown as BatchStatsRow
   const total = Number(stats.total)
@@ -122,8 +123,8 @@ function readDataStatus(db: DatabaseSync): DataStatus {
     ORDER BY completed_at DESC, id DESC LIMIT 1
   `).get() as ImportJobStatusRow | undefined)
   const row = db.prepare(`
-    SELECT MAX(COALESCE(date(NULLIF(timestamp, ''), 'localtime'), date(imported_at, 'localtime'))) AS latest_message_date
-    FROM messages
+    SELECT MAX(date(timestamp, 'localtime')) AS latest_message_date
+    FROM messages WHERE ${reliableTimestampSql()}
   `).get() as { latest_message_date: string | null }
   return { latestAttempt, lastSuccessfulImport, latestMessageDate: row.latest_message_date }
 }
