@@ -46,6 +46,31 @@ export const workBuddyBatchIngestSchema = z.object({
   attachments: z.array(workBuddyBatchAttachmentSchema).length(2).describe('同一次输入的两个独立聊天附件')
 })
 
+// 限制原始序列化的资源占用；独立附件数量由 Current Input Gate 判断。
+export const WORKBUDDY_CURRENT_CONTEXT_LIMITS = Object.freeze({
+  maxRawContexts: 16,
+  maxTranscriptCharacters: 256 * 1024,
+  maxTotalTranscriptBytes: 4 * 1024 * 1024
+})
+
+export const workBuddyCurrentContextSchema = z.strictObject({
+  file: z.string().min(1).max(255).describe('当前卡片原始显示文件名，仅作展示，不用于推导路径'),
+  extracted_dir_path: z.string().min(1).max(4096).describe('当前卡片明确提供的解压目录绝对路径'),
+  message_count: z.number().int().min(1).max(500),
+  transcript: z.string().min(1).max(WORKBUDDY_CURRENT_CONTEXT_LIMITS.maxTranscriptCharacters)
+    .describe('当前卡片完整 inline transcript，按传输协议解码一次，保留发送人、正文、换行与顺序'),
+  first_sender: z.string().min(1).max(4096).optional(),
+  first_message_at: z.string().min(1).max(128).optional(),
+  truncated: z.boolean().optional().describe('明确截断时必须为 true；缺失沿用当前 Gate 契约')
+})
+
+export const workBuddyCurrentContextBatchSchema = z.strictObject({
+  mode: z.literal('current_context'),
+  contexts: z.array(workBuddyCurrentContextSchema).min(1).max(WORKBUDDY_CURRENT_CONTEXT_LIMITS.maxRawContexts)
+    .describe('同一次当前输入的原始上下文，不由 Agent 去重；归组后必须恰好两个逻辑附件，总正文最多 4 MiB UTF-8')
+}).refine((input) => input.contexts.reduce((total, block) => total + Buffer.byteLength(block.transcript, 'utf8'), 0)
+  <= WORKBUDDY_CURRENT_CONTEXT_LIMITS.maxTotalTranscriptBytes, '当前输入正文总字节数超限')
+
 export const workBuddyBatchResultSchema = z.object({
   batch_session_id: z.string(),
   status: z.enum(['pending', 'preparing', 'in_progress', 'success', 'partial_success', 'failed']),

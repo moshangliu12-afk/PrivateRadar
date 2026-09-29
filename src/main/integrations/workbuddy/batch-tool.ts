@@ -4,10 +4,13 @@ import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import { McpServer } from '@modelcontextprotocol/server'
 import { createBatchImportItem, createBatchImportSession, listBatchImportItems } from '../../batch-import/repository'
-import { saveOriginalZip, saveStructuredSnapshot } from '../../batch-import/evidence'
+import { saveOriginalZip, saveStructuredSnapshot, verifyBatchEvidence } from '../../batch-import/evidence'
+import { saveDirectoryEvidence } from '../../batch-import/directory-evidence'
+import { safeAbsolutePath, WindowsPathLease } from '../../batch-import/windows-path-lease'
 import { executeBatchImportSession } from '../../batch-import/session'
-import { workBuddyBatchIngestSchema, workBuddyBatchResultSchema,
-  type WorkBuddyBatchIngestInput, type WorkBuddyBatchResult } from './validation'
+import { gateWorkBuddyBatchCurrentInput, WorkBuddyCurrentInputError } from '../../import/workbuddy-current-input'
+import { workBuddyBatchIngestSchema, workBuddyBatchResultSchema, workBuddyCurrentContextBatchSchema,
+  workBuddyIngestSchema, type WorkBuddyIngestInput, type WorkBuddyBatchIngestInput, type WorkBuddyBatchResult } from './validation'
 
 export interface WorkBuddyBatchToolOptions {
   databasePath: string
@@ -37,6 +40,20 @@ export function registerWorkBuddyBatchTool(
       }
     }
   )
+  server.registerTool(
+    'privateradar_ingest_current_context_batch',
+    {
+      title: '从当前卡片上下文批量写入 PrivateRadar',
+      description: '接收当前同一次输入的原始卡片 contexts，不由 Agent 去重或生成 messages。使用明确 extracted_dir_path 保存目录证据，inline transcript 由确定性 Parser 解析。归组后必须恰好两个附件，每附件 1–500 条；路径缺失、截断或解析失败立即停止。不得扫描目录、猜测路径或补造时间。',
+      inputSchema: workBuddyCurrentContextBatchSchema,
+      outputSchema: workBuddyBatchResultSchema
+    },
+    async (input) => {
+      const output = await ingestWorkBuddyCurrentContextBatch(db, options, input)
+      log?.('CURRENT_CONTEXT_BATCH_RESULT', JSON.stringify({ sessionId: output.batch_session_id, status: output.status }))
+      return { content: [{ type: 'text', text: batchResultText(output) }], structuredContent: output }
+    }
+  )
 }
 
 export async function ingestWorkBuddyBatch(
@@ -52,10 +69,72 @@ export async function ingestWorkBuddyBatch(
       }
     }
   }
-  const root = options.chatHistoryRoot ?? join(homedir(), '.workbuddy', 'app', 'tmp', 'chat-history')
+  const root = chatHistoryRoot(options)
   const sourcePaths = await Promise.all(input.attachments.map((attachment) =>
-    validateWorkBuddyZipPath(attachment.source_zip_path, root)
+    validateWorkBuddyAttachmentPath(attachment.source_zip_path, root, 'zip')
   ))
+
+  const sessionId = await prepareBatchAttachments(db, options, input.attachments.map((attachment, index) => ({
+    sourceKind: 'zip', sourcePath: sourcePaths[index],
+    displayName: attachment.display_name ?? basename(sourcePaths[index]), sourceHint: attachment.source_hint ?? null,
+    input: { import_mode: attachment.import_mode, batch_metadata: attachment.batch_metadata, messages: attachment.messages }
+  })))
+  return executeAndReportBatch(db, options, sessionId)
+}
+
+/** 输入预检及证据准备阶段；恢复阶段直接使用既有会话 API 和持久快照。 */
+export async function prepareWorkBuddyCurrentContextBatch(
+  db: DatabaseSync, options: WorkBuddyBatchToolOptions, rawInput: unknown
+): Promise<string> {
+  const input = workBuddyCurrentContextBatchSchema.parse(rawInput)
+  // 既有 Gate 在归组时完成 Parser；不再解析第二遍，也不改写其消息结果。
+  const normalized = gateWorkBuddyBatchCurrentInput(input.contexts)
+  for (const [index, block] of input.contexts.entries()) {
+    // 仅识别明确的独立截断标记；普通省略号可能是正文，不据此猜测截断。
+    if (/^\s*(?:\[truncated\]|\[内容已截断\]|\[聊天记录已截断\]|<truncated\s*\/>)\s*$/mi.test(block.transcript)) {
+      throw new WorkBuddyCurrentInputError('TRUNCATED_CURRENT_CONTEXT', index, '正文包含明确截断标记')
+    }
+  }
+  const prepared: PreparedBatchAttachment[] = []
+  for (const attachment of normalized.logical_attachments) {
+    const sourcePath = await validateWorkBuddyAttachmentPath(attachment.extracted_dir_path, chatHistoryRoot(options), 'directory')
+    const snapshot = {
+      messages: attachment.messages,
+      parser: { grammar_version: attachment.grammar_version, timezone_interpretation: attachment.timezone_interpretation },
+      current_context: {
+        file: attachment.file, extracted_dir_path: attachment.extracted_dir_path,
+        message_count: attachment.message_count, transcript: attachment.transcript,
+        first_sender: attachment.first_sender, first_message_at: attachment.first_message_at,
+        truncated: attachment.truncated, context_indexes: attachment.context_indexes,
+        raw_context_count: normalized.raw_context_count
+      }
+    }
+    // 只验证，不使用会 trim 的返回值替换 Parser 原始结果。
+    workBuddyIngestSchema.parse(snapshot)
+    prepared.push({ sourceKind: 'directory', sourcePath, displayName: attachment.file,
+      sourceHint: attachment.extracted_dir_path, input: snapshot })
+  }
+  return prepareBatchAttachments(db, options, prepared)
+}
+
+export async function ingestWorkBuddyCurrentContextBatch(
+  db: DatabaseSync, options: WorkBuddyBatchToolOptions, rawInput: unknown
+): Promise<WorkBuddyBatchResult> {
+  const sessionId = await prepareWorkBuddyCurrentContextBatch(db, options, rawInput)
+  return executeAndReportBatch(db, options, sessionId)
+}
+
+interface PreparedBatchAttachment {
+  sourceKind: 'zip' | 'directory'
+  sourcePath: string
+  displayName: string
+  sourceHint: string | null
+  input: WorkBuddyIngestInput
+}
+
+async function prepareBatchAttachments(
+  db: DatabaseSync, options: WorkBuddyBatchToolOptions, attachments: PreparedBatchAttachment[]
+): Promise<string> {
 
   // 会话与两个附件项短事务登记；证据持久化及导入各自独立进行。
   db.exec('BEGIN IMMEDIATE')
@@ -63,9 +142,11 @@ export async function ingestWorkBuddyBatch(
   try {
     const session = createBatchImportSession(db, 'workbuddy')
     sessionId = session.id
-    for (const [index, attachment] of input.attachments.entries()) {
-      createBatchImportItem(db, session.id, index,
-        attachment.display_name ?? basename(sourcePaths[index]), null, attachment.source_hint ?? null)
+    for (const [index, attachment] of attachments.entries()) {
+      const item = createBatchImportItem(db, session.id, index, attachment.displayName, null, attachment.sourceHint)
+      if (attachment.sourceKind === 'directory') {
+        db.prepare("UPDATE batch_import_items SET evidence_source_kind = 'directory' WHERE id = ?").run(item.id)
+      }
     }
     db.exec('COMMIT')
   } catch (error) {
@@ -74,15 +155,19 @@ export async function ingestWorkBuddyBatch(
   }
 
   const items = listBatchImportItems(db, sessionId)
-  for (const [index, attachment] of input.attachments.entries()) {
+  for (const [index, attachment] of attachments.entries()) {
     const item = items[index]
     try {
-      await saveOriginalZip(db, options.databasePath, item.id, sourcePaths[index])
-      await saveStructuredSnapshot(db, options.databasePath, item.id, {
-        import_mode: attachment.import_mode,
-        batch_metadata: attachment.batch_metadata,
-        messages: attachment.messages
-      })
+      if (attachment.sourceKind === 'directory') {
+        await saveDirectoryEvidence(db, options.databasePath, item.id, attachment.sourcePath)
+      } else {
+        await saveOriginalZip(db, options.databasePath, item.id, attachment.sourcePath)
+      }
+      await saveStructuredSnapshot(db, options.databasePath, item.id, attachment.input)
+      if (attachment.sourceKind === 'directory' &&
+          (await verifyBatchEvidence(db, options.databasePath, item.id)).status !== 'available') {
+        throw new Error('持久目录证据与消息快照未通过整体校验')
+      }
     } catch (error) {
       // 已登记的附件项必须留在会话中，另一附件的证据和导入继续执行。
       const current = db.prepare('SELECT status FROM batch_import_items WHERE id = ?').get(item.id) as { status: string }
@@ -98,7 +183,12 @@ export async function ingestWorkBuddyBatch(
       }
     }
   }
+  return sessionId
+}
 
+async function executeAndReportBatch(
+  db: DatabaseSync, options: WorkBuddyBatchToolOptions, sessionId: string
+): Promise<WorkBuddyBatchResult> {
   const summary = await executeBatchImportSession(db, options.databasePath, sessionId)
   const finalItems = listBatchImportItems(db, sessionId)
   const output: WorkBuddyBatchResult = {
@@ -138,11 +228,16 @@ export async function ingestWorkBuddyBatch(
   return workBuddyBatchResultSchema.parse(output)
 }
 
-async function validateWorkBuddyZipPath(sourcePath: string, rootPath: string): Promise<string> {
+function chatHistoryRoot(options: WorkBuddyBatchToolOptions): string {
+  return options.chatHistoryRoot ?? join(homedir(), '.workbuddy', 'app', 'tmp', 'chat-history')
+}
+
+async function validateWorkBuddyAttachmentPath(sourcePath: string, rootPath: string, kind: 'zip' | 'directory'): Promise<string> {
   if (!isAbsolute(sourcePath) || sourcePath.split(/[\\/]+/).includes('..')) {
-    throw new Error('原始 ZIP 必须是允许临时目录内、不含目录穿越的绝对路径')
+    throw new Error('原始附件必须是允许临时目录内、不含目录穿越的绝对路径')
   }
-  if (!sourcePath.toLowerCase().endsWith('.zip')) throw new Error('原始聊天附件必须是 ZIP 文件')
+  if (kind === 'zip' && !sourcePath.toLowerCase().endsWith('.zip')) throw new Error('原始聊天附件必须是 ZIP 文件')
+  if (kind === 'directory') { safeAbsolutePath(sourcePath); safeAbsolutePath(rootPath) }
   const root = resolve(rootPath)
   const rootInfo = await stat(root)
   if (!rootInfo.isDirectory()) throw new Error('WorkBuddy 聊天临时根路径不是目录')
@@ -154,19 +249,25 @@ async function validateWorkBuddyZipPath(sourcePath: string, rootPath: string): P
     info = await lstat(candidate)
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      throw new Error('当前附件真实路径不可用：原始 ZIP 不存在')
+      throw new Error('当前附件真实路径不可用：原始附件不存在')
     }
     throw error
   }
-  if (!info.isFile() || info.isSymbolicLink()) throw new Error('原始 ZIP 路径不是普通文件')
+  if (info.isSymbolicLink() || (kind === 'zip' ? !info.isFile() : !info.isDirectory())) {
+    throw new Error(kind === 'zip' ? '原始 ZIP 路径不是普通文件' : '原始附件路径不是普通目录')
+  }
   assertInside(canonicalRoot, await realpath(candidate))
+  if (kind === 'directory') {
+    const lease = new WindowsPathLease()
+    try { await lease.lock(candidate, true) } finally { await lease.close() }
+  }
   return candidate
 }
 
 function assertInside(root: string, target: string, allowRoot = false): void {
   const part = relative(root, target)
   if ((!part && !allowRoot) || part === '..' || part.startsWith(`..${sep}`) || isAbsolute(part)) {
-    throw new Error('原始 ZIP 路径不在允许的 WorkBuddy 聊天临时根目录内')
+    throw new Error('原始附件路径不在允许的 WorkBuddy 聊天临时根目录内')
   }
 }
 
