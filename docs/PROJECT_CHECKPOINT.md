@@ -1,5 +1,7 @@
 # PrivateRadar 项目交接检查点
 
+本文保留 alpha.14 / alpha.14.1 历史。顶部冻结状态与历史交接提示属于当时基线；当前阶段以文末“alpha.15 RC 准备”及 `docs/ALPHA15_STATUS.md` 为准，不把历史冻结或阻塞状态当作当前 alpha.15 结论。
+
 ## 冻结状态
 
 - 当前版本：`0.2.0-alpha.14`
@@ -266,3 +268,16 @@
 
 任何涉及正式数据库的验证必须先复制到隔离副本；不得用 Harness、脚本或直接 JSON-RPC 伪造 WorkBuddy GUI 正式链路；不得把 imported_at 或 approximate_date 当作消息原始时间；不得把 unknown sender 计入真人统计。
 ```
+
+## alpha.15 RC 准备（2026-10-01）
+
+- 本检查点父提交基线：`master`，`74fc0c7d9bf7e6c43bec791f6a1907d902e8f556`，Step 5L-B 打包契约已完成。Step 5L-C 开始时 tracked 工作区干净，仅三个历史 Skill ZIP 未跟踪；随后完成的 RC 候选与测试稳定性修复由本检查点固化。
+- 当前产品、Connector 与 MCP 版本：`0.2.0-alpha.15`；两份正式 Skill 保持字节同步的 `0.2.0-alpha.15-skill.3`。
+- 正式公开单卡与当前上下文恰好双卡工具，旧批量入口仅内部兼容。用户级官方 Skill 安全升级、自定义 Skill 保留与原子替换维持 Step 5L-B 契约。
+- Step 5G / 5H / 5I 已完成确定性输入契约、目录证据与当前上下文集成；Step 5J 真实双卡 5 + 5 条通过并带已知问题，随后验证回滚；Step 5K 已合入 alpha.14.1 维护修复。提交与匿名统计见 `docs/ALPHA15_STATUS.md`，隔离验收证据已保留。
+- 历史 Step 5L-B 验证基线为 574 项通过、4 项跳过、0 项失败。最新 Step 5L-C.1 全量基线为 582 项通过、4 项既有跳过、0 项失败（35 个文件：32 个通过、3 个跳过）；类型检查、生产构建、Connector 构建和差异空白检查通过。
+- Step 5L-C RC 准备完成：仅版本元数据、RC 文档、必要版本测试和 first-use 过期默认值清理，不扩展功能，不修复两个已知问题。
+- Step 5L-C.1 为 `TEST_STABILITY_FIXED`：跨月 Search 测试确认为 `NON_DETERMINISTIC_TEST`，仅在测试中固定 2026-09-29 上海本地参考时间并恢复时钟与时区；生产 Search 未改。重放超时连续及组合复测未复现，归类为 `TRANSIENT_TIMEOUT_NOT_REPRODUCED`，120 秒上限未调整，没有确认产品回归。
+- Step 5L-C.2 同步最终状态并固化独立 RC 准备检查点，提交信息为 `chore: prepare alpha.15 release candidate`，不 amend 或 squash。
+- 当前状态：`READY_TO_BUILD_ALPHA15_RC`，尚未正式发布。下一阶段仅在单独授权后执行 RC 构建及隔离全新安装 / 升级验收，包括真实安装版 schema 3 → 4 迁移、212 条消息隔离升级、已安装工具与 Skill、重启恢复及备份回滚。未执行项目见 `ALPHA_RELEASE_CHECKLIST.md`。
+- 正式用户继续使用 `0.2.0-alpha.14.1`。不修改正式数据库、Connector、Skill、WorkBuddy 配置；不 tag、不 push、不 release；三个历史 Skill ZIP 不动、不提交。

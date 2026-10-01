@@ -1,12 +1,18 @@
-# Step 5I 当前卡片上下文批量接线
+# alpha.15 当前卡片上下文批量导入
 
-本步骤只接通项目源码并使用隔离目录、数据库和 MCP 内存传输验证。正式 alpha.14.1、已安装 Skill、Connector、数据库及 Evidence 不同步。真实 WorkBuddy 验收留在 Step 5J。
+Step 5I 源码接线及隔离验证已完成；Step 5J 已完成真实 WorkBuddy 双卡 5+5 验收，结果为 `PASS_WITH_ISSUE`，随后 `ROLLBACK_VERIFIED`。形成 10 条 messages、10 条 FTS、1 个 Session、2 个 Item、2 个 Job、2 个 source batch 和 2 套 Directory Evidence。隔离验收证据保留；不在此文档复制真实正文或本机证据路径。
+
+Step 5L-B 已收敛正式 Tool 和 Skill 契约。alpha.15 RC 安装版尚待构建与验收，日常正式环境仍为 alpha.14.1。
+
+正式设计：WorkBuddy current context → raw contexts → Current Input Gate → exactly 2 logical attachments → deterministic Parser → Directory Evidence → 每个附件独立的 Item / Job / source batch。
+
+raw context count 可以大于 logical attachment count；例如同卡重复 serialization 后 raw 4 归组为 logical 2。正式产品只承诺恰好两个逻辑附件，不承诺任意 N 卡。
 
 ## 工具契约
 
-旧 `privateradar_ingest_batch` 保留 `{ attachments: [...] }`，仍要求两个 `source_zip_path + messages` 附件，原 ZIP 内容哈希、原件路径及来源规则不变。
+旧 `privateradar_ingest_batch` 仅为内部兼容路径，保留 `{ attachments: [...] }`、两个 `source_zip_path + messages` 附件及 ZIP Evidence，不出现在正式 tools/list。单卡正式入口为 `privateradar_ingest_messages`。
 
-新增独立工具 `privateradar_ingest_current_context_batch`：
+双卡正式工具为 `privateradar_ingest_current_context_batch`，由 `0.2.0-alpha.15-skill.3` 从当前输入映射字段并只调用一次：
 
 ```json
 {
@@ -72,8 +78,10 @@
 
 ## 后续边界
 
-尚未验证真实 WorkBuddy 将当前 resource 一一映射至工具参数；严格字段需由当前上下文直接提供，不能靠历史记录补齐。真实接入、Skill 同步和性能验收留在 Step 5J。
+真实双卡字段映射已在 Step 5J 验证；严格字段仍须由当前上下文直接提供，不能靠历史记录补齐。该结果不等于 RC 安装版验收，也不代表任意输入、附件数量或性能场景都已验证。
 
 保留 Step 5H 的强杀、断电孤立目录维护事项，不新增自动清理。完整安全边界仍限 Windows 本地固定磁盘，原生能力不可用时拒绝，没有普通复制降级。
 
-alpha.15 最终发布前必须吸收 alpha.14.1 的时间语义、Daily 缓存、空名称及纯符号名称 Search 维护修复。本步骤不合并这些维护提交，不发布 alpha.15。
+Step 5K 已吸收 alpha.14.1 的时间语义、Daily 缓存、空名称及纯符号名称 Search 维护修复。Step 5L-B 的 Packaging Contract checkpoint 为 `74fc0c7d9bf7e6c43bec791f6a1907d902e8f556`。
+
+两个非阻塞已知问题继续保留：部分多行消息进入 messages.content 时末尾一个换行可能被规范化移除，但 messages.json 和 raw_metadata_json 保留完整来源；某些纯中文明确日期 Search 可能漏召回。详见根目录 KNOWN_ISSUES.md。

@@ -1,4 +1,5 @@
 import { reliableTimestampSql } from './time-semantics'
+import { version as productVersion } from '../../package.json'
 import type { DatabaseSync } from 'node:sqlite'
 import { dirname, join } from 'node:path'
 import type { DataStatus, DataStatusImport, FirstUseStatus, LatestGuidedImport } from '../shared/models'
@@ -10,7 +11,7 @@ export function getFirstUseStatus(
   db: DatabaseSync,
   databasePath: string,
   now = new Date(),
-  appVersion = '0.2.0-alpha.3'
+  appVersion = productVersion
 ): FirstUseStatus {
   const messageCount = Number((db.prepare('SELECT COUNT(*) AS count FROM messages').get() as { count: number }).count)
   const batchCount = Number((db.prepare('SELECT COUNT(*) AS count FROM message_import_batches').get() as { count: number }).count)

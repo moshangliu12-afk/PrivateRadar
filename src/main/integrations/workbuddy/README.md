@@ -11,16 +11,18 @@
 
 当前上下文批量 Tool 接收本次输入真实提供的 raw context blocks。每个 block 原样携带 `file`、`extracted_dir_path`、`message_count` 与 inline `transcript`，并可携带 `first_sender`、`first_message_at`、`truncated`。Tool 自己完成重复 serialization 归组、确定性 Parser、Directory Evidence 与导入，最终必须恰好得到两个 logical attachments。Skill 不生成双卡 `messages`，不读取 `聊天记录.txt` 替代 inline transcript，也不扫描目录、猜测 ZIP 路径或按时间寻找附件。
 
-内部 legacy ZIP handler 继续保留原有路径边界、ZIP Evidence、validation 和回归测试，但不注册到正式 MCP。它要求两个真实 ZIP 绝对路径和各自消息数组；这不是 alpha.15 Skill 的正式调用路径。
+内部 legacy ZIP handler `privateradar_ingest_batch` 继续保留原有路径边界、ZIP Evidence、validation 和回归测试，但不注册到正式 MCP。它要求两个真实 ZIP 绝对路径和各自消息数组；这不是 alpha.15 Skill 的正式调用路径。
+
+产品、Connector metadata 与 MCP Server 版本统一为 `0.2.0-alpha.15`；两份正式 Skill 保持 `0.2.0-alpha.15-skill.3`，用户级部署从 Connector 内嵌 Skill 取源。官方旧内容可原子升级，同内容不重写，自定义内容保留并返回明确状态。Step 5J 已完成真实双卡 5+5 验收，随后正式环境回滚验证通过；alpha.15 RC 安装版仍待构建与验收。
 
 ## 两种导入模式
 
-- 快速导入：一次确认群名；发送人和时间允许保持缺失。
+- 单卡快速导入：群名缺失时省略，不强制追问；发送人和时间允许保持缺失。
 - 完整导入：一次确认群名、大致日期和可用的发送人映射，不逐条询问。
 
 `approximate_date` 和 `imported_at` 只属于批次，绝不复制到消息 `timestamp`。只有来源可逐条对应的时间才进入消息时间字段。
 
-调用 Tool 前必须先检查当前材料是否包含可逐条对应的原始时间。快速导入只减少交互，不得跳过这项检查。源材料直接提供的时间标记为 `source_native`，用户明确提供的时间标记为 `user_supplied`；没有可靠时间时省略时间字段。
+单卡调用 Tool 前必须先检查当前材料是否包含可逐条对应的原始时间。快速导入只减少交互，不得跳过这项检查。源材料直接提供的时间标记为 `source_native`，用户明确提供的时间标记为 `user_supplied`；没有可靠时间时省略时间字段。双卡直接交付原始 contexts，当前确定性 Parser 要求逐条完整日期与时分，缺失时整批拒绝，Skill 不补造时间或改走两个单卡调用。
 
 带原始时间的最小消息示例：
 

@@ -21,13 +21,25 @@ describe('问我的聊天', () => {
   let date = fixedDate
 
   beforeAll(() => {
+    // 固定演示数据与相对日期锚点，避免跨月改变“上个月没有消息”的测试前提。
+    vi.stubEnv('TZ', 'Asia/Shanghai')
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2004-02-23T12:00:00+08:00'))
     db = new DatabaseSync(':memory:')
     initializeDatabase(db)
     seedDemoData(db)
     date = (db.prepare(`SELECT MAX(date(timestamp, 'localtime')) AS date FROM messages`).get() as { date: string }).date
+    expect(date).toBe('2004-02-23')
   })
 
-  afterAll(() => db.close())
+  afterAll(() => {
+    try {
+      db?.close()
+    } finally {
+      vi.useRealTimers()
+      vi.unstubAllEnvs()
+    }
+  })
 
   it('FTS5 可以正常搜索产品名和正文', () => {
     const row = db.prepare(`SELECT COUNT(*) AS count FROM messages_fts WHERE messages_fts MATCH 'Claude'`).get() as { count: number }
@@ -99,7 +111,9 @@ describe('问我的聊天', () => {
 
   it('不存在的内容明确拒绝编造', async () => {
     const response = await askChat(db, '上个月谁推荐过一个不存在的工具？', { anchorDate: date, aiProvider: new MockAIProvider(), embeddingProvider: new MockEmbeddingProvider() })
+    expect(response.understanding.dateRange).toEqual({ label: '上个月', start: '2004-01-01', end: '2004-01-31' })
     expect(response.insufficientEvidence).toBe(true)
+    expect(response.results).toEqual([])
     expect(response.answer).toBe('没有找到足够相关的聊天记录。')
     expect(response.sourceMessageIds).toEqual([])
   })

@@ -15,7 +15,9 @@ PrivateRadar V0.1 三个核心需求已经完成：今日情报、跨群话题�
 - 可配置噪音过滤、保守候选归并、独立重要性评分和可追溯原始依据。
 - Provider 无关的 D2 结构化整理、来源保护、持久化缓存和失败降级。
 - 保守话题归并、7 天历史基线、独立 Signal Score、迷你趋势和原始证据追溯。
-- FTS5、日期/群/人物过滤、可选 Embedding 混合检索和基于有限证据的回答。
+- FTS5、日期/群/人物过滤和基于有限证据的回答；真实语义检索仍不属于当前正式能力。
+
+alpha.15 源码进入 RC 构建准备阶段，尚未正式发布，当前日常版本仍为 alpha.14.1。alpha.15 的 WorkBuddy 路线保留单卡导入，并新增同次两张微信聊天卡片批量导入。使用说明见 [USER_GUIDE.md](./USER_GUIDE.md)，安装版待验收项目见 [ALPHA_RELEASE_CHECKLIST.md](./ALPHA_RELEASE_CHECKLIST.md)。
 
 ## 启动
 
