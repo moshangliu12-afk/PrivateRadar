@@ -82,12 +82,13 @@ describe('WorkBuddy 微信导入最短路径', () => {
   })
 
   it('installer 只打包应用与 Connector 正式负载，不包含测试、历史 Skill ZIP 或验收数据', () => {
-    expect(packageJson.build.files).toEqual(['out/**/*', 'package.json'])
+    const includedFiles = packageJson.build.files.filter((pattern) => !pattern.startsWith('!'))
+    expect(includedFiles).toEqual(['out/**/*', 'package.json'])
     expect(packageJson.build.extraResources).toEqual([{
       from: 'integrations/workbuddy/connector',
       to: 'workbuddy-connector',
       filter: ['connector-meta.json', 'mcp.json', 'icon.svg', 'skills/**/*', 'dist/server.mjs']
     }])
-    expect(JSON.stringify(packageJson.build)).not.toMatch(/tests|fixtures|acceptance|\.zip|private-radar\.db|backup|rollback/i)
+    expect(JSON.stringify({ ...packageJson.build, files: includedFiles })).not.toMatch(/tests|fixtures|acceptance|\.zip|private-radar\.db|backup|rollback/i)
   })
 })

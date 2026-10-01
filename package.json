@@ -48,7 +48,9 @@
     },
     "files": [
       "out/**/*",
-      "package.json"
+      "package.json",
+      "!node_modules/zod/src/v3/tests{,/**/*}",
+      "!node_modules/zod/src/v4/{classic,core,mini}/tests{,/**/*}"
     ],
     "extraResources": [
       {
