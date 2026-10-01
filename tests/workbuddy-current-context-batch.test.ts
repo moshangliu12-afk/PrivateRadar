@@ -100,9 +100,10 @@ describe('当前卡片上下文到目录证据的完整批量链路', () => {
     await client.connect(a)
     try {
       const tools = (await client.listTools()).tools
-      expect(tools.map((tool) => tool.name)).toEqual(expect.arrayContaining([
-        'privateradar_ingest_messages', 'privateradar_ingest_batch', 'privateradar_ingest_current_context_batch'
-      ]))
+      expect(tools.map((tool) => tool.name)).toEqual([
+        'privateradar_ingest_messages', 'privateradar_ingest_current_context_batch'
+      ])
+      expect(tools.map((tool) => tool.name)).not.toContain('privateradar_ingest_batch')
       const schema = tools.find((tool) => tool.name === 'privateradar_ingest_current_context_batch')!.inputSchema
       expect(schema.additionalProperties).toBe(false)
       expect(schema.required).toEqual(expect.arrayContaining(['mode', 'contexts']))

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -5,14 +6,20 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   acknowledgeConnectorTrust,
   connectorSetupState,
+  deployWorkBuddySkill,
   detectWorkBuddyInstalled,
   inspectWorkBuddyConnection,
   isWorkBuddyConnectorRegistered,
   prepareWorkBuddyConnector,
   runtimeDataDirectory,
+  OFFICIAL_MANAGED_SKILL_SHA256,
+  WORKBUDDY_SKILL_VERSION,
   validateConnectorInstallation,
   writeOperationalLog
 } from '../src/main/deployment'
+
+const canonicalSkill = readFileSync(join(process.cwd(), 'integrations', 'workbuddy', 'connector', 'skills', 'ingest-chat', 'SKILL.md'), 'utf8')
+const officialOldSkill = readFileSync(join(process.cwd(), 'tests', 'fixtures', 'workbuddy-official-alpha4-skill2.md'), 'utf8')
 
 const directories: string[] = []
 
@@ -30,7 +37,7 @@ function fixture(): { root: string; payload: string; data: string } {
   writeFileSync(join(payload, 'connector-meta.json'), '{"source":"privateradar-workbuddy"}\n')
   writeFileSync(join(payload, 'icon.svg'), '<svg/>\n')
   writeFileSync(join(payload, 'dist', 'server.mjs'), 'export {}\n')
-  writeFileSync(join(payload, 'skills', 'ingest-chat', 'SKILL.md'), '# PrivateRadar\n')
+  writeFileSync(join(payload, 'skills', 'ingest-chat', 'SKILL.md'), canonicalSkill)
   return { root, payload, data }
 }
 
@@ -57,6 +64,60 @@ describe('Windows 安装与 WorkBuddy 连接组件', () => {
     expect(server.args[0]).toBe(join(result.connectorPath, 'dist', 'server.mjs'))
     expect(server.args).toContain(join(data, 'private-radar.db'))
     expect(JSON.stringify(config)).not.toContain('Documents\\Codex')
+    expect(result.skillDeployment).toMatchObject({ status: 'installed' })
+    expect(result.skillDeployment.sourcePath).toBe(join(result.connectorPath, 'skills', 'ingest-chat', 'SKILL.md'))
+    expect(readFileSync(result.skillDeployment.targetPath, 'utf8')).toBe(canonicalSkill)
+  })
+
+  it('官方旧 Skill 安全升级到 alpha.15-skill.3', () => {
+    const { root, payload, data } = fixture()
+    const userHome = join(root, 'user')
+    const target = join(userHome, '.workbuddy', 'skills', 'privateradar-ingest-chat', 'SKILL.md')
+    mkdirSync(join(target, '..'), { recursive: true })
+    writeFileSync(target, officialOldSkill)
+    const oldHash = createHash('sha256').update(officialOldSkill).digest('hex')
+    expect(oldHash).toBe('6a23f75db154d0d84adfd6616baf52737a851a2837ceae5f85d450e3ad3a616c')
+    expect(OFFICIAL_MANAGED_SKILL_SHA256.has(oldHash)).toBe(true)
+
+    const result = prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.14.1', new Date(), userHome)
+    expect(result.skillDeployment).toMatchObject({ status: 'upgraded', previousSha256: oldHash })
+    expect(readFileSync(target, 'utf8')).toBe(canonicalSkill)
+    expect(readFileSync(target, 'utf8')).toContain(`version: ${WORKBUDDY_SKILL_VERSION}`)
+  })
+
+  it('已安装正确 alpha.15-skill.3 时保持不变', () => {
+    const { root, payload, data } = fixture()
+    const userHome = join(root, 'user')
+    prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.15', new Date(), userHome)
+    const repeated = prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.15', new Date(), userHome)
+    expect(repeated.skillDeployment.status).toBe('unchanged')
+    expect(readFileSync(repeated.skillDeployment.targetPath, 'utf8')).toBe(canonicalSkill)
+  })
+
+  it('未知哈希或用户自定义 Skill 保留原文件并返回明确状态', () => {
+    const { root, payload, data } = fixture()
+    const userHome = join(root, 'user')
+    const target = join(userHome, '.workbuddy', 'skills', 'privateradar-ingest-chat', 'SKILL.md')
+    const customized = `---\nversion: ${WORKBUDDY_SKILL_VERSION}\n---\n# 用户自定义内容\n`
+    mkdirSync(join(target, '..'), { recursive: true })
+    writeFileSync(target, customized)
+
+    const result = prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.15', new Date(), userHome)
+    expect(result.skillDeployment.status).toBe('preserved_custom')
+    expect(readFileSync(target, 'utf8')).toBe(customized)
+  })
+
+  it('Skill 原子写入失败时旧文件保持完整', () => {
+    const { root, payload } = fixture()
+    const userHome = join(root, 'user')
+    const target = join(userHome, '.workbuddy', 'skills', 'privateradar-ingest-chat', 'SKILL.md')
+    mkdirSync(join(target, '..'), { recursive: true })
+    writeFileSync(target, officialOldSkill)
+
+    expect(() => deployWorkBuddySkill(payload, userHome, {
+      atomicRename: () => { throw new Error('模拟原子替换失败') }
+    })).toThrow('模拟原子替换失败')
+    expect(readFileSync(target, 'utf8')).toBe(officialOldSkill)
   })
 
   it('会话投影移除 cwd 后仍使用绝对 MCP 服务入口', () => {

@@ -63,28 +63,11 @@ function count(db: DatabaseSync, table: 'batch_import_sessions' | 'batch_import_
 }
 
 describe('alpha.15 WorkBuddy 双附件批量 Tool', () => {
-  it('标准 MCP 调用一次写入 3 + 6，两个附件分别有证据、身份和任务', async () => {
+  it('legacy handler 内部调用一次写入 3 + 6，两个附件分别有证据、身份和任务', async () => {
     const f = fixture()
-    const server = createWorkBuddyMcpServer(f.db, undefined, f.options)
-    const client = new Client({ name: 'batch-tool-test', version: '0.1.0' })
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
-    await server.connect(serverTransport)
-    await client.connect(clientTransport)
-    try {
-      const tools = await client.listTools()
-      expect(tools.tools.map((tool) => tool.name)).toContain('privateradar_ingest_batch')
-      expect(tools.tools.map((tool) => tool.name)).toContain('privateradar_ingest_messages')
-      const batchTool = tools.tools.find((tool) => tool.name === 'privateradar_ingest_batch')!
-      const attachmentsSchema = (batchTool.inputSchema.properties as Record<string, { minItems: number; maxItems: number }>).attachments
-      expect(attachmentsSchema).toMatchObject({ minItems: 2, maxItems: 2 })
-      const response = await client.callTool({ name: 'privateradar_ingest_batch', arguments: {
-        attachments: [attachment(f.firstZip, '甲', 3), attachment(f.secondZip, '乙', 6)]
-      } })
-      expect(response.isError).not.toBe(true)
-      const output = response.structuredContent as {
-        batch_session_id: string; status: string; summary: { attachments_total: number; imported_total: number }
-        items: Array<{ item_id: string; effective_job_id: string; source_batch_id: string; attachment_identity: string }>
-      }
+    const output = await ingestWorkBuddyBatch(f.db, f.options, {
+      attachments: [attachment(f.firstZip, '甲', 3), attachment(f.secondZip, '乙', 6)]
+    })
       expect(output).toMatchObject({ status: 'success', summary: { attachments_total: 2, imported_total: 9 } })
       expect(output.items).toHaveLength(2)
       expect(output.items[0].item_id).not.toBe(output.items[1].item_id)
@@ -116,10 +99,6 @@ describe('alpha.15 WorkBuddy 双附件批量 Tool', () => {
       expect(f.db.prepare('SELECT batch_item_id FROM import_jobs ORDER BY rowid').all()).toEqual([
         { batch_item_id: output.items[0].item_id }, { batch_item_id: output.items[1].item_id }
       ])
-    } finally {
-      await client.close()
-      await server.close()
-    }
   })
 
   it('时间交错时仍各自按源数组顺序保存，群名缺失保持空值与未知来源', async () => {

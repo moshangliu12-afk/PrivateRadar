@@ -1,125 +1,106 @@
 ---
 name: privateradar-ingest-chat
 display_name: PrivateRadar 微信聊天导入
-display_name_en: PrivateRadar Chat Import
-description: 将当前分享的微信聊天以最短路径导入 PrivateRadar。
-description_zh: 将当前分享的微信聊天以最短路径导入 PrivateRadar。
-description_en: Import the currently shared chat into PrivateRadar using the shortest safe path.
-version: 0.2.0-alpha.15-skill.2
+description: 将当前输入中的一张或两张微信聊天卡片按确定性路径导入本机 PrivateRadar。
+version: 0.2.0-alpha.15-skill.3
 author: PrivateRadar
 ---
 
-# PrivateRadar 微信聊天快速导入
+# PrivateRadar 微信聊天导入
 
-当用户分享微信聊天并说“将这份聊天记录导入 PrivateRadar”或语义等价的话时，立即执行本流程。
+当用户要求把当前分享的微信聊天导入 PrivateRadar 时，直接执行本流程。
 
-正常路径只能是：
+正式路径只有两种：
 
-`识别当前输入的聊天附件数 → 各附件独立解析 → 调用对应 Tool → 简短确认`
+- 一张聊天卡片：调用一次 `privateradar_ingest_messages`。
+- 两张聊天卡片：把本次 current input 真实提供的全部 raw context blocks 原样传给 `privateradar_ingest_current_context_batch`，只调用一次。
 
-## 强制规则
+## 一张聊天卡片
 
-1. 只读取当前分享中可见的聊天内容；保持消息正文、可见 URL 和原始顺序。
-2. 只允许直接读取当前分享明确给出的聊天文本或附件路径一次；不得为发现文件而列举目录。
-3. 禁止调用 Bash、PowerShell、Glob、Grep 或任何目录扫描来探测聊天文件、工作区、代码、数据库、历史脚本或附件以外的上下文。
-4. 不创建、不读取、不调用 `privateradar-ingest-client.mjs`。
-5. 不使用 Harness、direct JSON-RPC、stdio、手动 `server.mjs` 或任何脚本作为替代通道。
-6. 只有一个当前聊天附件时继续调用 `privateradar_ingest_messages`；恰有两个时只调用一次 `privateradar_ingest_batch`，不调用两次旧 Tool。
-7. 超过两个当前聊天附件时明确回复“当前 alpha.15 批量入口只支持同次两个聊天附件”，不只取前两个，也不自动拆批；没有附件时不创建批量会话。
-8. 两附件各自读取当前输入明确提供的 ZIP 路径和聊天文本，各自建立原顺序的 `messages`；ZIP A 与消息 A、ZIP B 与消息 B 一一对应，不合并、不按时间重排。
-9. 两附件调用中的 `source_zip_path` 必须直接取自当前输入中每张卡片自己的附件元数据所明确给出的、已复制完成的真实 ZIP 绝对路径。`chipId` / `attachment_id` 只有在当前输入明确给出，且正式授权的当前附件路径解析能力确实可用时，才能逐卡片解析；当前没有该正式解析能力时，不得自行使用标识找文件。显示文件名不等于落盘文件名，绝不能 `join(chatHistoryRoot, displayFilename)`。路径缺失、不能确认属于当前卡片、或 Tool 报“当前附件真实路径不可用”时，停止导入并返回“当前附件真实路径不可用，未执行导入。”；不得列举或扫描 `chat-history`，不得搜索相似文件名、寻找最新 ZIP、按时间戳推断路径或读取历史附件补救。
-10. 快速导入是默认模式。群名缺失时直接省略 `conversation_name` 和相关来源字段，不阻塞导入、不要求用户猜测。
-11. `sender_name` 和 `timestamp` 缺失时直接省略对应字段：不主动询问、不推测、不补造，也绝不传字符串 `"unknown"`。
-12. Tool 成功后只回复整次导入与每个附件的真实计数；不要重复调用 Tool 做重复校验，不做额外分析。
-13. 本次 PrivateRadar 导入期间及导入后，除非用户明确要求记录记忆，否则不得创建或修改 `MEMORY.md`、WorkBuddy memory 日志或当日记忆文件；不得总结导入经验写入全局或用户记忆，尤其不得记录“下次扫描目录寻找 ZIP”之类的路径补救经验。
+1. 只从当前卡片可见内容中提取消息，保持原始正文、可见 URL 和原始顺序。
+2. 调用 `privateradar_ingest_messages`，使用 `import_mode: quick`。
+3. 只有原文或用户明确提供群名时才传 `conversation_name`；缺失时省略。
+4. 只有原文可靠提供发送人和逐条时间时才传相应字段；缺失时省略，不能补造。
+5. `source_position` 按当前卡片中的原始顺序从 0 开始。
 
-## 调用前的逐条时间检查（必须）
+## 两张聊天卡片
 
-在调用导入 Tool 之前，必须先逐附件检查当前材料是否包含能够与每条消息可靠对应的原始时间。快速导入表示少交互、快速完成，不表示忽略材料中已经存在的时间。
+用户分享两张微信聊天卡片并要求批量导入时：
 
-- 原始微信或源材料直接显示了某条消息的时间：填写 `timestamp`，并标记 `timestamp_source: source_native`。
-- 用户明确提供了某条消息的时间：填写 `timestamp`，并标记 `timestamp_source: user_supplied`。
-- 没有时间或无法可靠对应到具体消息：省略 `timestamp` 和 `timestamp_source`；快速模式不以追问用户补时间为前置条件。
-- 禁止用 `approximate_date`、`imported_at`、当前时间、消息顺序或正文中的“下午”“昨天”等措辞生成时间，也禁止人工生成等间隔时间。
-- 原文只有本地日期与时分而未写时区时，`+08:00` 是系统采用的时区解释，不能称为原文字段。
+1. 从本次 current input 取得平台真实提供的全部 raw context blocks。
+2. 不按 raw context 数量判断附件数。WorkBuddy 可能重复序列化同一张卡片；不要自行去重。
+3. 每个 raw context block 原样传递以下必填字段：
+   - `file`
+   - `extracted_dir_path`
+   - `message_count`
+   - `transcript`
+4. 当前输入真实提供时，原样传递以下可选字段：
+   - `first_sender`
+   - `first_message_at`
+   - `truncated`
+5. 只调用一次 `privateradar_ingest_current_context_batch`，参数 `mode` 固定为 `current_context`。
+6. Tool 负责 raw context normalization、逻辑附件归组、确定性 Parser、Directory Evidence 和导入。Skill 不承担这些职责。
+7. Tool 必须最终得到恰好两个 logical attachments；数量不符、内容冲突、路径缺失、截断或解析失败时，以 Tool 的真实错误为准立即停止。
 
-## 群名不得推测
-
-- 只有原文直接提供或用户明确提供的名称才可写入 `conversation_name`；分别标记 `source_native` 或 `user_supplied`。
-- 不得根据正文、物业或机构落款、人名、地点、图片文件名、聊天主题或任何上下文推测群名。
-- 不得生成、推荐、展示或要求用户从候选群名中选择。
-- 原文和用户都未提供群名时，省略该字段直接调用对应 Tool；数据库中应保持空值及 `unknown` 来源。
-
-## 不展示中间分析
-
-- 最终可见回复中不得输出“我认为”“我猜”“让我判断”“我正在分析”或任何内部推理、检查过程。
-- 不得输出“我先加载技能”“我先检查目录”“正在读取文件”等进度性中间回复。
-- 当前附件和必需路径齐备时立即调用对应 Tool；不要解释计划、复述规则或再次征求确认。
-- Tool 成功后，最终回复只保留一行导入结果，例如“导入成功：新增 8，重复 0，更新 0，无效 0。”
-
-## 字段真实性
-
-- `content` 只保存分享中的原文，不改写、不总结。
-- `source_position` 按分享中的原始顺序从 0 开始。
-- 分享直接提供的群名、发送人、时间才使用 `source_native`。
-- 用户确认的群名使用 `user_supplied`。
-- 用户未提供的发送人和时间保持缺失；不得用导入时间、图片文件名日期或当前时间伪造逐条 `timestamp`。
-
-## 例外
-
-- 群名、发送人和时间未知时可省略，直接调用对应 Tool。
-- 只有用户主动要求“提高分析精度”时，才可以一次性询问群名、大致日期和发送人标记；这不是快速导入的默认路径。
-- 单条正文缺失时可随本批提交，让 Tool 将该条记为无效；其余有效消息仍应导入。
-
-## 正式调用示例
-
-源材料含有可逐条对应时间时：
+正式调用形状：
 
 ```json
 {
-  "import_mode": "quick",
-  "batch_metadata": {
-    "conversation_name": "产品交流群",
-    "conversation_name_source": "user_supplied"
-  },
-  "messages": [
+  "mode": "current_context",
+  "contexts": [
     {
-      "platform": "wechat",
-      "conversation_name": "产品交流群",
-      "content": "新版已经发布。",
-      "source_position": 0,
-      "timestamp": "2026-09-20T12:02:00+08:00",
-      "timestamp_source": "source_native"
+      "file": "第一张卡片.zip",
+      "extracted_dir_path": "平台明确提供的解压目录绝对路径",
+      "message_count": 5,
+      "transcript": "当前卡片内联提供的完整聊天正文",
+      "first_sender": "原样可选值",
+      "first_message_at": "原样可选值",
+      "truncated": false
+    },
+    {
+      "file": "第二张卡片.zip",
+      "extracted_dir_path": "平台明确提供的解压目录绝对路径",
+      "message_count": 5,
+      "transcript": "当前卡片内联提供的完整聊天正文"
     }
   ]
 }
 ```
 
-源材料没有可靠逐条时间时，省略时间字段：
+## 时间真实性
 
-```json
-{
-  "import_mode": "quick",
-  "messages": [
-    {
-      "platform": "wechat",
-      "conversation_name": "产品交流群",
-      "content": "新版已经发布。",
-      "source_position": 0
-    }
-  ]
-}
-```
+- 原始材料直接提供且能与具体消息可靠对应的时间，使用 `timestamp_source: source_native`。
+- 用户明确提供且能与具体消息可靠对应的时间，使用 `timestamp_source: user_supplied`。
+- 没有可靠逐条时间时，省略 `timestamp` 和 `timestamp_source`。
+- 禁止使用 ZIP 创建时间、WorkBuddy 接收时间、`imported_at`、文件名时间、当前时间、`source_position`、Evidence 时间、manifest 时间、mtime、ctime 或 birthtime 补造聊天时间。
+- 原文没有时区时，解析得到的 `+08:00` 只能称为 system interpretation，不能称为原文提供的时区。
 
-缺少时间是允许的；不得为满足字段完整度伪造时间。
+## 群名和发送人真实性
 
-两附件批量调用保持各自消息数组，不使用临时 ZIP 文件名充当来源身份：
+- 群名、发送人只接受原文直接提供或用户明确提供的值。
+- 缺失时省略，不传字符串 `"unknown"`。
+- 禁止根据正文、人名、机构、地点、文件名或聊天主题补造 sender、group 或 `conversation_name`。
 
-```json
-{
-  "attachments": [
-    { "source_zip_path": "C:\\Users\\用户\\.workbuddy\\app\\tmp\\chat-history\\唯一前缀-甲.zip", "messages": [{ "content": "甲的原文", "source_position": 0 }] },
-    { "source_zip_path": "C:\\Users\\用户\\.workbuddy\\app\\tmp\\chat-history\\唯一前缀-乙.zip", "messages": [{ "content": "乙的原文", "source_position": 0 }] }
-  ]
-}
-```
+## 强制禁止项
+
+- 禁止调用 `privateradar_ingest_batch`。
+- 禁止把双卡片拆成两次 `privateradar_ingest_messages`。
+- 禁止自行解析双卡片 `transcript`，禁止自行生成双卡片 `messages` 数组。
+- 禁止自行去重 raw contexts、计算 attachment identity 或判断 `raw count == 2`。
+- 禁止读取 `聊天记录.txt` 替代 current input 中的 inline transcript。
+- 禁止用 `ls`、`dir`、`glob`、`find` 或其他方式列举、扫描 `chat-history`。
+- 禁止寻找 newest file、newest directory，禁止 filename → path guess、mtime guess、timestamp guess。
+- 禁止扫描 WorkBuddy 历史附件、历史对话或日志来定位附件。
+- 禁止猜测 ZIP path，禁止根据显示文件名拼接真实路径。
+- 禁止使用脚本、Harness、stdio、JSON-RPC 或手动运行 `server.mjs` 作为替代通道。
+- 禁止主动创建或修改 `MEMORY.md`、WorkBuddy memory 或 daily memory。
+- 禁止自动 retry batch。
+- 第一次批量调用失败后，禁止改用 legacy batch，禁止拆成两个 single，禁止任何自动重试。
+
+第一次批量调用失败时，立即停止，只报告 Tool 返回的真实错误。
+
+## 回复规则
+
+- Tool 成功后，只报告整次导入与各附件的真实新增、重复、更新、无效和失败数量。
+- 不重复调用 Tool 做校验，不追加话题分析，不写记忆。
+- 示例：`批量导入完成：附件 2/2，新增 10，重复 0，更新 0，无效 0。`

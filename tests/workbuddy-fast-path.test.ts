@@ -11,57 +11,59 @@ const metadata = JSON.parse(readFileSync(join(root, 'integrations', 'workbuddy',
   version: string
 }
 const mcpConfig = readFileSync(join(root, 'integrations', 'workbuddy', 'connector', 'mcp.json'), 'utf8')
+const packageJson = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
+  build: { files: string[]; extraResources: Array<{ from: string; filter: string[] }> }
+}
 
 describe('WorkBuddy 微信导入最短路径', () => {
-  it('Skill 明确默认快速导入、缺失群名不阻塞且禁止脚本兜底', () => {
-    expect(skill).toContain('快速导入是默认模式')
-    expect(skill).toContain('群名缺失时省略')
-    expect(skill).toContain('直接省略对应字段')
-    expect(skill).toContain('禁止寻找或使用脚本、Harness、stdio、JSON-RPC')
-    expect(skill).toContain('Tool 成功后只回复整次导入')
+  it('Connector 内嵌 Skill 是 canonical source，两份内容字节级同步', () => {
+    expect(packagedSkill).toBe(skill)
   })
 
-  it.each([['Connector Skill', skill], ['Skill 包', packagedSkill]] as const)('%s 明确单附件、双附件和超量边界', (_label, content) => {
+  it.each([['Connector Skill', skill], ['Skill 包', packagedSkill]] as const)('%s 使用 alpha.15-skill.3 的单卡和双卡正式契约', (_label, content) => {
+    expect(content).toContain('version: 0.2.0-alpha.15-skill.3')
     expect(content).toContain('privateradar_ingest_messages')
-    expect(content).toContain('privateradar_ingest_batch')
-    expect(content).toContain('超过两个')
-    expect(content).toContain('当前 alpha.15 批量入口只支持同次两个聊天附件')
-    expect(content).toContain('群名缺失')
-    expect(content).toContain('不合并')
-    expect(content).toContain('chat-history')
+    expect(content).toContain('privateradar_ingest_current_context_batch')
+    expect(content).toContain('只调用一次')
+    expect(content).toContain('本次 current input 真实提供的全部 raw context blocks')
+    expect(content).toContain('不按 raw context 数量判断附件数')
+    for (const field of ['file', 'extracted_dir_path', 'message_count', 'transcript',
+      'first_sender', 'first_message_at', 'truncated']) expect(content).toContain(`\`${field}\``)
   })
 
-  it.each([['Connector Skill', skill], ['Skill 包', packagedSkill]] as const)('%s 禁止路径缺失时发现文件及导入后写记忆', (_label, content) => {
-    expect(content).toContain('当前附件真实路径不可用')
-    expect(content).toContain('当前附件真实路径不可用，未执行导入。')
-    expect(content).toContain('停止导入')
-    expect(content).toMatch(/(?:禁止|不得)列举或扫描 `chat-history`/)
-    expect(content).toContain('搜索相似文件名')
-    expect(content).toContain('寻找最新 ZIP')
-    expect(content).toContain('按时间戳推断路径')
-    expect(content).toContain('读取历史附件补救')
-    expect(content).toContain('附件元数据')
-    expect(content).toContain('`chipId` / `attachment_id`')
-    expect(content).toContain('正式授权的当前附件路径解析能力')
-    expect(content).toContain('不得自行使用标识找文件')
-    expect(content).toContain('`join(chatHistoryRoot, displayFilename)`')
+  it.each([['Connector Skill', skill], ['Skill 包', packagedSkill]] as const)('%s 明确禁止旧批量入口、路径猜测、记忆副作用与失败重试', (_label, content) => {
+    const legacyLines = content.split(/\r?\n/).filter((line) => line.includes('privateradar_ingest_batch'))
+    expect(legacyLines).toEqual(['- 禁止调用 `privateradar_ingest_batch`。'])
+    expect(content).toContain('禁止把双卡片拆成两次 `privateradar_ingest_messages`')
+    expect(content).toContain('禁止自行生成双卡片 `messages` 数组')
+    expect(content).toContain('禁止自行去重 raw contexts')
+    expect(content).toContain('禁止读取 `聊天记录.txt`')
+    for (const command of ['ls', 'dir', 'glob', 'find']) expect(content).toContain(`\`${command}\``)
+    expect(content).toContain('扫描 `chat-history`')
+    expect(content).toContain('newest file')
+    expect(content).toContain('newest directory')
+    expect(content).toContain('filename → path guess')
+    expect(content).toContain('mtime guess')
+    expect(content).toContain('timestamp guess')
+    expect(content).toContain('历史附件、历史对话或日志')
+    expect(content).toContain('猜测 ZIP path')
     expect(content).toContain('`MEMORY.md`')
     expect(content).toContain('WorkBuddy memory')
-    expect(content).toContain('当日记忆文件')
+    expect(content).toContain('daily memory')
+    expect(content).toContain('禁止自动 retry batch')
+    expect(content).toContain('第一次批量调用失败后')
+    expect(content).toContain('立即停止，只报告 Tool 返回的真实错误')
   })
 
-  it.each([['Connector Skill', skill], ['Skill 包', packagedSkill]] as const)('%s 要求先检查逐条时间且不伪造', (_label, content) => {
-    expect(content).toContain('调用前的逐条时间检查（必须）')
-    expect(content).toContain('快速导入表示少交互、快速完成，不表示忽略材料中已经存在的时间')
+  it.each([['Connector Skill', skill], ['Skill 包', packagedSkill]] as const)('%s 保持可靠时间与缺失元数据语义', (_label, content) => {
     expect(content).toContain('timestamp_source: source_native')
     expect(content).toContain('timestamp_source: user_supplied')
-    expect(content).toContain('快速模式不以追问用户补时间为前置条件')
-    expect(content).toContain('approximate_date')
     expect(content).toContain('imported_at')
     expect(content).toContain('当前时间')
-    expect(content).toContain('人工生成等间隔时间')
-    expect(content).toContain('2026-09-20T12:02:00+08:00')
-    expect(content).toContain('没有可靠逐条时间')
+    expect(content).toContain('没有可靠逐条时间时')
+    expect(content).toContain('system interpretation')
+    expect(content).toContain('不能称为原文提供的时区')
+    expect(content).toContain('禁止根据正文、人名、机构、地点、文件名或聊天主题补造')
   })
 
   it('正式 README 说明确定性格式并同时给出有时间和缺时间 payload', () => {
@@ -77,5 +79,15 @@ describe('WorkBuddy 微信导入最短路径', () => {
     expect(mcpConfig).toContain('privateradar-workbuddy')
     expect(mcpConfig).toContain('dist/server.mjs')
     expect(mcpConfig).not.toContain('privateradar-local-spike')
+  })
+
+  it('installer 只打包应用与 Connector 正式负载，不包含测试、历史 Skill ZIP 或验收数据', () => {
+    expect(packageJson.build.files).toEqual(['out/**/*', 'package.json'])
+    expect(packageJson.build.extraResources).toEqual([{
+      from: 'integrations/workbuddy/connector',
+      to: 'workbuddy-connector',
+      filter: ['connector-meta.json', 'mcp.json', 'icon.svg', 'skills/**/*', 'dist/server.mjs']
+    }])
+    expect(JSON.stringify(packageJson.build)).not.toMatch(/tests|fixtures|acceptance|\.zip|private-radar\.db|backup|rollback/i)
   })
 })

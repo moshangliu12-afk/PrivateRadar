@@ -1,15 +1,17 @@
 # WorkBuddyAdapter
 
-正式接入通过 WorkBuddy 官方本地 stdio MCP Connector。单附件保留 `privateradar_ingest_messages`；同次恰好两个附件使用 `privateradar_ingest_batch`。运行时代码由以下部分组成：
+正式接入通过 WorkBuddy 官方本地 stdio MCP Connector。正式 `tools/list` 只公开两个入口：单卡片使用 `privateradar_ingest_messages`，双卡片使用 `privateradar_ingest_current_context_batch`。旧 ZIP 批量 handler 仅保留内部兼容性与回归测试，不对 WorkBuddy 公开。运行时代码由以下部分组成：
 
 - `server.ts`：stdio 进程生命周期与不含正文的生命周期日志。
 - `tool.ts`：MCP Tool 注册及结构化输入、输出。
 - `validation.ts`：字段、来源标记及批量上限。
 - `ingest.ts`：WorkBuddy 输入到既有导入、标准化、身份、去重和 SQLite 流程的适配。
 - `batch-metadata.ts`：批次元数据、完整度计算和能力降级提示。
-- `batch-tool.ts`：两附件输入、临时 ZIP 路径边界、证据保存及现有会话编排的接线。
+- `batch-tool.ts`：当前上下文批量入口、Directory Evidence，以及内部 legacy ZIP handler 与现有会话编排的接线。
 
-批量 Tool 要求调用方明确传入两个附件各自真实存在的 ZIP 绝对路径和消息数组，单项最多 500 条。默认允许根目录由当前用户主目录定位到 `.workbuddy/app/tmp/chat-history`；测试可注入独立临时根目录。越界、目录、符号链接及不存在的路径均在创建会话前拒绝；两个路径均存在后，证据复制、哈希或快照保存仍可能失败，此时保留会话及各附件项，并让其他附件继续导入。临时文件名仅用于展示，稳定身份由附件项编号和 ZIP SHA-256 承担。连接器不会扫描目录，也不会根据文件名或文件时间配对消息；若当前输入只暴露展示文件名，需要上游明确传递每张卡片对应的真实绝对路径，不能拼接或搜索猜测。
+当前上下文批量 Tool 接收本次输入真实提供的 raw context blocks。每个 block 原样携带 `file`、`extracted_dir_path`、`message_count` 与 inline `transcript`，并可携带 `first_sender`、`first_message_at`、`truncated`。Tool 自己完成重复 serialization 归组、确定性 Parser、Directory Evidence 与导入，最终必须恰好得到两个 logical attachments。Skill 不生成双卡 `messages`，不读取 `聊天记录.txt` 替代 inline transcript，也不扫描目录、猜测 ZIP 路径或按时间寻找附件。
+
+内部 legacy ZIP handler 继续保留原有路径边界、ZIP Evidence、validation 和回归测试，但不注册到正式 MCP。它要求两个真实 ZIP 绝对路径和各自消息数组；这不是 alpha.15 Skill 的正式调用路径。
 
 ## 两种导入模式
 

@@ -1,9 +1,14 @@
-import { createHash } from 'node:crypto'
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { createHash, randomUUID } from 'node:crypto'
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 
 export const CONNECTOR_ID = 'privateradar-workbuddy'
+export const WORKBUDDY_SKILL_VERSION = '0.2.0-alpha.15-skill.3'
+export const OFFICIAL_MANAGED_SKILL_SHA256 = new Set([
+  '6a23f75db154d0d84adfd6616baf52737a851a2837ceae5f85d450e3ad3a616c',
+  '639a747f93323b5547a68393a754980abcb33e6ed7e4acef9c95c32bfc5a67cf'
+])
 const REQUIRED_CONNECTOR_FILES = [
   'connector-meta.json',
   'icon.svg',
@@ -21,6 +26,20 @@ export interface ConnectorSetupResult {
   registrationChanged: boolean
   requiresTrust: boolean
   trustReason: 'first_install' | 'configuration_changed' | 'none'
+  skillDeployment: WorkBuddySkillDeploymentResult
+}
+
+export interface WorkBuddySkillDeploymentResult {
+  status: 'installed' | 'upgraded' | 'unchanged' | 'preserved_custom'
+  sourcePath: string
+  targetPath: string
+  sourceSha256: string
+  previousSha256: string | null
+}
+
+export interface WorkBuddySkillDeploymentOptions {
+  managedHashes?: ReadonlySet<string>
+  atomicRename?: (oldPath: string, newPath: string) => void
 }
 
 interface McpConfiguration {
@@ -77,6 +96,7 @@ export function prepareWorkBuddyConnector(
   } satisfies ConnectorSetupState, null, 2)}\n`, 'utf8')
 
   validateConnectorInstallation(connectorPath, configHash)
+  const skillDeployment = deployWorkBuddySkill(connectorPath, userHome)
   const registration = registerWorkBuddyConnector(connectorPath, userHome)
 
   return {
@@ -84,8 +104,41 @@ export function prepareWorkBuddyConnector(
     prepared: true,
     ...registration,
     requiresTrust: trustReason !== 'none',
-    trustReason
+    trustReason,
+    skillDeployment
   }
+}
+
+export function deployWorkBuddySkill(
+  connectorPath: string,
+  userHome = homedir(),
+  options: WorkBuddySkillDeploymentOptions = {}
+): WorkBuddySkillDeploymentResult {
+  const sourcePath = join(connectorPath, 'skills', 'ingest-chat', 'SKILL.md')
+  const targetPath = join(userHome, '.workbuddy', 'skills', 'privateradar-ingest-chat', 'SKILL.md')
+  if (!existsSync(sourcePath) || !statSync(sourcePath).isFile()) throw new Error('连接组件缺少正式 Skill source')
+
+  const sourceContent = readFileSync(sourcePath, 'utf8')
+  if (!new RegExp(`^version:\\s*${escapeRegExp(WORKBUDDY_SKILL_VERSION)}\\s*$`, 'm').test(sourceContent)) {
+    throw new Error(`正式 Skill source 版本必须是 ${WORKBUDDY_SKILL_VERSION}`)
+  }
+  const sourceSha256 = sha256(sourceContent)
+  const previousContent = existsSync(targetPath) ? readFileSync(targetPath, 'utf8') : null
+  const previousSha256 = previousContent === null ? null : sha256(previousContent)
+  const result = (status: WorkBuddySkillDeploymentResult['status']): WorkBuddySkillDeploymentResult => ({
+    status, sourcePath, targetPath, sourceSha256, previousSha256
+  })
+
+  if (previousSha256 === sourceSha256) return result('unchanged')
+  if (previousSha256 !== null && !(options.managedHashes ?? OFFICIAL_MANAGED_SKILL_SHA256).has(previousSha256)) {
+    return result('preserved_custom')
+  }
+
+  writeTextAtomically(targetPath, sourceContent, options.atomicRename)
+  if (!existsSync(targetPath) || sha256(readFileSync(targetPath, 'utf8')) !== sourceSha256) {
+    throw new Error('用户级 Skill 写入后校验失败')
+  }
+  return result(previousSha256 === null ? 'installed' : 'upgraded')
 }
 
 export function registerWorkBuddyConnector(
@@ -298,6 +351,32 @@ function writeJsonAtomically(path: string, value: McpConfiguration): void {
   writeFileSync(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
   readMcpConfiguration(temporaryPath, '临时 WorkBuddy 配置')
   renameSync(temporaryPath, path)
+}
+
+function writeTextAtomically(
+  path: string,
+  content: string,
+  atomicRename: (oldPath: string, newPath: string) => void = renameSync
+): void {
+  mkdirSync(dirname(path), { recursive: true })
+  const temporaryPath = join(dirname(path), `.${basename(path)}.privateradar-${randomUUID()}.tmp`)
+  try {
+    writeFileSync(temporaryPath, content, { encoding: 'utf8', flag: 'wx' })
+    if (sha256(readFileSync(temporaryPath, 'utf8')) !== sha256(content)) {
+      throw new Error('临时 Skill 写入校验失败')
+    }
+    atomicRename(temporaryPath, path)
+  } finally {
+    if (existsSync(temporaryPath)) rmSync(temporaryPath, { force: true })
+  }
+}
+
+function sha256(content: string): string {
+  return createHash('sha256').update(content).digest('hex')
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

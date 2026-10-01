@@ -24,23 +24,6 @@ export function registerWorkBuddyBatchTool(
   log?: (event: string, detail?: string) => void
 ): void {
   server.registerTool(
-    'privateradar_ingest_batch',
-    {
-      title: '批量写入 PrivateRadar 两个微信聊天附件',
-      description: '仅接收当前同一次输入明确提供的两个真实聊天 ZIP 绝对路径及各自的消息数组；路径必须存在，不得扫描目录寻找文件。每个附件最多 500 条。群名与逐条时间缺失时省略，不得猜测。',
-      inputSchema: workBuddyBatchIngestSchema,
-      outputSchema: workBuddyBatchResultSchema
-    },
-    async (input) => {
-      const output = await ingestWorkBuddyBatch(db, options, input)
-      log?.('BATCH_INGEST_RESULT', JSON.stringify({ sessionId: output.batch_session_id, status: output.status }))
-      return {
-        content: [{ type: 'text', text: batchResultText(output) }],
-        structuredContent: output
-      }
-    }
-  )
-  server.registerTool(
     'privateradar_ingest_current_context_batch',
     {
       title: '从当前卡片上下文批量写入 PrivateRadar',
@@ -52,6 +35,34 @@ export function registerWorkBuddyBatchTool(
       const output = await ingestWorkBuddyCurrentContextBatch(db, options, input)
       log?.('CURRENT_CONTEXT_BATCH_RESULT', JSON.stringify({ sessionId: output.batch_session_id, status: output.status }))
       return { content: [{ type: 'text', text: batchResultText(output) }], structuredContent: output }
+    }
+  )
+}
+
+/**
+ * legacy ZIP 批量入口只供内部兼容性测试和既有代码调用，不加入正式 MCP tools/list。
+ */
+export function registerWorkBuddyLegacyBatchTool(
+  server: McpServer,
+  db: DatabaseSync,
+  options: WorkBuddyBatchToolOptions,
+  log?: (event: string, detail?: string) => void
+): void {
+  server.registerTool(
+    'privateradar_ingest_batch',
+    {
+      title: '批量写入 PrivateRadar 两个微信聊天附件',
+      description: '兼容旧版 ZIP 批量输入，仅供内部调用。',
+      inputSchema: workBuddyBatchIngestSchema,
+      outputSchema: workBuddyBatchResultSchema
+    },
+    async (input) => {
+      const output = await ingestWorkBuddyBatch(db, options, input)
+      log?.('BATCH_INGEST_RESULT', JSON.stringify({ sessionId: output.batch_session_id, status: output.status }))
+      return {
+        content: [{ type: 'text', text: batchResultText(output) }],
+        structuredContent: output
+      }
     }
   )
 }
