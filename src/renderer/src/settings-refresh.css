@@ -1,0 +1,506 @@
+.settings-page {
+  display: grid;
+  gap: 26px;
+  min-width: 0;
+}
+
+.settings-page .settings-section {
+  min-width: 0;
+}
+
+.settings-page .settings-section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 13px;
+}
+
+.settings-page .settings-kicker {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: .07em;
+}
+
+.settings-page .settings-section-heading h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -.025em;
+}
+
+.settings-page .settings-section-index {
+  color: #a3aa96;
+  font: italic 15px/1 Georgia, serif;
+}
+
+.settings-page .data-status-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  padding: 22px 24px;
+  border: 1px solid #e0e5d6;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(110deg, var(--card), #fafbf4);
+  box-shadow: 0 4px 18px rgba(37, 43, 34, .025);
+}
+
+.settings-page .data-status-heading {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.settings-page .settings-source-icon,
+.settings-page .settings-card-icon {
+  display: grid;
+  flex: 0 0 39px;
+  place-items: center;
+  width: 39px;
+  height: 39px;
+  border: 1px solid #dce7c4;
+  border-radius: 13px;
+  color: #617445;
+  background: #f0f5e4;
+}
+
+.settings-page .settings-source-icon svg,
+.settings-page .settings-card-icon svg {
+  width: 19px;
+  height: 19px;
+}
+
+.settings-page .data-status-recent {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  min-width: 0;
+}
+
+.settings-page .data-status-recent > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.settings-page .data-status-recent > strong {
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.settings-page .settings-import-date {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.settings-page .import-status {
+  flex: 0 0 auto;
+  padding: 7px 12px;
+  border: 1px solid #dce6c9;
+  color: #58713c;
+  background: #f1f6e5;
+  font-size: 11px;
+  font-weight: 550;
+}
+
+.settings-page .import-status.partial {
+  border-color: #e7d9b1;
+  color: #856930;
+  background: #f8f0dc;
+}
+
+.settings-page .import-status.failed {
+  border-color: #ead6cf;
+  color: #905b4d;
+  background: #f8eae4;
+}
+
+.settings-page .data-status-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-page .data-status-metrics > small {
+  margin-right: 3px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.settings-page .data-status-metrics > span {
+  padding: 7px 10px;
+  border: 1px solid #eeeee5;
+  border-radius: 8px;
+  color: #737d68;
+  background: #f7f8f0;
+  font-size: 12px;
+}
+
+.settings-page .data-status-metrics strong {
+  margin-left: 5px;
+  color: #3d4933;
+}
+
+.settings-page .data-status-last-success {
+  gap: 6px;
+  padding-top: 14px;
+  border-top-color: var(--line);
+}
+
+.settings-page .data-status-facts {
+  grid-template-columns: minmax(0, .8fr) minmax(0, 1.3fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.settings-page .data-status-summary {
+  gap: 7px;
+  min-width: 0;
+}
+
+.settings-page .data-status-summary > span,
+.settings-page .data-status-last-success > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.settings-page .data-status-summary > strong,
+.settings-page .data-status-last-success > strong {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 550;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.settings-page .settings-source-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.settings-page .settings-source-state > span {
+  flex: 0 0 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #c09a51;
+}
+
+.settings-page .settings-source-state.connected > span {
+  background: #9cbf63;
+}
+
+.settings-page .settings-columns {
+  display: grid;
+  grid-template-columns: minmax(0, .95fr) minmax(0, 1.15fr);
+  gap: 22px;
+  align-items: start;
+}
+
+.settings-page .settings-health-grid {
+  display: grid;
+  gap: 11px;
+}
+
+.settings-page .settings-health-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 89px;
+  padding: 17px 18px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--card);
+}
+
+.settings-page .settings-health-card > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.settings-page .settings-health-card > div > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.settings-page .settings-health-card strong {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.settings-page .settings-health-card.healthy strong {
+  color: #55723c;
+}
+
+.settings-page .settings-health-card.needs-attention strong {
+  color: #947132;
+}
+
+.settings-page .settings-health-dot {
+  flex: 0 0 7px;
+  width: 7px;
+  height: 7px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: #a6c76c;
+  box-shadow: 0 0 0 4px #f0f5e4;
+}
+
+.settings-page .needs-attention .settings-health-dot {
+  background: #c7a35a;
+  box-shadow: 0 0 0 4px #faf2dd;
+}
+
+.settings-page .settings-storage-card {
+  padding: 19px 21px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+}
+
+.settings-page .settings-storage-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.settings-page .settings-local-label {
+  padding: 5px 8px;
+  border-radius: 6px;
+  color: #78865e;
+  background: #f1f5e8;
+  font-size: 10px;
+  letter-spacing: .08em;
+}
+
+.settings-page .settings-storage-card h3 {
+  margin: 13px 0 7px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.settings-page .settings-storage-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.settings-page .settings-storage-location {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 15px;
+  padding: 11px 12px;
+  border: 1px solid #eeede4;
+  border-radius: 10px;
+  background: #f9f8f1;
+}
+
+.settings-page .settings-storage-location > svg {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  color: #8a9970;
+}
+
+.settings-page .settings-storage-location > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.settings-page .settings-storage-location span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.settings-page .settings-storage-location code {
+  color: #58624e;
+  font: 11px/1.65 "Cascadia Mono", Consolas, monospace;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.settings-page .settings-action-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.settings-page .settings-action-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 62px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  color: #606c56;
+  background: var(--card);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: background .17s ease, border-color .17s ease, transform .17s ease;
+}
+
+.settings-page .settings-action-card:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: #cddabd;
+  background: #fffef9;
+}
+
+.settings-page .settings-action-card:focus-visible {
+  outline: 3px solid rgba(157, 190, 95, .5);
+  outline-offset: 3px;
+}
+
+.settings-page .settings-action-card:disabled {
+  opacity: .6;
+  cursor: wait;
+}
+
+.settings-page .settings-action-card.primary-action {
+  border-color: #303e31;
+  color: #f6f7ef;
+  background: #2b392e;
+}
+
+.settings-page .settings-action-card.primary-action:hover:not(:disabled) {
+  background: #3b4a3b;
+}
+
+.settings-page .settings-action-icon {
+  display: grid;
+  flex: 0 0 30px;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid #e7e9dc;
+  border-radius: 9px;
+  color: #849269;
+  background: #f6f7ee;
+}
+
+.settings-page .settings-action-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.settings-page .primary-action .settings-action-icon {
+  border-color: rgba(194, 223, 118, .2);
+  color: var(--lime);
+  background: rgba(194, 223, 118, .1);
+}
+
+.settings-page .settings-action-card > span:nth-child(2) {
+  min-width: 0;
+  line-height: 1.5;
+}
+
+.settings-page .settings-action-arrow {
+  flex: 0 0 15px;
+  width: 15px;
+  height: 15px;
+  margin-left: auto;
+  color: #a0a891;
+}
+
+.settings-page .settings-operation-notice {
+  margin-top: 13px;
+  border-radius: 11px;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.settings-page .settings-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 15px;
+  border-top: 1px solid var(--line);
+  color: #929b85;
+  font-size: 11px;
+}
+
+.settings-page .settings-footer-mark {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  color: #576d3b;
+  background: #e6edcf;
+}
+
+.settings-page .settings-footer-mark svg {
+  width: 13px;
+  height: 13px;
+}
+
+@media (max-width: 1120px) {
+  .settings-page .settings-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-page .settings-health-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .settings-page .settings-action-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .settings-page .data-status-card {
+    padding: 18px;
+  }
+
+  .settings-page .data-status-facts {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+
+  .settings-page .settings-health-grid,
+  .settings-page .settings-action-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-page .data-status-heading {
+    flex-wrap: wrap;
+  }
+
+  .settings-page .data-status-recent {
+    min-width: 140px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-page .settings-action-card {
+    transition: none;
+  }
+
+  .settings-page .settings-action-card:hover:not(:disabled) {
+    transform: none;
+  }
+}

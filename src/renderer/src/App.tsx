@@ -19,6 +19,8 @@ import type {
 } from '../../shared/models'
 import { isCompletedDataImport, loadDaily, refreshAfterExternalImport, refreshSubmittedSearch, senderCountLabel } from './data-refresh'
 import { canNavigateToNextDate, formatLocalDateKey, shiftLocalDateKey, shouldShowReturnToLatest } from './daily-date'
+import { EmptySignal, UiIcon } from './ui-components'
+import type { UiIconName } from './ui-components'
 
 const NAV_ITEMS = ['今日情报', '话题雷达', '问我的聊天', '设置']
 
@@ -286,45 +288,46 @@ export function App(): React.JSX.Element {
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">
-          <span className="brand-mark">PR</span>
+          <span className="brand-mark">PR<span className="brand-mark-dot" /></span>
           <div><strong>PrivateRadar</strong><small>个人情报系统</small></div>
         </div>
-        <nav>
+        <div className="side-label">工作空间</div>
+        <nav aria-label="页面导航">
           {NAV_ITEMS.map((item, index) => (
             <button
               className={(page === 'daily' && index === 0) || (page === 'radar' && index === 1) || (page === 'search' && index === 2) || (page === 'settings' && index === 3) ? 'active' : ''}
               key={item}
               type="button"
+              aria-current={(page === 'daily' && index === 0) || (page === 'radar' && index === 1) || (page === 'search' && index === 2) || (page === 'settings' && index === 3) ? 'page' : undefined}
               onClick={index === 0 ? () => void openDaily() : index === 1 ? () => void openRadar() : index === 2 ? () => setPage('search') : () => { setPage('settings'); void refreshFirstUse() }}
             >
-              <span>{['◉', '⌁', '⌕', '⚙'][index]}</span>{item}
+              <UiIcon name={(['radar', 'topics', 'search', 'settings'] as const)[index]} /><span>{item}</span><i className="nav-indicator" />
             </button>
           ))}
         </nav>
-        <div className="privacy-note">聊天原文仅保存在本机</div>
+        <div className="privacy-note"><span className="local-icon"><UiIcon name="shield" /></span><div><strong>本地优先</strong><small>聊天原文仅保存在本机</small></div></div>
       </aside>
 
-      <main>
-        <header>
+      <main className={`content-column page-${page}`}>
+        <div className="app-toolbar">
+          <div className="header-actions">
+            {summary?.demoMode && <span className="demo-badge">当前为示例数据</span>}
+            {page === 'daily' && summary?.date && summary.mode === 'ai' && <button className="regenerate-button" type="button" onClick={() => void regenerate()} disabled={regenerating || dailyLoading}>{regenerating ? '正在整理…' : '重新生成'}</button>}
+            <button className="import-button" type="button" onClick={() => void beginWechatImport()}><UiIcon name="inbox" />开始导入我的聊天</button>
+          </div>
+        </div>
+        <header className="page-heading">
           <div>
             {page === 'daily' && selectedDate && latestDate
-              ? <div className="daily-date-navigation">
+              ? <div className="eyebrow"><span className="eyebrow-mark" />每日简报<span className="eyebrow-divider">/</span><div className="daily-date-navigation" aria-label="情报日期导航">
                   <button type="button" aria-label="上一天" onClick={() => void loadSelectedDate(shiftLocalDateKey(selectedDate, -1))} disabled={dailyLoading}>‹</button>
-                  <strong>{formatLocalDateKey(selectedDate)}</strong>
+                  <strong title={formatLocalDateKey(selectedDate)}>{selectedDate.replaceAll('-', '.')}</strong>
                   <button type="button" aria-label="下一天" onClick={() => void loadSelectedDate(shiftLocalDateKey(selectedDate, 1))} disabled={dailyLoading || !canNavigateToNextDate(selectedDate, latestDate)}>›</button>
                   {shouldShowReturnToLatest(selectedDate, latestDate) && <button className="return-latest-button" type="button" onClick={() => void goToLatestDate()} disabled={dailyLoading}>回到最新</button>}
-                </div>
-              : <div className="eyebrow">{page === 'settings' ? '数据与隐私' : page === 'radar' ? (radar ? radar.date ?? '无可靠聊天日期' : '正在读取日期') : (summary ? summary.date ?? '无可靠聊天日期' : '正在读取日期')}</div>}
+                </div></div>
+              : <div className="eyebrow"><span className="eyebrow-mark" />{page === 'settings' ? <>数据与隐私<span className="eyebrow-divider">/</span>系统状态</> : page === 'radar' ? <>话题脉冲<span className="eyebrow-divider">/</span>{radar ? radar.date?.replaceAll('-', '.') ?? '无可靠聊天日期' : '正在读取日期'}</> : page === 'search' ? <>私有检索<span className="eyebrow-divider">/</span>{firstUse ? `数据最新至 ${firstUse.dataStatus.latestMessageDate?.replaceAll('-', '.') ?? '时间未知'}` : '正在读取日期'}</> : '每日简报'}</div>}
             <h1>{page === 'daily' ? '今日情报' : page === 'radar' ? '话题雷达' : page === 'search' ? '问我的聊天' : '设置'}</h1>
             <p>{page === 'daily' ? '从噪音里，找到今天真正值得看的信息。' : page === 'radar' ? '识别相对过去七天正在突然升温的跨群话题。' : page === 'search' ? '先检索本地证据，再基于证据回答。' : '查看数据来源、存储状态与隐私说明。'}</p>
-          </div>
-          <div className="header-actions">
-            {page === 'daily' && summary?.date && <span className={`mode-badge ${summary.mode}`}>{modeLabel(summary)}</span>}
-            {summary?.demoMode && <span className="demo-badge">当前为演示数据</span>}
-            {page === 'daily' && summary?.date && summary.mode === 'ai' && <button className="regenerate-button" type="button" onClick={() => void regenerate()} disabled={regenerating || dailyLoading}>{regenerating ? '正在整理…' : '重新生成'}</button>}
-            <button className="import-button" type="button" onClick={() => void beginWechatImport()}>
-              开始导入我的聊天
-            </button>
           </div>
         </header>
 
@@ -335,16 +338,16 @@ export function App(): React.JSX.Element {
         {importResult && <ImportReport result={importResult} />}
 
         {page === 'daily' && summary && !dailyLoading && (summary.date === null
-          ? <div className="empty-candidates">无可靠聊天日期。时间未知的消息仍可通过搜索查找。</div>
+          ? <EmptySignal kicker="日期信息待补充" title="无可靠聊天日期" description="时间未知的消息仍可通过搜索查找。" icon="chat" />
           : <>
-            <section className="stats">
-              <Stat label="当日分析群" value={summary.conversationCount} suffix="个" />
-              <Stat label="当日消息" value={summary.messageCount} suffix="条" />
-              <Stat label="当日情报" value={summary.finalIntelligenceCount} suffix="条" />
-              <div className="stat mode-stat"><span>当前模式</span><strong>{modeLabel(summary)}</strong></div>
+            <section className="stats" aria-label="今日概览">
+              <Stat label="当日分析群" value={summary.conversationCount} suffix="个" icon="topics" note="当日已分析的聊天群" />
+              <Stat label="当日消息" value={summary.messageCount} suffix="条" icon="chat" note={`当日共 ${summary.messageCount.toLocaleString()} 条聊天消息`} />
+              <Stat label="当日情报" value={summary.finalIntelligenceCount} suffix="条" icon="spark" note="经过今日价值筛选的结果" />
+              <div className={`stat mode-stat ${summary.mode}`}><span>当前模式<i className="mode-dot" /></span><strong>{modeLabel(summary)}</strong><small className="metric-foot">{summary.mode === 'rule' ? '基于本地规则整理' : '基于证据进行 AI 整理'}</small></div>
             </section>
 
-            {summary.modeNotice && <div className="mode-notice">{summary.modeNotice}</div>}
+            {summary.modeNotice && <div className="mode-notice notice-strip" role="status"><span className="notice-icon">i</span>{summary.modeNotice}</div>}
             {summary.mode === 'ai' && summary.telemetry && (
               <div className="privacy-telemetry">
                 本次发送给 AI：{summary.telemetry.candidateCount} 个候选 / {summary.telemetry.evidenceMessageCount} 条证据消息
@@ -353,7 +356,7 @@ export function App(): React.JSX.Element {
             )}
 
             <section className="section-heading">
-              <div><span>今日价值筛选 · 优先级排序</span><h2>今日最重要</h2></div>
+              <div><span>今日价值筛选 · 优先级排序</span><h2>今天最重要</h2></div>
               <small>按今日价值、优先级与 D1 分数综合排序</small>
             </section>
 
@@ -386,14 +389,14 @@ export function App(): React.JSX.Element {
                   {openCandidateId === item.candidateId && <EvidencePanel evidence={evidence} />}
                 </div>
               ))}
-              {summary.items.length === 0 && <div className="empty-candidates">{summary.messageCount === 0 ? '当天没有聊天记录' : '当天没有值得关注的情报。'}</div>}
+              {summary.items.length === 0 && <EmptySignal title={summary.messageCount === 0 ? '当天没有聊天记录' : '今天没有值得关注的情报'} description={summary.messageCount === 0 ? '可以切换日期，查看已有聊天记录中的情报。' : '当日聊天已完成筛选，目前没有需要优先关注的信号。'} />}
             </section>
             {summary.messageCount > 0 && <MissingImportantFeedback dateKey={summary.date} />}
           </>)}
         {page === 'radar' && !radar && !error && <div className="loading">正在计算过去 7 天历史基线……</div>}
         {page === 'radar' && radar && (
           <>
-            {radar.dataQualityNotice && <div className="data-quality-notice">{radar.dataQualityNotice}</div>}
+            {radar.dataQualityNotice && <div className="data-quality-notice notice-strip" role="status"><span className="notice-icon">i</span>{radar.dataQualityNotice}</div>}
             {radar.date === null
               ? <div className="empty-candidates">无可靠聊天日期，暂无法按日期分析话题。时间未知的消息仍可通过搜索查找。</div>
               : <RadarPage radar={radar} openTopicId={openTopicId} evidence={topicEvidence} onToggleEvidence={toggleTopicEvidence} />}
@@ -401,6 +404,7 @@ export function App(): React.JSX.Element {
         )}
         {page === 'search' && (
           <SearchPage
+            status={firstUse}
             question={question}
             querying={querying}
             response={queryResponse}
@@ -432,7 +436,7 @@ function WelcomePage({ error, onDemo, onImport }: {
       <p className="welcome-copy">从重要消息、升温话题到历史聊天搜索，所有结果都能回到原始消息查看依据。</p>
       {error && <div className="error">{error}</div>}
       <div className="welcome-actions">
-        <button type="button" className="welcome-choice primary" onClick={() => void onDemo()}><strong>体验 Demo</strong><span>无需微信，立即体验 PrivateRadar</span></button>
+        <button type="button" className="welcome-choice primary" onClick={() => void onDemo()}><strong>体验示例聊天</strong><span>无需微信，立即体验 PrivateRadar</span></button>
         <button type="button" className="welcome-choice" onClick={() => void onImport()}><strong>导入我的微信聊天</strong><span>开始使用自己的聊天记录</span></button>
       </div>
       <small className="welcome-privacy">聊天原文默认保存在你的电脑上。</small>
@@ -575,11 +579,13 @@ function DailyFeedbackControls({ item, state, onSave }: {
   </div>
 }
 
-function MissingImportantFeedback({ dateKey }: { dateKey: string }): React.JSX.Element {
+export function MissingImportantFeedback({ dateKey }: { dateKey: string }): React.JSX.Element {
   const [showForm, setShowForm] = useState(false)
+  const [selection, setSelection] = useState<{ dateKey: string; choice: 'no' | 'yes' } | null>(null)
   const [note, setNote] = useState('')
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
+  const selectedChoice = selection?.dateKey === dateKey ? selection.choice : null
   async function submit(): Promise<void> {
     setSaving(true)
     try {
@@ -590,15 +596,19 @@ function MissingImportantFeedback({ dateKey }: { dateKey: string }): React.JSX.E
       setSaving(false)
     }
   }
-  if (saved) return <section className="missing-feedback"><strong>感谢反馈</strong><span>已记录今天可能遗漏的重要内容。</span></section>
-  return <section className="missing-feedback">
-    <strong>今天有重要内容被漏掉了吗？</strong>
-    <div className="feedback-actions"><button type="button" onClick={() => setShowForm(false)}>没有</button><button type="button" onClick={() => setShowForm(true)}>有</button></div>
-    {showForm && <div className="feedback-editor"><p>可以简单描述一下（可选），之后我们会结合本地聊天记录人工分析。</p><input value={note} maxLength={1000} onChange={(event) => setNote(event.target.value)} placeholder="例如：群里有人说某产品今天大更新了" aria-label="遗漏重要内容说明" /><div className="feedback-editor-actions"><button type="button" disabled={saving} onClick={() => void submit()}>记录反馈</button><button type="button" disabled={saving} onClick={() => setShowForm(false)}>取消</button></div></div>}
+  if (saved) return <section className="missing-feedback feedback-card" role="status"><span className="feedback-mark"><UiIcon name="check" /></span><div className="feedback-copy"><strong>感谢反馈</strong><span>已记录今天可能遗漏的重要内容。</span></div></section>
+  return <section className="missing-feedback feedback-card" aria-label="情报反馈">
+    <span className="feedback-mark"><UiIcon name="chat" /></span>
+    <div className="feedback-copy"><strong>今天有重要内容被漏掉了吗？</strong><span>反馈会保存在本机，供后续人工审计。</span></div>
+    <div className="feedback-actions">
+      <button type="button" aria-pressed={selectedChoice === 'no'} onClick={() => { setSelection({ dateKey, choice: 'no' }); setShowForm(false) }}>没有</button>
+      <button type="button" aria-pressed={selectedChoice === 'yes'} onClick={() => { setSelection({ dateKey, choice: 'yes' }); setShowForm(true) }}>有</button>
+    </div>
+    {showForm && <div className="feedback-editor"><p>可以简单描述一下（可选），之后我们会结合本地聊天记录人工分析。</p><input value={note} maxLength={1000} onChange={(event) => setNote(event.target.value)} placeholder="例如：群里有人说某产品今天大更新了" aria-label="遗漏重要内容说明" /><div className="feedback-editor-actions"><button type="button" disabled={saving} onClick={() => void submit()}>记录反馈</button><button type="button" disabled={saving} onClick={() => { setSelection(null); setShowForm(false) }}>取消</button></div></div>}
   </section>
 }
 
-function SettingsPage({ status, importing, onImportFile, onConfigure, onCheck }: {
+export function SettingsPage({ status, importing, onImportFile, onConfigure, onCheck }: {
   status: FirstUseStatus
   importing: boolean
   onImportFile: () => Promise<void>
@@ -630,26 +640,66 @@ function SettingsPage({ status, importing, onImportFile, onConfigure, onCheck }:
   }
   return <section className="settings-page">
     <DataStatusCard status={status} />
-    <div className="settings-grid"><div><span>PrivateRadar 版本</span><strong>{status.appVersion}</strong></div><div><span>本地数据库</span><strong>{status.databaseHealthy ? '正常' : '需要检查'}</strong></div></div>
-    <div className="storage-card"><span>数据存储位置</span><code>{status.dataDirectory}</code><p>聊天原文默认保存在你的电脑上。安装升级和默认卸载不会删除这些数据。</p></div>
-    <div className="settings-actions"><button className="primary-action" type="button" onClick={() => void checkConnection()} disabled={checking}>{checking ? '正在检查…' : '检查 WorkBuddy 连接'}</button><button type="button" onClick={() => void onConfigure()}>配置 WorkBuddy</button><button type="button" onClick={() => void openDirectory('data')}>打开数据目录</button><button type="button" onClick={() => void openDirectory('log')}>打开日志目录</button><button type="button" onClick={() => void onImportFile()} disabled={importing}>{importing ? '正在导入…' : '从文件导入'}</button><button type="button" onClick={() => void exportFeedback()}>导出测试反馈</button></div>
-    {notice && <div className={status.workBuddyConnected ? 'mode-notice' : 'error'}>{notice}</div>}
+    <div className="settings-columns">
+      <section className="settings-section" aria-labelledby="settings-health-title">
+        <div className="settings-section-heading"><div><span className="settings-kicker">本机环境</span><h2 id="settings-health-title">运行状态</h2></div><span className="settings-section-index">02</span></div>
+        <div className="settings-health-grid">
+          <article className="settings-health-card"><span className="settings-card-icon"><UiIcon name="radar" /></span><div><span>PrivateRadar 版本</span><strong>{status.appVersion}</strong></div></article>
+          <article className={`settings-health-card ${status.databaseHealthy ? 'healthy' : 'needs-attention'}`}><span className="settings-card-icon"><UiIcon name="database" /></span><div><span>本地数据库</span><strong>{status.databaseHealthy ? '正常' : '需要检查'}</strong></div><span className="settings-health-dot" aria-hidden="true" /></article>
+        </div>
+      </section>
+      <section className="settings-section" aria-labelledby="settings-storage-title">
+        <div className="settings-section-heading"><div><span className="settings-kicker">隐私与存储</span><h2 id="settings-storage-title">本地数据</h2></div><span className="settings-section-index">03</span></div>
+        <article className="settings-storage-card">
+          <div className="settings-storage-top"><span className="settings-card-icon"><UiIcon name="shield" /></span><span className="settings-local-label">本地优先</span></div>
+          <h3>你的聊天数据，保存在本机</h3>
+          <p>聊天原文默认保存在你的电脑上。安装升级和默认卸载不会删除这些数据。</p>
+          <div className="settings-storage-location"><UiIcon name="folder" /><div><span>PrivateRadar 数据存储路径</span><code>{status.dataDirectory}</code></div></div>
+        </article>
+      </section>
+    </div>
+    <section className="settings-section" aria-labelledby="settings-actions-title">
+      <div className="settings-section-heading"><div><span className="settings-kicker">应用工具</span><h2 id="settings-actions-title">管理与诊断</h2></div><span className="settings-section-index">04</span></div>
+      <div className="settings-action-grid">
+        <button className="settings-action-card primary-action" type="button" onClick={() => void checkConnection()} disabled={checking}><span className="settings-action-icon"><UiIcon name="link" /></span><span>{checking ? '正在检查…' : '检查 WorkBuddy 连接'}</span><UiIcon name="arrow" className="settings-action-arrow" /></button>
+        <button className="settings-action-card" type="button" onClick={() => void onConfigure()}><span className="settings-action-icon"><UiIcon name="settings" /></span><span>配置 WorkBuddy</span><UiIcon name="arrow" className="settings-action-arrow" /></button>
+        <button className="settings-action-card" type="button" onClick={() => void openDirectory('data')}><span className="settings-action-icon"><UiIcon name="folder" /></span><span>打开数据目录</span><UiIcon name="arrow" className="settings-action-arrow" /></button>
+        <button className="settings-action-card" type="button" onClick={() => void openDirectory('log')}><span className="settings-action-icon"><UiIcon name="inbox" /></span><span>打开日志目录</span><UiIcon name="arrow" className="settings-action-arrow" /></button>
+        <button className="settings-action-card" type="button" onClick={() => void onImportFile()} disabled={importing}><span className="settings-action-icon"><UiIcon name="inbox" /></span><span>{importing ? '正在导入…' : '从文件导入'}</span><UiIcon name="arrow" className="settings-action-arrow" /></button>
+        <button className="settings-action-card" type="button" onClick={() => void exportFeedback()}><span className="settings-action-icon"><UiIcon name="chat" /></span><span>导出测试反馈</span><UiIcon name="arrow" className="settings-action-arrow" /></button>
+      </div>
+      {notice && <div role="status" className={`settings-operation-notice ${status.workBuddyConnected ? 'mode-notice' : 'error'}`}>{notice}</div>}
+    </section>
+    <footer className="settings-footer"><span className="settings-footer-mark" aria-hidden="true"><UiIcon name="shield" /></span><span>本地数据 · 由你掌握</span></footer>
   </section>
 }
 
 function DataStatusCard({ status }: { status: FirstUseStatus }): React.JSX.Element {
   const { latestAttempt, lastSuccessfulImport, latestMessageDate } = status.dataStatus
-  if (!latestAttempt) return <section className="data-status-card data-status-empty">
-    <div><span>数据状态</span><strong>尚未导入聊天数据</strong></div>
-    <div className="data-status-summary"><span>累计</span><strong>{status.totalMessageCount.toLocaleString()} 条消息 · {status.importBatchCount.toLocaleString()} 个聊天批次</strong></div>
-    <div className="data-status-summary"><span>WorkBuddy</span><strong>{status.workBuddyConnected ? '已连接' : '未连接'}</strong></div>
+  if (!latestAttempt) return <section className="settings-section" aria-labelledby="settings-source-title">
+    <div className="settings-section-heading"><div><span className="settings-kicker">连接与导入</span><h2 id="settings-source-title">数据来源</h2></div><span className="settings-section-index">01</span></div>
+    <article className="data-status-card data-status-empty">
+      <div className="data-status-heading"><span className="settings-source-icon"><UiIcon name="inbox" /></span><div className="data-status-recent"><span>最近一次导入</span><strong>尚未导入聊天数据</strong></div></div>
+      <div className="data-status-facts">
+        <div className="data-status-summary"><span>数据最新至</span><strong>{latestMessageDate ?? '时间未知'}</strong></div>
+        <div className="data-status-summary"><span>累计</span><strong>{status.totalMessageCount.toLocaleString()} 条消息 · {status.importBatchCount.toLocaleString()} 个聊天批次</strong></div>
+        <div className="data-status-summary"><span>数据源状态</span><strong className={`settings-source-state ${status.workBuddyConnected ? 'connected' : 'disconnected'}`}><span aria-hidden="true" />WorkBuddy {status.workBuddyConnected ? '已连接' : '未连接'}</strong></div>
+      </div>
+    </article>
   </section>
   const successfulLatest = latestAttempt.status === 'success' || latestAttempt.status === 'partial'
-  return <section className="data-status-card">
-    <div className="data-status-heading"><span>数据状态</span><div className="data-status-recent"><strong>最近一次导入</strong><span>{latestAttempt.source} · {formatDateTime(latestAttempt.completedAt)}</span></div><b className={`import-status ${latestAttempt.status}`}>{importStatusLabel(latestAttempt.status)}</b></div>
-    <div className="data-status-metrics"><span>新增 <strong>{latestAttempt.importedCount}</strong></span><span>重复 <strong>{latestAttempt.duplicateCount}</strong></span><span>更新 <strong>{latestAttempt.updatedCount}</strong></span><span>错误 <strong>{latestAttempt.errorCount}</strong></span></div>
-    {!successfulLatest && lastSuccessfulImport && <div className="data-status-last-success"><span>最近成功导入</span><strong>{lastSuccessfulImport.source} · {formatDateTime(lastSuccessfulImport.completedAt)}</strong></div>}
-    <div className="data-status-facts"><div className="data-status-summary"><span>数据最新至</span><strong>{latestMessageDate ?? '时间未知'}</strong></div><div className="data-status-summary"><span>累计</span><strong>{status.totalMessageCount.toLocaleString()} 条消息 · {status.importBatchCount.toLocaleString()} 个聊天批次</strong></div><div className="data-status-summary"><span>WorkBuddy</span><strong>{status.workBuddyConnected ? '已连接' : '未连接'}</strong></div></div>
+  return <section className="settings-section" aria-labelledby="settings-source-title">
+    <div className="settings-section-heading"><div><span className="settings-kicker">连接与导入</span><h2 id="settings-source-title">数据来源</h2></div><span className="settings-section-index">01</span></div>
+    <article className="data-status-card">
+      <div className="data-status-heading"><span className="settings-source-icon"><UiIcon name="inbox" /></span><div className="data-status-recent"><span>最近一次导入</span><strong>{latestAttempt.source}<span className="settings-import-date"> · {formatDateTime(latestAttempt.completedAt)}</span></strong></div><b className={`import-status ${latestAttempt.status}`}>{importStatusLabel(latestAttempt.status)}</b></div>
+      <div className="data-status-metrics"><small>导入结果</small><span>新增 <strong>{latestAttempt.importedCount}</strong></span><span>重复 <strong>{latestAttempt.duplicateCount}</strong></span><span>更新 <strong>{latestAttempt.updatedCount}</strong></span><span>错误 <strong>{latestAttempt.errorCount}</strong></span></div>
+      {!successfulLatest && lastSuccessfulImport && <div className="data-status-last-success"><span>最近成功导入</span><strong>{lastSuccessfulImport.source} · {formatDateTime(lastSuccessfulImport.completedAt)}</strong></div>}
+      <div className="data-status-facts">
+        <div className="data-status-summary"><span>数据最新至</span><strong>{latestMessageDate ?? '时间未知'}</strong></div>
+        <div className="data-status-summary"><span>累计</span><strong>{status.totalMessageCount.toLocaleString()} 条消息 · {status.importBatchCount.toLocaleString()} 个聊天批次</strong></div>
+        <div className="data-status-summary"><span>数据源状态</span><strong className={`settings-source-state ${status.workBuddyConnected ? 'connected' : 'disconnected'}`}><span aria-hidden="true" />WorkBuddy {status.workBuddyConnected ? '已连接' : '未连接'}</strong></div>
+      </div>
+    </article>
   </section>
 }
 
@@ -657,7 +707,7 @@ function importStatusLabel(status: 'success' | 'partial' | 'failed'): string {
   return status === 'success' ? '成功' : status === 'partial' ? '部分完成' : '失败'
 }
 
-function RadarPage({
+export function RadarPage({
   radar,
   openTopicId,
   evidence,
@@ -669,59 +719,79 @@ function RadarPage({
   onToggleEvidence: (topicId: string, date: string) => Promise<void>
 }): React.JSX.Element {
   return (
-    <>
-      <section className="radar-stats">
-        <Stat label="历史基线" value={radar.historyDays} suffix="天" />
-        <Stat label="新出现" value={radar.newTopics.length} suffix="个" />
-        <Stat label="正在升温" value={radar.warmingTopics.length} suffix="个" />
+    <div className="topics-page">
+      <section className="radar-stats topic-stats" aria-label="话题趋势概览">
+        <article className="topic-stat topic-stat-baseline">
+          <div className="topic-stat-heading"><span>历史基线</span><UiIcon name="database" /></div>
+          <div className="topic-stat-value">{radar.historyDays.toLocaleString()}<small>天</small></div>
+          <p>趋势比较窗口</p>
+        </article>
+        <article className="topic-stat">
+          <div className="topic-stat-heading"><span>新出现</span><UiIcon name="spark" /></div>
+          <div className="topic-stat-value">{radar.newTopics.length.toLocaleString()}<small>个</small></div>
+          <p>{radar.newTopics.length > 0 ? '今天首次进入视野的话题' : '今天没有新话题'}</p>
+        </article>
+        <article className="topic-stat">
+          <div className="topic-stat-heading"><span>正在升温</span><UiIcon name="radar" /></div>
+          <div className="topic-stat-value">{radar.warmingTopics.length.toLocaleString()}<small>个</small></div>
+          <p>{radar.warmingTopics.length > 0 ? '相较历史基线关注度上升' : '没有明显升温信号'}</p>
+        </article>
       </section>
       <TopicSection
+        kind="new"
         title="新出现"
         description="今天首次出现的话题"
         topics={radar.newTopics}
-        emptyText="今天没有新出现的话题。"
+        emptyText="今天没有新出现的话题"
+        historyDays={radar.historyDays}
         openTopicId={openTopicId}
         evidence={evidence}
         onToggleEvidence={onToggleEvidence}
       />
       <TopicSection
+        kind="warming"
         title="正在升温"
         description="相比近期历史明显增加的话题"
         topics={radar.warmingTopics}
-        emptyText="暂未发现明显升温的话题。"
+        emptyText="暂未发现明显升温的话题"
+        historyDays={radar.historyDays}
         notice={radar.historySufficient ? null : '历史数据不足，趋势仅供参考'}
         openTopicId={openTopicId}
         evidence={evidence}
         onToggleEvidence={onToggleEvidence}
       />
-    </>
+    </div>
   )
 }
 
 function TopicSection({
+  kind,
   title,
   description,
   topics,
   emptyText,
+  historyDays,
   notice,
   openTopicId,
   evidence,
   onToggleEvidence
 }: {
+  kind: 'new' | 'warming'
   title: string
   description: string
   topics: TopicRadarSummary['topics']
   emptyText: string
+  historyDays: number
   notice?: string | null
   openTopicId: string
   evidence: TopicEvidence | null
   onToggleEvidence: (topicId: string, date: string) => Promise<void>
 }): React.JSX.Element {
   return (
-    <section className="radar-section">
+    <section className={`radar-section topic-section topic-section-${kind}`}>
       <div className="section-heading">
         <div><span>{description}</span><h2>{title}</h2></div>
-        <small>Signal Score 表示值得注意程度</small>
+        <small className="topic-score-key"><i aria-hidden="true" />Signal Score <span>表示值得注意程度</span></small>
       </div>
       {notice && <div className="trend-history-notice">{notice}</div>}
       <div className="topic-list">
@@ -730,7 +800,7 @@ function TopicSection({
             <article className="topic-card">
               <div className="rank">{String(index + 1).padStart(2, '0')}</div>
               <div className="topic-copy">
-                <div className="candidate-heading"><h3>{topic.canonicalName}</h3><b>{topic.signalScore.toFixed(2)} Signal</b></div>
+                <div className="candidate-heading"><h3>{topic.canonicalName}</h3><b className="topic-score">{topic.signalScore.toFixed(2)} Signal</b></div>
                 <div className="topic-metrics">
                   <span>今日消息<strong>{topic.messageCount}</strong></span>
                   <span>今日群数<strong>{topic.conversationCount}</strong></span>
@@ -742,20 +812,32 @@ function TopicSection({
                 <TopicTrend topic={topic} />
                 <div className="reason-list">{topic.reasonCodes.map((code) => <span key={code}>{topicReasonLabel(code)}</span>)}</div>
               </div>
-              <button type="button" onClick={() => void onToggleEvidence(topic.topicId, topic.date)}>
+              <button type="button" aria-expanded={openTopicId === topic.topicId} onClick={() => void onToggleEvidence(topic.topicId, topic.date)}>
                 {openTopicId === topic.topicId ? '收起依据' : '查看依据'}
               </button>
             </article>
             {openTopicId === topic.topicId && <TopicEvidencePanel evidence={evidence} />}
           </div>
         ))}
-        {topics.length === 0 && <div className="empty-candidates">{emptyText}</div>}
+        {topics.length === 0 && (
+          <article className="topic-empty">
+            <div className="topic-empty-icon" aria-hidden="true">
+              <UiIcon name={kind === 'new' ? 'spark' : 'radar'} />
+            </div>
+            <div className="topic-empty-copy">
+              <h3>{emptyText}</h3>
+              <p>{historyDays > 0 ? `趋势基线来自最近 ${historyDays} 天的数据。` : '尚无可用于趋势比较的历史数据。'}</p>
+            </div>
+            <span className="topic-empty-status">{kind === 'new' ? '暂无信号' : notice ? '基线积累中' : '趋势平稳'}</span>
+          </article>
+        )}
       </div>
     </section>
   )
 }
 
-function SearchPage({
+export function SearchPage({
+  status,
   question,
   querying,
   response,
@@ -765,6 +847,7 @@ function SearchPage({
   onSubmit,
   onToggleContext
 }: {
+  status: FirstUseStatus | null
   question: string
   querying: boolean
   response: ChatQueryResponse | null
@@ -776,14 +859,45 @@ function SearchPage({
 }): React.JSX.Element {
   const examples = ['上个月谁推荐过 AI 工具？', '最近大家怎么评价 Claude Code？']
   return (
-    <>
-      <form className="chat-search" onSubmit={(event) => { event.preventDefault(); void onSubmit() }}>
-        <div className="search-input-row">
-          <input value={question} onChange={(event) => onQuestionChange(event.target.value)} placeholder="例如：之前谁分享过微信小程序 GitHub 项目？" aria-label="询问聊天记录" />
-          <button type="submit" disabled={querying || !question.trim()}>{querying ? '正在检索…' : '检索聊天'}</button>
-        </div>
-        <div className="query-examples"><span>试试：</span>{examples.map((example) => <button type="button" key={example} onClick={() => void onSubmit(example)}>{example}</button>)}</div>
-      </form>
+    <div className="search-page">
+      <div className="search-layout">
+        <form className="chat-search" onSubmit={(event) => { event.preventDefault(); void onSubmit() }}>
+          <div className="search-card-head">
+            <span className="search-card-icon"><UiIcon name="search" /></span>
+            <div><h2>从聊天记录中找答案</h2><p>输入问题，查找与你有关的本地聊天证据。</p></div>
+            <span className="search-local-chip"><span />本机优先</span>
+          </div>
+          <div className="search-input-row">
+            <label className="search-input-wrap">
+              <UiIcon name="search" />
+              <input value={question} onChange={(event) => onQuestionChange(event.target.value)} placeholder="例如：之前谁分享过微信小程序 GitHub 项目？" aria-label="询问聊天记录" />
+              <span className="search-enter-hint" aria-hidden="true">↵</span>
+            </label>
+            <button type="submit" disabled={querying || !question.trim()}><span>{querying ? '正在检索…' : '检索聊天'}</span><UiIcon name="arrow" /></button>
+          </div>
+          <div className="query-examples"><span>试试：</span>{examples.map((example) => <button type="button" key={example} onClick={() => void onSubmit(example)}>{example}</button>)}</div>
+        </form>
+
+        <aside className="search-aside" aria-label="检索原则与本地索引">
+          <section className="search-evidence-card">
+            <div className="search-evidence-head"><span className="search-evidence-icon"><UiIcon name="shield" /></span><span>证据优先</span><span className="search-evidence-local">本地记录</span></div>
+            <h2>答案要有来处</h2>
+            <p>先定位相关聊天证据，再基于证据组织回答。回答与原始记录一起呈现，方便核对。</p>
+            <div className="search-evidence-steps"><span><b>01</b>搜索本地记录</span><UiIcon name="arrow" /><span><b>02</b>基于证据作答</span></div>
+          </section>
+          <section className="search-index-card" aria-label="本地索引概况">
+            <div className="search-index-head"><span>索引概况</span><UiIcon name="database" /></div>
+            <div className="search-index-stats"><div><strong>{status ? status.totalMessageCount.toLocaleString() : '—'}</strong><span>条消息</span></div><div><strong>{status ? status.importBatchCount.toLocaleString() : '—'}</strong><span>个聊天批次</span></div></div>
+            <p className={status?.databaseHealthy ? 'search-index-state healthy' : 'search-index-state'}><span />{status ? (status.databaseHealthy ? '本地数据库正常' : '本地数据库需要检查') : '正在读取本地索引状态…'}</p>
+          </section>
+        </aside>
+      </div>
+
+      {!response && <section className="search-answer-state" aria-live="polite">
+        <span className="search-answer-icon"><UiIcon name="search" /></span>
+        <div><span className="search-answer-kicker">{querying ? '正在查找本地证据' : '随时开始检索'}</span><h2>{querying ? '正在检索聊天记录' : '等待你的问题'}</h2><p>{querying ? '请稍候，正在定位与你的问题有关的聊天记录。' : '输入一个问题，PrivateRadar 会先查找本地聊天证据，再基于证据回答。'}</p></div>
+        <span className="search-answer-local"><UiIcon name="shield" />本地聊天证据优先</span>
+      </section>}
 
       {response && (
         <section className="query-response">
@@ -851,7 +965,7 @@ function SearchPage({
           )}
         </section>
       )}
-    </>
+    </div>
   )
 }
 
@@ -1072,6 +1186,6 @@ function ImportReport({ result }: { result: ImportResult }): React.JSX.Element {
   )
 }
 
-function Stat({ label, value, suffix }: { label: string; value: number; suffix: string }): React.JSX.Element {
-  return <div className="stat"><span>{label}</span><strong>{value.toLocaleString()}<small>{suffix}</small></strong></div>
+export function Stat({ label, value, suffix, icon = 'radar', note }: { label: string; value: number; suffix: string; icon?: UiIconName; note?: string }): React.JSX.Element {
+  return <div className="stat"><span>{label}<UiIcon name={icon} /></span><strong>{value.toLocaleString()}<small>{suffix}</small></strong>{note && <small className="metric-foot">{note}</small>}</div>
 }
