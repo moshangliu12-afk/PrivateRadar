@@ -18,22 +18,25 @@ vi.mock('../src/main/deployment', () => ({
   isWorkBuddyConnectorRegistered: () => false
 }))
 
-const productVersion = '0.2.0-alpha.15'
+// alpha.15.1 仅刷新桌面界面；Connector、MCP、Skill 内容未变，保持原 alpha.15 系列版本。
+const productVersion = '0.2.0-alpha.15.1'
+const connectorVersion = '0.2.0-alpha.15'
+const mcpVersion = '0.2.0-alpha.15'
 const skillVersion = '0.2.0-alpha.15-skill.3'
 const readSource = (path: string): string => readFileSync(new URL(path, import.meta.url), 'utf8')
 
-describe('alpha.15 发布候选版本契约', () => {
+describe('alpha.15.1 桌面界面修订的独立版本契约', () => {
   it('产品与 lockfile 顶层和根包版本一致', () => {
     expect(product.version).toBe(productVersion)
     expect(lockfile.version).toBe(productVersion)
     expect(lockfile.packages[''].version).toBe(productVersion)
   })
 
-  it('Connector 元数据版本与产品一致', () => {
-    expect(metadata.version).toBe(product.version)
+  it('Connector 元数据保持明确的 alpha.15 版本，不随桌面界面修订升版', () => {
+    expect(metadata.version).toBe(connectorVersion)
   })
 
-  it('内存 MCP 握手版本一致且只公开正式双工具', async () => {
+  it('内存 MCP 握手保持明确的 alpha.15 版本且只公开正式双工具', async () => {
     const db = new DatabaseSync(':memory:')
     initializeDatabase(db)
     const server = createWorkBuddyMcpServer(db, undefined, { databasePath: ':memory:' })
@@ -42,7 +45,7 @@ describe('alpha.15 发布候选版本契约', () => {
     try {
       await server.connect(serverTransport)
       await client.connect(clientTransport)
-      expect(client.getServerVersion()?.version).toBe(product.version)
+      expect(client.getServerVersion()?.version).toBe(mcpVersion)
       const tools = await client.listTools()
       expect(tools.tools.map((tool) => tool.name).sort()).toEqual([
         'privateradar_ingest_current_context_batch',
@@ -90,6 +93,6 @@ describe('alpha.15 发布候选版本契约', () => {
   it('安装包命名由产品版本推导但不制作安装包', () => {
     expect(product.build.win.artifactName).toBe('PrivateRadar-Setup-${version}-x64.${ext}')
     const artifact = product.build.win.artifactName.replace('${version}', product.version).replace('${ext}', 'exe')
-    expect(artifact).toBe('PrivateRadar-Setup-0.2.0-alpha.15-x64.exe')
+    expect(artifact).toBe('PrivateRadar-Setup-0.2.0-alpha.15.1-x64.exe')
   })
 })
