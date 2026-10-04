@@ -23,14 +23,25 @@ export function understandQuery(db: DatabaseSync, question: string, anchorDate: 
   const personIntent = /谁在|谁提到|谁发|谁分享|谁推荐|哪个人|哪位/.test(question) ? 'who' : 'none'
   const strippedQuestion = stripQuestionShell(question, [...matchedConversations, ...matchedSenders].map((item) => item.name))
   const entityKeys = extractQueryEntityKeys(question)
-  const expansion = expandQuery(strippedQuestion, entityKeys)
+  const hasQuestionShell = /[？?]|什么|哪些|怎么|如何|有没有|请问/.test(question)
+  const isQuestion = strippedQuestion !== question || hasQuestionShell
+    || timeIntent !== 'none'
+  const explicitTerms = extractSearchTerms(strippedQuestion, entityKeys, [], [])
+  // 显式实体与关键词保持原规则；仅未知自然语言内容走确定性分词。
+  const fallbackTerms = explicitTerms.length === 0 && hasQuestionShell
+    ? segmentNaturalLanguageFallback(strippedQuestion, dateRange)
+    : undefined
+  const literal = strippedQuestion.replace(/[？?!！。]+$/g, '').trim()
+  const searchTerms = fallbackTerms ?? (explicitTerms.length > 0 ? explicitTerms
+    : literal.length >= 2 && /[\p{L}\p{N}]/u.test(literal) ? [literal] : [])
+  const expansion = expandQuery(strippedQuestion, entityKeys, fallbackTerms)
   return {
     intent: /怎么看|怎么样|如何评价|评价|看法|观点|反馈如何|体验如何|大家认为/.test(question) ? 'summarize' : 'find',
     sort: /最早|第一次|首次/.test(question) ? 'oldest' : 'relevance',
     dateRange,
     timeIntent,
     personIntent,
-    isNaturalLanguage: strippedQuestion !== question || /[？?]/.test(question) || timeIntent !== 'none'
+    isNaturalLanguage: isQuestion
       || expansion.eventTerms.length > 0 || expansion.coreTopics.includes('消防安全') || expansion.coreTopics.includes('故障'),
     conversationIds: matchedConversations.map((item) => item.id),
     conversationNames: matchedConversations.map((item) => item.name),
@@ -40,7 +51,7 @@ export function understandQuery(db: DatabaseSync, question: string, anchorDate: 
     coreTopics: expansion.coreTopics,
     eventTerms: expansion.eventTerms,
     expandedTerms: expansion.terms,
-    searchTerms: extractSearchTerms(strippedQuestion, entityKeys, [], [])
+    searchTerms
   }
 }
 
@@ -103,11 +114,59 @@ function extractSearchTerms(question: string, entityKeys: string[], conversation
   for (const term of dictionary) if (contentQuestion.toLowerCase().includes(term.toLowerCase())) terms.add(term)
   for (const version of contentQuestion.match(/\bv?\d+(?:\.\d+){1,3}\b/gi) ?? []) terms.add(version)
   for (const name of names) terms.delete(name)
-  if (terms.size === 0) {
-    const literal = contentQuestion.replace(/[？?!！。]+$/g, '').trim()
-    if (literal.length >= 2) terms.add(literal)
-  }
   return [...terms].filter((term) => term.length >= 2).sort((left, right) => right.length - left.length || left.localeCompare(right))
+}
+
+const MAX_FALLBACK_TERMS = 8
+const fallbackFunctionWords = new Set([
+  '关于', '有关', '和', '与', '以及', '及', '的', '了', '什么', '哪些', '是',
+  '吗', '呀', '呢', '谁', '大家', '到', '从', '有', '在', '里', '中',
+  '怎么', '如何', '请问', '有没有'
+])
+const wordSegmenter = new Intl.Segmenter('zh', { granularity: 'word' })
+
+function segmentNaturalLanguageFallback(question: string, dateRange: QueryDateRange): string[] {
+  let content = question.replace(/(?:聊|说|讨论|提到)(?:了|过)?(?:什么|哪些)|怎么(?:说|看)|有没有|请问/gu, ' ')
+  if (dateRange.label !== '全部时间') {
+    content = content
+      .replace(/20\d{2}[-年/]\d{1,2}[-月/]\d{1,2}日?/gu, ' ')
+      .replace(/最近\s*(?:\d+\s*天|三个月|一个月)|今天|昨天|本周|这周|上周|本月|这个月|上个月|近期|最近/gu, ' ')
+  }
+  const words: string[] = []
+  const compounds: string[] = []
+  let run: string[] = []
+  const flush = (): void => {
+    const units: string[] = []
+    for (let index = 0; index < run.length;) {
+      if (run[index].length >= 2) { units.push(run[index++]); continue }
+      let singles = ''
+      while (index < run.length && run[index].length === 1) singles += run[index++]
+      // 单字连续片段合并；孤立尾字接前词、孤立首字接后词，避免专名被截断。
+      if (singles.length >= 2) units.push(singles)
+      else if (units.length > 0) units[units.length - 1] += singles
+      else if (index < run.length) units.push(singles + run[index++])
+    }
+    words.push(...units)
+    // 同一连续内容片段的相邻词组成有限复合词，同时保留组成词用于 OR 召回。
+    for (let index = 1; index < units.length; index += 1) {
+      const compound = units[index - 1] + units[index]
+      if (compound.length <= 8) compounds.push(compound)
+    }
+    run = []
+  }
+  for (const item of wordSegmenter.segment(content)) {
+    if (!item.isWordLike || fallbackFunctionWords.has(item.segment)) { flush(); continue }
+    if (/^\p{Script=Han}+$/u.test(item.segment)) run.push(item.segment)
+    else {
+      flush()
+      if (item.segment.length >= 2 && /[\p{L}\p{N}]/u.test(item.segment)) words.push(item.segment)
+    }
+  }
+  flush()
+  // 优先保留独立内容词，并为更具体的复合词保留两个名额；不回退为整句问句。
+  return [...new Set([...words.slice(0, MAX_FALLBACK_TERMS - 2), ...compounds, ...words])]
+    .slice(0, MAX_FALLBACK_TERMS)
+    .sort((left, right) => right.length - left.length || left.localeCompare(right))
 }
 
 function stripQuestionShell(question: string, knownNames: string[]): string {
@@ -125,7 +184,7 @@ function stripQuestionShell(question: string, knownNames: string[]): string {
   return value || question.trim()
 }
 
-function expandQuery(question: string, entityKeys: string[]): { coreTopics: string[]; eventTerms: string[]; terms: string[] } {
+function expandQuery(question: string, entityKeys: string[], fallbackTerms?: string[]): { coreTopics: string[]; eventTerms: string[]; terms: string[] } {
   const terms = new Set<string>()
   const coreTopics = new Set<string>()
   const eventTerms = new Set<string>()
@@ -159,10 +218,12 @@ function expandQuery(question: string, entityKeys: string[]): { coreTopics: stri
     addTopic('故障', ['故障', '连不上', '异常', '不可用', '失败', '崩溃'])
   }
 
-  const literal = question.replace(/[？?!！。]+$/g, '').trim()
-  if (literal.length >= 2) {
-    coreTopics.add(literal)
-    terms.add(literal)
+  const literals = fallbackTerms ?? [question.replace(/[？?!！。]+$/g, '').trim()]
+  for (const literal of literals) {
+    if (literal.length >= 2 && /[\p{L}\p{N}]/u.test(literal)) {
+      coreTopics.add(literal)
+      terms.add(literal)
+    }
   }
   for (const key of entityKeys) {
     if (key.startsWith('product:')) terms.add(key.slice('product:'.length))
