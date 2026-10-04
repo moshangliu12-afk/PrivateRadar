@@ -244,9 +244,12 @@ export async function saveDirectoryEvidence(
     throw error
   } finally {
     // 先关闭所有自有句柄，避免 Windows 拒绝清理；不会清理其他项或已有目标。
-    await lease.close()
-    if (staging) await fs.rm(staging, { recursive: true, force: true })
-    if (published) await fs.rm(target.item, { recursive: true, force: true })
+    // 关闭失败也先确认辅助进程已销毁，再清理本次未登记的暂存/发布目标。
+    try { await lease.close() } finally {
+      lease.assertReleased()
+      if (staging) await fs.rm(staging, { recursive: true, force: true })
+      if (published) await fs.rm(target.item, { recursive: true, force: true })
+    }
   }
 }
 

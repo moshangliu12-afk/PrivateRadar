@@ -6,7 +6,7 @@ import { McpServer } from '@modelcontextprotocol/server'
 import { createBatchImportItem, createBatchImportSession, listBatchImportItems } from '../../batch-import/repository'
 import { saveOriginalZip, saveStructuredSnapshot, verifyBatchEvidence } from '../../batch-import/evidence'
 import { saveDirectoryEvidence } from '../../batch-import/directory-evidence'
-import { safeAbsolutePath, WindowsPathLease } from '../../batch-import/windows-path-lease'
+import { safeAbsolutePath, WindowsPathLease, withRequestScopedWindowsPathLeaseRuntime } from '../../batch-import/windows-path-lease'
 import { executeBatchImportSession } from '../../batch-import/session'
 import { gateWorkBuddyBatchCurrentInput, WorkBuddyCurrentInputError } from '../../import/workbuddy-current-input'
 import { workBuddyBatchIngestSchema, workBuddyBatchResultSchema, workBuddyCurrentContextBatchSchema,
@@ -131,8 +131,10 @@ export async function prepareWorkBuddyCurrentContextBatch(
 export async function ingestWorkBuddyCurrentContextBatch(
   db: DatabaseSync, options: WorkBuddyBatchToolOptions, rawInput: unknown
 ): Promise<WorkBuddyBatchResult> {
-  const sessionId = await prepareWorkBuddyCurrentContextBatch(db, options, rawInput)
-  return executeAndReportBatch(db, options, sessionId)
+  return withRequestScopedWindowsPathLeaseRuntime(async () => {
+    const sessionId = await prepareWorkBuddyCurrentContextBatch(db, options, rawInput)
+    return executeAndReportBatch(db, options, sessionId)
+  })
 }
 
 interface PreparedBatchAttachment {

@@ -335,7 +335,11 @@ describe('目录证据：隔离固定磁盘上的持久快照', () => {
     const f = fixture()
     const original = WindowsPathLease.prototype.copyFile
     vi.spyOn(WindowsPathLease.prototype, 'copyFile').mockImplementation(async function (this: WindowsPathLease, ...args) {
-      await this.close()
+      // 租约关闭不再代表共享 helper 退出；只终止本用例创建的隔离辅助进程。
+      const helper = (this as unknown as { runtime: { process: import('node:child_process').ChildProcessWithoutNullStreams } }).runtime.process
+      const exited = new Promise<void>((done) => helper.once('close', () => done()))
+      helper.kill()
+      await exited
       await original.apply(this, args)
     })
     await expect(save(f)).rejects.toThrow('退出')

@@ -171,19 +171,23 @@ export async function saveStructuredSnapshot(
     published = false
     return { relativePath: paths.snapshotRelative, sha256: expectedHash }
   } catch (error) {
-    await lease?.close()
-    lease = null
-    if (published) await rm(paths.snapshotPath, { force: true }).catch(() => undefined)
-    if (!(error instanceof EvidenceConflictError) && item.snapshot_relative_path === null) {
-      db.prepare(`
-        UPDATE batch_import_items SET status = 'failed', error_summary = ?, updated_at = ?
-        WHERE id = ? AND snapshot_relative_path IS NULL
-      `).run(`快照保存失败：${errorMessage(error)}`, new Date().toISOString(), batchItemId)
+    try { await lease?.close() } finally {
+      lease?.assertReleased()
+      lease = null
+      if (published) await rm(paths.snapshotPath, { force: true }).catch(() => undefined)
+      if (!(error instanceof EvidenceConflictError) && item.snapshot_relative_path === null) {
+        db.prepare(`
+          UPDATE batch_import_items SET status = 'failed', error_summary = ?, updated_at = ?
+          WHERE id = ? AND snapshot_relative_path IS NULL
+        `).run(`快照保存失败：${errorMessage(error)}`, new Date().toISOString(), batchItemId)
+      }
     }
     throw error
   } finally {
-    await lease?.close()
-    if (temporaryPath) await rm(temporaryPath, { force: true }).catch(() => undefined)
+    try { await lease?.close() } finally {
+      lease?.assertReleased()
+      if (temporaryPath) await rm(temporaryPath, { force: true }).catch(() => undefined)
+    }
   }
 }
 
