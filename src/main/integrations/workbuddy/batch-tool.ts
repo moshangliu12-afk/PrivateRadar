@@ -4,6 +4,7 @@ import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import { McpServer } from '@modelcontextprotocol/server'
 import { createBatchImportItem, createBatchImportSession, listBatchImportItems } from '../../batch-import/repository'
+import { assertCollectingCollection } from '../../collections/repository'
 import { saveOriginalZip, saveStructuredSnapshot, verifyBatchEvidence } from '../../batch-import/evidence'
 import { saveDirectoryEvidence } from '../../batch-import/directory-evidence'
 import { safeAbsolutePath, WindowsPathLease, withRequestScopedWindowsPathLeaseRuntime } from '../../batch-import/windows-path-lease'
@@ -98,6 +99,8 @@ export async function prepareWorkBuddyCurrentContextBatch(
   db: DatabaseSync, options: WorkBuddyBatchToolOptions, rawInput: unknown
 ): Promise<string> {
   const input = workBuddyCurrentContextBatchSchema.parse(rawInput)
+  // 尽早拒绝无效归集，不启动路径租约或产生任何导入记录；创建事务内仍必须重新校验。
+  if (input.collection_id !== undefined) assertCollectingCollection(db, input.collection_id)
   // 既有 Gate 在归组时完成 Parser；不再解析第二遍，也不改写其消息结果。
   const normalized = gateWorkBuddyBatchCurrentInput(input.contexts)
   for (const [index, block] of input.contexts.entries()) {
@@ -125,7 +128,7 @@ export async function prepareWorkBuddyCurrentContextBatch(
     prepared.push({ sourceKind: 'directory', sourcePath, displayName: attachment.file,
       sourceHint: attachment.extracted_dir_path, input: snapshot })
   }
-  return prepareBatchAttachments(db, options, prepared)
+  return prepareBatchAttachments(db, options, prepared, input.collection_id)
 }
 
 export async function ingestWorkBuddyCurrentContextBatch(
@@ -146,14 +149,14 @@ interface PreparedBatchAttachment {
 }
 
 async function prepareBatchAttachments(
-  db: DatabaseSync, options: WorkBuddyBatchToolOptions, attachments: PreparedBatchAttachment[]
+  db: DatabaseSync, options: WorkBuddyBatchToolOptions, attachments: PreparedBatchAttachment[], collectionId?: string
 ): Promise<string> {
 
   // 会话与两个附件项短事务登记；证据持久化及导入各自独立进行。
   db.exec('BEGIN IMMEDIATE')
   let sessionId: string
   try {
-    const session = createBatchImportSession(db, 'workbuddy')
+    const session = createBatchImportSession(db, 'workbuddy', collectionId)
     sessionId = session.id
     for (const [index, attachment] of attachments.entries()) {
       const item = createBatchImportItem(db, session.id, index, attachment.displayName, null, attachment.sourceHint)
@@ -204,8 +207,13 @@ async function executeAndReportBatch(
 ): Promise<WorkBuddyBatchResult> {
   const summary = await executeBatchImportSession(db, options.databasePath, sessionId)
   const finalItems = listBatchImportItems(db, sessionId)
+  const session = db.prepare('SELECT id, collection_id FROM batch_import_sessions WHERE id = ?').get(sessionId) as
+    { id: string; collection_id: string | null } | undefined
+  if (!session) throw new Error('导入完成后持久会话不存在')
   const output: WorkBuddyBatchResult = {
     batch_session_id: sessionId,
+    session_id: session.id,
+    collection_id: session.collection_id,
     status: summary.status,
     summary: {
       attachments_total: summary.attachments_total,

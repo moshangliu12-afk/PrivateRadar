@@ -67,6 +67,15 @@ author: PrivateRadar
 }
 ```
 
+## Collection ID 只显式转交
+
+- 仅当本轮当前用户输入明确提供 `Collection <完整 UUID>`，或本次规范输入明确给出 `collection_id` 时，才在双卡参数顶层添加 `collection_id`，把该值原样传给 `privateradar_ingest_current_context_batch.collection_id`。
+- 用户本轮没有显式提供时，省略 `collection_id`，不传空字符串或 null，沿用普通双卡导入。
+- 禁止从旧聊天轮次寻找 Collection ID，禁止从最近一次导入复用，禁止从名称、群名、时间、正文或 PrivateRadar 当前页面状态猜测。
+- 禁止修复、截断或补全 UUID；Collection identity 只认本轮明确提供的完整 UUID。
+- 一张卡片同时要求加入 Collection 时，立即停止并报告 `COLLECTION_NOT_SUPPORTED_FOR_SINGLE_IMPORT`；不得降级成普通导入，不得自动转换成双卡链。
+- Collection 只指定归属，不改变当前输入范围；仍只传本次 raw contexts，由现有 Tool 归组为恰好两个 logical attachments，不支持 N 卡。
+
 ## 时间真实性
 
 - 原始材料直接提供且能与具体消息可靠对应的时间，使用 `timestamp_source: source_native`。

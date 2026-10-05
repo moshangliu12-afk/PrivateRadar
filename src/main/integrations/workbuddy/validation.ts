@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { collectionIdSchema } from '../../collections/repository'
 
 export const provenanceSchema = z.enum(['source_native', 'user_supplied', 'inferred', 'unknown'])
 
@@ -26,6 +27,8 @@ export const workBuddyBatchMetadataSchema = z.object({
 })
 
 export const workBuddyIngestSchema = z.object({
+  collection_id: z.never({ error: 'COLLECTION_NOT_SUPPORTED_FOR_SINGLE_IMPORT: 单卡导入暂不支持归集' }).optional()
+    .describe('单卡不支持 Collection；提供此字段必须拒绝，不得忽略'),
   import_mode: z.enum(['quick', 'complete']).optional().describe('快速导入或完整导入；默认快速导入'),
   source_batch_id: z.string().trim().min(1).optional().describe('同一来源批次的稳定 ID；重复导入和补全时保持不变'),
   source_attachment_identity: z.string().trim().min(1).optional().describe('来源附件的稳定身份，例如附件哈希或原始分享 ID'),
@@ -66,6 +69,7 @@ export const workBuddyCurrentContextSchema = z.strictObject({
 
 export const workBuddyCurrentContextBatchSchema = z.strictObject({
   mode: z.literal('current_context'),
+  collection_id: collectionIdSchema.optional().describe('仅转交本次用户明确提供的完整 Collection UUID；未提供时不猜测'),
   contexts: z.array(workBuddyCurrentContextSchema).min(1).max(WORKBUDDY_CURRENT_CONTEXT_LIMITS.maxRawContexts)
     .describe('同一次当前输入的原始上下文，不由 Agent 去重；归组后必须恰好两个逻辑附件，总正文最多 4 MiB UTF-8')
 }).refine((input) => input.contexts.reduce((total, block) => total + Buffer.byteLength(block.transcript, 'utf8'), 0)
@@ -73,6 +77,8 @@ export const workBuddyCurrentContextBatchSchema = z.strictObject({
 
 export const workBuddyBatchResultSchema = z.object({
   batch_session_id: z.string(),
+  session_id: z.string(),
+  collection_id: collectionIdSchema.nullable(),
   status: z.enum(['pending', 'preparing', 'in_progress', 'success', 'partial_success', 'failed']),
   summary: z.object({
     attachments_total: z.number().int(),

@@ -19,7 +19,7 @@ vi.mock('../src/main/deployment', () => ({
   isWorkBuddyConnectorRegistered: () => false
 }))
 
-// 桌面 alpha.15.4 修复 Search 日期语义与日期文本清理；Connector、MCP 和 Skill 内容未变，保留各自正式版本。
+// alpha.16 当前只建立开发检查点，发布版本另行准备；本轮不随 Collection 桥接升级版本。
 // 各组件保护明确的独立版本，不要求所有组件版本相等，也不接受任意版本。
 const productVersion = '0.2.0-alpha.15.4'
 const connectorVersion = '0.2.0-alpha.15.1'
@@ -65,7 +65,7 @@ describe('alpha.15.4 Search 日期修复发布的独立组件版本契约', () =
     const packaged = readFileSync(new URL('../integrations/workbuddy/skill-package/privateradar-ingest-chat/SKILL.md', import.meta.url))
     expect(connector.equals(packaged)).toBe(true)
     expect(createHash('sha256').update(connector).digest('hex'))
-      .toBe('1cedc0cac81aa74869874f50c02c5b6c9d0a7e6d66f44ab8ac004054c3e90f0e')
+      .toBe('b8a6c458a002b6d50fbe0b13f7df02ba3ac29d932b6493c949d99e38a17ca47e')
     expect(connector.toString('utf8')).toMatch(new RegExp(`^version: ${skillVersion.replaceAll('.', '\\.')}$`, 'm'))
   })
 

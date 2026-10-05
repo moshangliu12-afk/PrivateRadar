@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
+import { assertCollectingCollection } from '../collections/repository'
 
 export type BatchImportStatus = 'pending' | 'preparing' | 'in_progress' | 'success' | 'partial_success' | 'failed'
 
@@ -42,14 +43,32 @@ export interface BatchItemJob {
   completed_at: string | null
 }
 
-export function createBatchImportSession(db: DatabaseSync, source: string): BatchImportSession {
-  const id = randomUUID()
-  const now = new Date().toISOString()
-  db.prepare(`
-    INSERT INTO batch_import_sessions (id, source, status, created_at, updated_at)
-    VALUES (?, ?, 'pending', ?, ?)
-  `).run(id, source, now, now)
-  return db.prepare('SELECT * FROM batch_import_sessions WHERE id = ?').get(id) as unknown as BatchImportSession
+export function createBatchImportSession(db: DatabaseSync, source: string, collectionId?: string): BatchImportSession {
+  // 真实批量入口已持有短写事务；独立调用时自行取得事务，避免校验与创建之间的竞态。
+  const ownsTransaction = collectionId !== undefined && !db.isTransaction
+  if (ownsTransaction) db.exec('BEGIN IMMEDIATE')
+  try {
+    if (collectionId !== undefined) assertCollectingCollection(db, collectionId)
+    const id = randomUUID()
+    const now = new Date().toISOString()
+    if (collectionId === undefined) {
+      db.prepare(`
+        INSERT INTO batch_import_sessions (id, source, status, created_at, updated_at)
+        VALUES (?, ?, 'pending', ?, ?)
+      `).run(id, source, now, now)
+    } else {
+      db.prepare(`
+        INSERT INTO batch_import_sessions (id, source, status, created_at, updated_at, collection_id)
+        VALUES (?, ?, 'pending', ?, ?, ?)
+      `).run(id, source, now, now, collectionId)
+    }
+    const session = db.prepare('SELECT * FROM batch_import_sessions WHERE id = ?').get(id) as unknown as BatchImportSession
+    if (ownsTransaction) db.exec('COMMIT')
+    return session
+  } catch (error) {
+    if (ownsTransaction) db.exec('ROLLBACK')
+    throw error
+  }
 }
 
 export function createBatchImportItem(

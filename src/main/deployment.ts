@@ -5,9 +5,13 @@ import { basename, dirname, join, resolve } from 'node:path'
 
 export const CONNECTOR_ID = 'privateradar-workbuddy'
 export const WORKBUDDY_SKILL_VERSION = '0.2.0-alpha.15-skill.3'
+// 当前开发检查点不升版本，以精确内容哈希保护官方载荷和后续升级资格。
+export const OFFICIAL_CURRENT_SKILL_SHA256 = 'b8a6c458a002b6d50fbe0b13f7df02ba3ac29d932b6493c949d99e38a17ca47e'
 export const OFFICIAL_MANAGED_SKILL_SHA256 = new Set([
   '6a23f75db154d0d84adfd6616baf52737a851a2837ceae5f85d450e3ad3a616c',
-  '639a747f93323b5547a68393a754980abcb33e6ed7e4acef9c95c32bfc5a67cf'
+  '639a747f93323b5547a68393a754980abcb33e6ed7e4acef9c95c32bfc5a67cf',
+  '1cedc0cac81aa74869874f50c02c5b6c9d0a7e6d66f44ab8ac004054c3e90f0e',
+  OFFICIAL_CURRENT_SKILL_SHA256
 ])
 const REQUIRED_CONNECTOR_FILES = [
   'connector-meta.json',
@@ -123,6 +127,7 @@ export function deployWorkBuddySkill(
     throw new Error(`正式 Skill source 版本必须是 ${WORKBUDDY_SKILL_VERSION}`)
   }
   const sourceSha256 = sha256(sourceContent)
+  if (sourceSha256 !== OFFICIAL_CURRENT_SKILL_SHA256) throw new Error('正式 Skill source 内容哈希不符合受保护契约')
   const previousContent = existsSync(targetPath) ? readFileSync(targetPath, 'utf8') : null
   const previousSha256 = previousContent === null ? null : sha256(previousContent)
   const result = (status: WorkBuddySkillDeploymentResult['status']): WorkBuddySkillDeploymentResult => ({

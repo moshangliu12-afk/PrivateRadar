@@ -37,6 +37,9 @@ export class WorkBuddyAdapter {
   constructor(private readonly db: DatabaseSync) {}
 
   ingest(input: WorkBuddyIngestInput, validationMs = 0, context: WorkBuddyImportContext = {}): WorkBuddyIngestResult {
+    if (Object.prototype.hasOwnProperty.call(input, 'collection_id')) {
+      throw new Error('COLLECTION_NOT_SUPPORTED_FOR_SINGLE_IMPORT: 单卡导入暂不支持归集')
+    }
     const handlerStarted = performance.now()
     const prepareStarted = performance.now()
     const sourceBatchId = context.sourceBatchId ?? resolveSourceBatchId(input)

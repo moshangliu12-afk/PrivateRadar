@@ -34,14 +34,18 @@ function fixture() {
 }
 
 // 在线程内执行当前真实服务实现；只做内存转译，不复制绑定/完成逻辑或生成构建文件。
-const modules = Object.fromEntries(['repository', 'service'].map((name) => [name,
-  transpileModule(readFileSync(new URL(`../src/main/collections/${name}.ts`, import.meta.url), 'utf8'), {
+const modules = Object.fromEntries([
+  ['repository', '../src/main/collections/repository.ts'],
+  ['service', '../src/main/collections/service.ts'],
+  ['batch', '../src/main/batch-import/repository.ts']
+].map(([name, path]) => [name,
+  transpileModule(readFileSync(new URL(path, import.meta.url), 'utf8'), {
     compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
   }).outputText
 ]))
 
-interface Operation { method: 'bindSession' | 'completeCollection'; args: string[] }
-interface Result { success: boolean; error?: string }
+interface Operation { method: 'bindSession' | 'completeCollection' | 'createBatchImportSession'; args: string[] }
+interface Result { success: boolean; error?: string; sessionId?: string }
 
 async function race(path: string, operations: Operation[]): Promise<Result[]> {
   const gate = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT))
@@ -54,7 +58,7 @@ async function race(path: string, operations: Operation[]): Promise<Result[]> {
         if (loaded[name]) return loaded[name].exports;
         const module = loaded[name] = { exports: {} };
         new Function('require', 'module', 'exports', workerData.modules[name])(
-          key => key === './repository' ? load('repository') : require(key), module, module.exports);
+          key => key === './repository' || key === '../collections/repository' ? load('repository') : require(key), module, module.exports);
         return module.exports;
       }
       const service = load('service');
@@ -65,8 +69,9 @@ async function race(path: string, operations: Operation[]): Promise<Result[]> {
       Atomics.wait(gate, 0, 0);
       let result;
       try {
-        service[workerData.operation.method](db, ...workerData.operation.args);
-        result = { success: true };
+        const target = workerData.operation.method === 'createBatchImportSession' ? load('batch') : service;
+        const value = target[workerData.operation.method](db, ...workerData.operation.args);
+        result = { success: true, sessionId: value.id };
       } catch (error) { result = { success: false, error: error.message }; }
       finally { db.close(); }
       parentPort.postMessage(result);
@@ -95,6 +100,55 @@ async function race(path: string, operations: Operation[]): Promise<Result[]> {
 }
 
 describe('归集绑定与完成的真实多连接并发边界', () => {
+  it('新会话原子创建归属与完成竞争，完成先赢时不能留下孤儿会话', async () => {
+    const { db, path } = fixture()
+    for (let index = 0; index < 8; index++) {
+      const collection = createCollection(db, `新导入归集${index}`)
+      const before = db.prepare('SELECT COUNT(*) AS count FROM batch_import_sessions').get() as { count: number }
+      const results = await race(path, [
+        { method: 'createBatchImportSession', args: ['workbuddy', collection.id] },
+        { method: 'completeCollection', args: [collection.id] }
+      ])
+      expect(results.filter((result) => result.success)).toHaveLength(1)
+      const after = db.prepare('SELECT COUNT(*) AS count FROM batch_import_sessions').get() as { count: number }
+      if (results[0].success) {
+        expect(results[1].error).toContain('未终结')
+        expect(getCollection(db, collection.id)?.status).toBe('collecting')
+        expect(after.count).toBe(before.count + 1)
+        expect(listCollectionSessions(db, collection.id)).toEqual([
+          expect.objectContaining({ id: results[0].sessionId, collection_id: collection.id, status: 'pending' })
+        ])
+      } else {
+        expect(results[0].error).toContain('COLLECTION_COMPLETED')
+        expect(getCollection(db, collection.id)?.status).toBe('completed')
+        expect(after).toEqual(before)
+        expect(listCollectionSessions(db, collection.id)).toEqual([])
+      }
+    }
+    expect(db.prepare('PRAGMA integrity_check').get()).toEqual({ integrity_check: 'ok' })
+    expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+  }, 30000)
+
+  it('显式外层短事务创建归属与两个先后顺序均安全，失败回滚不遗留会话', () => {
+    const { db, path } = fixture()
+    const other = new DatabaseSync(path)
+    databases.push(other)
+    initializeDatabase(other)
+    const completedFirst = createCollection(db, '先完成后导入')
+    completeCollection(other, completedFirst.id)
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      expect(() => createBatchImportSession(db, 'workbuddy', completedFirst.id)).toThrow('COLLECTION_COMPLETED')
+    } finally { db.exec('ROLLBACK') }
+    expect(db.prepare('SELECT COUNT(*) AS count FROM batch_import_sessions').get()).toEqual({ count: 0 })
+    const importedFirst = createCollection(db, '先导入后完成')
+    db.exec('BEGIN IMMEDIATE')
+    const session = createBatchImportSession(db, 'workbuddy', importedFirst.id)
+    db.exec('COMMIT')
+    expect(() => completeCollection(other, importedFirst.id)).toThrow('未终结')
+    expect(listCollectionSessions(other, importedFirst.id)).toEqual([session])
+  })
+
   it('绑定待处理会话与完成同时竞争时，只能一个成功，不产生已完成后新增成员', async () => {
     const { db, path } = fixture()
     // 多轮竞争不依赖某一个线程必定先取得写锁。

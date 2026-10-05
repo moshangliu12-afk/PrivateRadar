@@ -66,6 +66,20 @@ describe('WorkBuddy 微信导入最短路径', () => {
     expect(content).toContain('禁止根据正文、人名、机构、地点、文件名或聊天主题补造')
   })
 
+  it.each([['Connector Skill', skill], ['Skill 包', packagedSkill]] as const)('%s 只转交当前明确的完整归集身份，不猜测、不回溯、不降级单卡', (_label, content) => {
+    expect(content).toContain('本轮当前用户输入明确提供 `Collection <完整 UUID>`')
+    expect(content).toContain('本次规范输入明确给出 `collection_id`')
+    expect(content).toContain('原样传给 `privateradar_ingest_current_context_batch.collection_id`')
+    expect(content).toContain('用户本轮没有显式提供时，省略 `collection_id`')
+    expect(content).toContain('禁止从旧聊天轮次寻找 Collection ID')
+    expect(content).toContain('禁止从最近一次导入复用')
+    expect(content).toContain('禁止从名称、群名、时间、正文或 PrivateRadar 当前页面状态猜测')
+    expect(content).toContain('禁止修复、截断或补全 UUID')
+    expect(content).toContain('COLLECTION_NOT_SUPPORTED_FOR_SINGLE_IMPORT')
+    expect(content).toContain('不得降级成普通导入，不得自动转换成双卡链')
+    expect(content).toContain('恰好两个 logical attachments，不支持 N 卡')
+  })
+
   it('正式 README 说明确定性格式并同时给出有时间和缺时间 payload', () => {
     expect(adapterReadme).toContain('调用 Tool 前必须先检查')
     expect(adapterReadme).toContain('2026-09-20T12:02:00+08:00')

@@ -13,6 +13,7 @@ import { Client } from '@modelcontextprotocol/client'
 import { InMemoryTransport } from '@modelcontextprotocol/server'
 import { createWorkBuddyMcpServer } from '../src/main/integrations/workbuddy/tool'
 import type { WorkBuddyBatchResult } from '../src/main/integrations/workbuddy/validation'
+import { createCollection } from '../src/main/collections/service'
 import { ingestWorkBuddyCurrentContextBatch } from '../src/main/integrations/workbuddy/batch-tool'
 import { initializeDatabase } from '../src/main/schema'
 import { verifyBatchEvidence } from '../src/main/batch-import/evidence'
@@ -127,8 +128,9 @@ function count(db: DatabaseSync, table: string): number {
 }
 
 describe('单请求共享执行载体，租约和原生句柄仍独立', () => {
-  it('最小隔离双卡完整 MCP 链路仅启动一个 helper，三块上下文导入十二条消息', async () => {
+  it.each([false, true])('最小隔离双卡完整 MCP 链路仅启动一个 helper，三块上下文导入十二条消息，显式归集=%s', async (withCollection) => {
     const f = batchFixture(), capture = createRuntimeCapture()
+    const collection = withCollection ? createCollection(f.db, '隔离性能契约') : null
     const server = createWorkBuddyMcpServer(f.db, undefined, f.options)
     const client = new Client({ name: '隔离双卡回归', version: '0.1.0' })
     const [a, b] = InMemoryTransport.createLinkedPair()
@@ -137,11 +139,16 @@ describe('单请求共享执行载体，租约和原生句柄仍独立', () => {
     try {
       const started = performance.now()
       const response = await withRuntimeCapture(capture, () => client.callTool({
-        name: 'privateradar_ingest_current_context_batch', arguments: f.input
+        name: 'privateradar_ingest_current_context_batch',
+        arguments: { ...f.input, ...(collection ? { collection_id: collection.id } : {}) }
       }))
       const elapsedMs = performance.now() - started
       expect(response.isError).not.toBe(true)
       const result = response.structuredContent as WorkBuddyBatchResult
+      expect(result.collection_id).toBe(collection?.id ?? null)
+      expect(result.session_id).toBe(result.batch_session_id)
+      expect(f.db.prepare('SELECT collection_id FROM batch_import_sessions WHERE id = ?').get(result.session_id))
+        .toEqual({ collection_id: result.collection_id })
       expect(result.status).toBe('success')
       expect(result.items.map((item) => item.imported)).toEqual([6, 6])
       expect(capture.helpers).toHaveLength(1)

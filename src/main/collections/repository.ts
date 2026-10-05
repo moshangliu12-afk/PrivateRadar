@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite'
+import { z } from 'zod'
 import type { BatchImportSession } from '../batch-import/repository'
 
 export type CollectionStatus = 'collecting' | 'completed'
@@ -9,6 +10,16 @@ export interface Collection {
   status: CollectionStatus
   created_at: string
   completed_at: string | null
+}
+
+export const collectionIdSchema = z.uuid({ error: 'INVALID_COLLECTION_ID: 归集身份必须是完整 UUID' })
+
+export function assertCollectingCollection(db: DatabaseSync, id: string): Collection {
+  collectionIdSchema.parse(id)
+  const collection = getCollection(db, id)
+  if (!collection) throw new Error('COLLECTION_NOT_FOUND: 归集不存在')
+  if (collection.status !== 'collecting') throw new Error('COLLECTION_COMPLETED: 已完成的归集不能新增导入会话')
+  return collection
 }
 
 export function getCollection(db: DatabaseSync, id: string): Collection | null {
