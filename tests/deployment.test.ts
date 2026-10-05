@@ -71,7 +71,7 @@ describe('Windows 安装与 WorkBuddy 连接组件', () => {
     expect(readFileSync(result.skillDeployment.targetPath, 'utf8')).toBe(canonicalSkill)
   })
 
-  it('官方旧 Skill 安全升级到 alpha.15-skill.3', () => {
+  it('官方旧 Skill 安全升级到 alpha.16-skill.1', () => {
     const { root, payload, data } = fixture()
     const userHome = join(root, 'user')
     const target = join(userHome, '.workbuddy', 'skills', 'privateradar-ingest-chat', 'SKILL.md')
@@ -87,16 +87,16 @@ describe('Windows 安装与 WorkBuddy 连接组件', () => {
     expect(readFileSync(target, 'utf8')).toContain(`version: ${WORKBUDDY_SKILL_VERSION}`)
   })
 
-  it('已安装正确 alpha.15-skill.3 时保持不变', () => {
+  it('已安装正确 alpha.16-skill.1 时保持不变', () => {
     const { root, payload, data } = fixture()
     const userHome = join(root, 'user')
-    prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.15', new Date(), userHome)
-    const repeated = prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.15', new Date(), userHome)
+    prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.16', new Date(), userHome)
+    const repeated = prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.16', new Date(), userHome)
     expect(repeated.skillDeployment.status).toBe('unchanged')
     expect(readFileSync(repeated.skillDeployment.targetPath, 'utf8')).toBe(canonicalSkill)
   })
 
-  it('当前官方 alpha.15-skill.3 原字节可安全升级到显式归集规则，当前源哈希受固定契约保护', () => {
+  it('正式 alpha.15-skill.3 原字节可安全升级到 alpha.16-skill.1，当前源哈希受固定契约保护', () => {
     const { root, payload, data } = fixture()
     const userHome = join(root, 'user')
     const target = join(userHome, '.workbuddy', 'skills', 'privateradar-ingest-chat', 'SKILL.md')
@@ -107,11 +107,30 @@ describe('Windows 安装与 WorkBuddy 连接组件', () => {
     expect(OFFICIAL_MANAGED_SKILL_SHA256.has(oldHash)).toBe(true)
     expect(createHash('sha256').update(canonicalSkill).digest('hex')).toBe(OFFICIAL_CURRENT_SKILL_SHA256)
     expect(OFFICIAL_MANAGED_SKILL_SHA256.has(OFFICIAL_CURRENT_SKILL_SHA256)).toBe(true)
-    const result = prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.15.4', new Date(), userHome)
+    const result = prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.16', new Date(), userHome)
     expect(result.skillDeployment).toMatchObject({ status: 'upgraded', previousSha256: oldHash,
       sourceSha256: OFFICIAL_CURRENT_SKILL_SHA256 })
     expect(readFileSync(target, 'utf8')).toBe(canonicalSkill)
     expect(readFileSync(target, 'utf8')).toContain('Collection ID 只显式转交')
+  })
+
+  it('开发态官方归集 Skill 仅按既定精确哈希安全升级到候选版本', () => {
+    const { root, payload, data } = fixture()
+    const userHome = join(root, 'user')
+    const target = join(userHome, '.workbuddy', 'skills', 'privateradar-ingest-chat', 'SKILL.md')
+    // 只还原开发检查点版本头，固定旧哈希保证正文也与该检查点字节一致。
+    const developmentSkill = canonicalSkill.replace('version: 0.2.0-alpha.16-skill.1', 'version: 0.2.0-alpha.15-skill.3')
+    const developmentHash = createHash('sha256').update(developmentSkill).digest('hex')
+    expect(developmentHash).toBe('b8a6c458a002b6d50fbe0b13f7df02ba3ac29d932b6493c949d99e38a17ca47e')
+    expect(OFFICIAL_MANAGED_SKILL_SHA256.has(developmentHash)).toBe(true)
+    mkdirSync(join(target, '..'), { recursive: true })
+    writeFileSync(target, developmentSkill)
+
+    const result = prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.16', new Date(), userHome)
+    expect(result.skillDeployment).toMatchObject({ status: 'upgraded', previousSha256: developmentHash,
+      sourceSha256: OFFICIAL_CURRENT_SKILL_SHA256 })
+    expect(readFileSync(target, 'utf8')).toBe(canonicalSkill)
+    expect(readFileSync(target, 'utf8')).toContain('version: 0.2.0-alpha.16-skill.1')
   })
 
   it('即使复制官方版本号和正文，未知自定义补充也不能被官方白名单覆盖', () => {

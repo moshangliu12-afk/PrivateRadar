@@ -19,26 +19,26 @@ vi.mock('../src/main/deployment', () => ({
   isWorkBuddyConnectorRegistered: () => false
 }))
 
-// alpha.16 当前只建立开发检查点，发布版本另行准备；本轮不随 Collection 桥接升级版本。
+// 归集能力分别进入桌面、连接组件、服务和技能的候选载荷，各自使用既有版本格式。
 // 各组件保护明确的独立版本，不要求所有组件版本相等，也不接受任意版本。
-const productVersion = '0.2.0-alpha.15.4'
-const connectorVersion = '0.2.0-alpha.15.1'
-const mcpVersion = '0.2.0-alpha.15.1'
-const skillVersion = '0.2.0-alpha.15-skill.3'
+const productVersion = '0.2.0-alpha.16'
+const connectorVersion = '0.2.0-alpha.16'
+const mcpVersion = '0.2.0-alpha.16'
+const skillVersion = '0.2.0-alpha.16-skill.1'
 const readSource = (path: string): string => readFileSync(new URL(path, import.meta.url), 'utf8')
 
-describe('alpha.15.4 Search 日期修复发布的独立组件版本契约', () => {
+describe('alpha.16 归集候选的独立组件版本契约', () => {
   it('产品与 lockfile 顶层和根包版本一致', () => {
     expect(product.version).toBe(productVersion)
     expect(lockfile.version).toBe(productVersion)
     expect(lockfile.packages[''].version).toBe(productVersion)
   })
 
-  it('Connector 元数据明确为 alpha.15.1，不与桌面版本混同', () => {
+  it('Connector 元数据明确为 alpha.16，独立保护版本', () => {
     expect(metadata.version).toBe(connectorVersion)
   })
 
-  it('内存 MCP 握手明确为 alpha.15.1 且只公开正式双工具', async () => {
+  it('内存 MCP 握手明确为 alpha.16 且只公开正式双工具', async () => {
     const db = new DatabaseSync(':memory:')
     initializeDatabase(db)
     const server = createWorkBuddyMcpServer(db, undefined, { databasePath: ':memory:' })
@@ -60,12 +60,12 @@ describe('alpha.15.4 Search 日期修复发布的独立组件版本契约', () =
     }
   })
 
-  it('两份 Skill 字节同步并保持 skill.3 而非产品版本', () => {
+  it('两份 Skill 字节同步并明确使用 alpha.16-skill.1', () => {
     const connector = readFileSync(new URL('../integrations/workbuddy/connector/skills/ingest-chat/SKILL.md', import.meta.url))
     const packaged = readFileSync(new URL('../integrations/workbuddy/skill-package/privateradar-ingest-chat/SKILL.md', import.meta.url))
     expect(connector.equals(packaged)).toBe(true)
     expect(createHash('sha256').update(connector).digest('hex'))
-      .toBe('b8a6c458a002b6d50fbe0b13f7df02ba3ac29d932b6493c949d99e38a17ca47e')
+      .toBe('1de8b841995b914a1fd9729442f635ca6169429254e07d1d45fed67fa1bf661e')
     expect(connector.toString('utf8')).toMatch(new RegExp(`^version: ${skillVersion.replaceAll('.', '\\.')}$`, 'm'))
   })
 
@@ -97,6 +97,6 @@ describe('alpha.15.4 Search 日期修复发布的独立组件版本契约', () =
   it('安装包命名由产品版本推导但不制作安装包', () => {
     expect(product.build.win.artifactName).toBe('PrivateRadar-Setup-${version}-x64.${ext}')
     const artifact = product.build.win.artifactName.replace('${version}', product.version).replace('${ext}', 'exe')
-    expect(artifact).toBe('PrivateRadar-Setup-0.2.0-alpha.15.4-x64.exe')
+    expect(artifact).toBe('PrivateRadar-Setup-0.2.0-alpha.16-x64.exe')
   })
 })

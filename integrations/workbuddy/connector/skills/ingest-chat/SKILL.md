@@ -2,7 +2,7 @@
 name: privateradar-ingest-chat
 display_name: PrivateRadar 微信聊天导入
 description: 将当前输入中的一张或两张微信聊天卡片按确定性路径导入本机 PrivateRadar。
-version: 0.2.0-alpha.15-skill.3
+version: 0.2.0-alpha.16-skill.1
 author: PrivateRadar
 ---
 

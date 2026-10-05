@@ -4,13 +4,14 @@ import { homedir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 
 export const CONNECTOR_ID = 'privateradar-workbuddy'
-export const WORKBUDDY_SKILL_VERSION = '0.2.0-alpha.15-skill.3'
-// 当前开发检查点不升版本，以精确内容哈希保护官方载荷和后续升级资格。
-export const OFFICIAL_CURRENT_SKILL_SHA256 = 'b8a6c458a002b6d50fbe0b13f7df02ba3ac29d932b6493c949d99e38a17ca47e'
+export const WORKBUDDY_SKILL_VERSION = '0.2.0-alpha.16-skill.1'
+// 候选载荷和历史官方内容均以完整精确哈希保护，不覆盖用户自定义内容。
+export const OFFICIAL_CURRENT_SKILL_SHA256 = '1de8b841995b914a1fd9729442f635ca6169429254e07d1d45fed67fa1bf661e'
 export const OFFICIAL_MANAGED_SKILL_SHA256 = new Set([
   '6a23f75db154d0d84adfd6616baf52737a851a2837ceae5f85d450e3ad3a616c',
   '639a747f93323b5547a68393a754980abcb33e6ed7e4acef9c95c32bfc5a67cf',
   '1cedc0cac81aa74869874f50c02c5b6c9d0a7e6d66f44ab8ac004054c3e90f0e',
+  'b8a6c458a002b6d50fbe0b13f7df02ba3ac29d932b6493c949d99e38a17ca47e',
   OFFICIAL_CURRENT_SKILL_SHA256
 ])
 const REQUIRED_CONNECTOR_FILES = [
