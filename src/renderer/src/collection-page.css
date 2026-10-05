@@ -1,0 +1,38 @@
+.collection-page { display: grid; gap: 18px; min-width: 0; }
+.collection-page button { border: 1px solid var(--line-strong); border-radius: 10px; padding: 9px 14px; color: var(--ink-2); background: var(--paper-2); cursor: pointer; }
+.collection-page button:hover:not(:disabled) { background: var(--sand); }
+.collection-page button:focus-visible, .collection-page summary:focus-visible, .collection-page input:focus-visible { outline: 2px solid var(--lime-ink); outline-offset: 3px; }
+.collection-page button:disabled { opacity: .45; cursor: default; }
+.collection-page .collection-primary { background: var(--lime); border-color: var(--lime); font-weight: 700; }
+.collection-page .collection-primary:hover:not(:disabled) { background: var(--lime-2); }
+.collection-actions, .collection-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.collection-row { justify-content: space-between; }
+.collection-card { padding: 22px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--card); min-width: 0; overflow-wrap: anywhere; }
+.collection-card h2, .collection-card h3 { margin: 0; color: var(--ink); }
+.collection-card h2 { font-size: 20px; }
+.collection-card h3 { font-size: 15px; }
+.collection-card p { color: var(--ink-3); font-size: 13px; }
+.collection-list { display: grid; gap: 14px; }
+.collection-empty { padding: 36px; text-align: center; }
+.collection-badge { border-radius: 999px; padding: 5px 11px; font-size: 12px; white-space: nowrap; background: var(--sand); }
+.collection-badge.collecting { color: var(--lime-ink); background: var(--lime-2); }
+.collection-identity { display: block; margin-top: 3px; color: var(--muted); font: 11px/1.4 ui-monospace, monospace; }
+.collection-id { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 20px 0; }
+.collection-id code { padding: 9px 12px; border-radius: 8px; background: var(--paper); font-size: 13px; user-select: all; overflow-wrap: anywhere; }
+.collection-command { padding: 12px; border-left: 3px solid var(--lime); background: var(--paper-2); }
+.collection-page .collection-notice { color: var(--lime-ink); padding: 12px; background: var(--paper-2); border-radius: 8px; }
+.collection-page .collection-error { color: #984c36; background: #fff1e9; padding: 12px; border-radius: 8px; overflow-wrap: anywhere; }
+.collection-create { display: grid; gap: 14px; }
+.collection-create label { font-weight: 700; }
+.collection-create input { width: 100%; padding: 12px; border: 1px solid var(--line-strong); border-radius: 10px; color: var(--ink); background: var(--paper-2); font: inherit; }
+.collection-sessions { min-width: 0; }
+.collection-sessions > h2 { font-size: 20px; }
+.collection-sessions > h2 small { color: var(--muted); margin-left: 6px; font-size: 12px; }
+.collection-stat-note { color: var(--muted); font-size: 12px; }
+.collection-session { margin-top: 12px; }
+.collection-session summary { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; cursor: pointer; font-size: 13px; }
+.collection-session summary::before { content: '›'; font-size: 20px; color: var(--lime-ink); }
+.collection-session[open] summary::before { content: '⌄'; }
+.collection-session summary time { margin-left: auto; color: var(--muted); font-size: 12px; }
+.collection-session-body { margin-top: 16px; border-top: 1px solid var(--line); }
+.collection-item { padding: 16px; margin-top: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper-2); }

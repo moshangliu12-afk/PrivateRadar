@@ -1,7 +1,15 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { CollectionDesktopApi } from '../shared/collections'
 import type { CandidateEvidence, ChatQueryResponse, ConnectorSetupResult, DailyBriefItem, DashboardSummary, FeedbackExportResult, FeedbackState, FirstUseStatus, ImportResult, MessageContext, TopicEvidence, TopicRadarSummary } from '../shared/models'
 
 contextBridge.exposeInMainWorld('privateRadar', {
+  ...({
+    createCollection: (name: string) => ipcRenderer.invoke('collections:create', name),
+    listCollections: () => ipcRenderer.invoke('collections:list'),
+    getCollection: (id: string) => ipcRenderer.invoke('collections:get', id),
+    listCollectionSessions: (id: string) => ipcRenderer.invoke('collections:sessions', id),
+    completeCollection: (id: string) => ipcRenderer.invoke('collections:complete', id)
+  } satisfies CollectionDesktopApi),
   getDashboardSummary: (date?: string): Promise<DashboardSummary> => ipcRenderer.invoke('dashboard:get-summary', date),
   refreshDashboard: (date?: string): Promise<DashboardSummary> => ipcRenderer.invoke('dashboard:refresh', date),
   regenerateDashboard: (date?: string): Promise<DashboardSummary> => ipcRenderer.invoke('dashboard:regenerate', date),

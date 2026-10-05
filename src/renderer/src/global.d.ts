@@ -1,8 +1,9 @@
 import type { CandidateEvidence, ChatQueryResponse, ConnectorSetupResult, DailyBriefItem, DashboardSummary, FeedbackExportResult, FeedbackState, FirstUseStatus, ImportResult, MessageContext, TopicEvidence, TopicRadarSummary } from '../../shared/models'
+import type { CollectionDesktopApi } from '../../shared/collections'
 
 declare global {
   interface Window {
-    privateRadar: {
+    privateRadar: CollectionDesktopApi & {
       getDashboardSummary: (date?: string) => Promise<DashboardSummary>
       refreshDashboard: (date?: string) => Promise<DashboardSummary>
       regenerateDashboard: (date?: string) => Promise<DashboardSummary>

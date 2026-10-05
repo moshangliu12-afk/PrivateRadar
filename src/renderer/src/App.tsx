@@ -21,15 +21,16 @@ import { isCompletedDataImport, loadDaily, refreshAfterExternalImport, refreshSu
 import { canNavigateToNextDate, formatLocalDateKey, shiftLocalDateKey, shouldShowReturnToLatest } from './daily-date'
 import { EmptySignal, UiIcon } from './ui-components'
 import type { UiIconName } from './ui-components'
+import { CollectionPage } from './collection-page'
 
-const NAV_ITEMS = ['今日情报', '话题雷达', '问我的聊天', '设置']
+const NAV_ITEMS = ['今日情报', '话题雷达', '问我的聊天', '设置', '批量收集']
 
 export function App(): React.JSX.Element {
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [latestDate, setLatestDate] = useState<string | null>(null)
   const [dailyLoading, setDailyLoading] = useState(false)
-  const [page, setPage] = useState<'welcome' | 'import-guide' | 'import-complete' | 'daily' | 'radar' | 'search' | 'settings'>('daily')
+  const [page, setPage] = useState<'welcome' | 'import-guide' | 'import-complete' | 'daily' | 'radar' | 'search' | 'settings' | 'collections'>('daily')
   const [firstUse, setFirstUse] = useState<FirstUseStatus | null>(null)
   const [bootstrapped, setBootstrapped] = useState(false)
   const [importBaselineJobId, setImportBaselineJobId] = useState<string | null>(null)
@@ -275,7 +276,7 @@ export function App(): React.JSX.Element {
 
   if (!bootstrapped) return <div className="first-use-loading">正在准备 PrivateRadar……</div>
   if (page === 'welcome') {
-    return <WelcomePage error={error} onDemo={activateDemo} onImport={beginWechatImport} />
+    return <WelcomePage error={error} onDemo={activateDemo} onImport={beginWechatImport} onCollect={() => setPage('collections')} />
   }
   if (page === 'import-guide' && firstUse) {
     return <WechatImportGuide status={firstUse} onBack={() => setPage(firstUse.firstLaunch ? 'welcome' : 'daily')} onRefresh={refreshFirstUse} />
@@ -295,13 +296,13 @@ export function App(): React.JSX.Element {
         <nav aria-label="页面导航">
           {NAV_ITEMS.map((item, index) => (
             <button
-              className={(page === 'daily' && index === 0) || (page === 'radar' && index === 1) || (page === 'search' && index === 2) || (page === 'settings' && index === 3) ? 'active' : ''}
+              className={(page === 'daily' && index === 0) || (page === 'radar' && index === 1) || (page === 'search' && index === 2) || (page === 'settings' && index === 3) || (page === 'collections' && index === 4) ? 'active' : ''}
               key={item}
               type="button"
-              aria-current={(page === 'daily' && index === 0) || (page === 'radar' && index === 1) || (page === 'search' && index === 2) || (page === 'settings' && index === 3) ? 'page' : undefined}
-              onClick={index === 0 ? () => void openDaily() : index === 1 ? () => void openRadar() : index === 2 ? () => setPage('search') : () => { setPage('settings'); void refreshFirstUse() }}
+              aria-current={(page === 'daily' && index === 0) || (page === 'radar' && index === 1) || (page === 'search' && index === 2) || (page === 'settings' && index === 3) || (page === 'collections' && index === 4) ? 'page' : undefined}
+              onClick={index === 0 ? () => void openDaily() : index === 1 ? () => void openRadar() : index === 2 ? () => setPage('search') : index === 4 ? () => { setError(''); setPage('collections') } : () => { setPage('settings'); void refreshFirstUse() }}
             >
-              <UiIcon name={(['radar', 'topics', 'search', 'settings'] as const)[index]} /><span>{item}</span><i className="nav-indicator" />
+              <UiIcon name={(['radar', 'topics', 'search', 'settings', 'folder'] as const)[index]} /><span>{item}</span><i className="nav-indicator" />
             </button>
           ))}
         </nav>
@@ -325,9 +326,9 @@ export function App(): React.JSX.Element {
                   <button type="button" aria-label="下一天" onClick={() => void loadSelectedDate(shiftLocalDateKey(selectedDate, 1))} disabled={dailyLoading || !canNavigateToNextDate(selectedDate, latestDate)}>›</button>
                   {shouldShowReturnToLatest(selectedDate, latestDate) && <button className="return-latest-button" type="button" onClick={() => void goToLatestDate()} disabled={dailyLoading}>回到最新</button>}
                 </div></div>
-              : <div className="eyebrow"><span className="eyebrow-mark" />{page === 'settings' ? <>数据与隐私<span className="eyebrow-divider">/</span>系统状态</> : page === 'radar' ? <>话题脉冲<span className="eyebrow-divider">/</span>{radar ? radar.date?.replaceAll('-', '.') ?? '无可靠聊天日期' : '正在读取日期'}</> : page === 'search' ? <>私有检索<span className="eyebrow-divider">/</span>{firstUse ? `数据最新至 ${firstUse.dataStatus.latestMessageDate?.replaceAll('-', '.') ?? '时间未知'}` : '正在读取日期'}</> : '每日简报'}</div>}
-            <h1>{page === 'daily' ? '今日情报' : page === 'radar' ? '话题雷达' : page === 'search' ? '问我的聊天' : '设置'}</h1>
-            <p>{page === 'daily' ? '从噪音里，找到今天真正值得看的信息。' : page === 'radar' ? '识别相对过去七天正在突然升温的跨群话题。' : page === 'search' ? '先检索本地证据，再基于证据回答。' : '查看数据来源、存储状态与隐私说明。'}</p>
+              : <div className="eyebrow"><span className="eyebrow-mark" />{page === 'collections' ? <>批量收集<span className="eyebrow-divider">/</span>固定归集身份</> : page === 'settings' ? <>数据与隐私<span className="eyebrow-divider">/</span>系统状态</> : page === 'radar' ? <>话题脉冲<span className="eyebrow-divider">/</span>{radar ? radar.date?.replaceAll('-', '.') ?? '无可靠聊天日期' : '正在读取日期'}</> : page === 'search' ? <>私有检索<span className="eyebrow-divider">/</span>{firstUse ? `数据最新至 ${firstUse.dataStatus.latestMessageDate?.replaceAll('-', '.') ?? '时间未知'}` : '正在读取日期'}</> : '每日简报'}</div>}
+            <h1>{page === 'collections' ? '批量收集' : page === 'daily' ? '今日情报' : page === 'radar' ? '话题雷达' : page === 'search' ? '问我的聊天' : '设置'}</h1>
+            <p>{page === 'collections' ? '为多次聊天导入保留一个明确的收集记录。' : page === 'daily' ? '从噪音里，找到今天真正值得看的信息。' : page === 'radar' ? '识别相对过去七天正在突然升温的跨群话题。' : page === 'search' ? '先检索本地证据，再基于证据回答。' : '查看数据来源、存储状态与隐私说明。'}</p>
           </div>
         </header>
 
@@ -418,15 +419,17 @@ export function App(): React.JSX.Element {
         {page === 'settings' && firstUse && (
           <SettingsPage status={firstUse} importing={importing} onImportFile={chooseFile} onConfigure={beginWechatImport} onCheck={refreshFirstUse} />
         )}
+        {page === 'collections' && <CollectionPage />}
       </main>
     </div>
   )
 }
 
-function WelcomePage({ error, onDemo, onImport }: {
+function WelcomePage({ error, onDemo, onImport, onCollect }: {
   error: string
   onDemo: () => Promise<void>
   onImport: () => Promise<void>
+  onCollect: () => void
 }): React.JSX.Element {
   return (
     <main className="welcome-page">
@@ -439,6 +442,7 @@ function WelcomePage({ error, onDemo, onImport }: {
         <button type="button" className="welcome-choice primary" onClick={() => void onDemo()}><strong>体验示例聊天</strong><span>无需微信，立即体验 PrivateRadar</span></button>
         <button type="button" className="welcome-choice" onClick={() => void onImport()}><strong>导入我的微信聊天</strong><span>开始使用自己的聊天记录</span></button>
       </div>
+      <button type="button" className="regenerate-button" onClick={onCollect}>开始批量收集</button>
       <small className="welcome-privacy">聊天原文默认保存在你的电脑上。</small>
     </main>
   )

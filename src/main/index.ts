@@ -11,6 +11,7 @@ import { getFirstUseStatus, markOnboardingComplete } from './first-use'
 import { seedDemoData } from './demo'
 import { prepareWorkBuddyConnector, runtimeDataDirectory, writeOperationalLog } from './deployment'
 import { DashboardSummaryCache } from './dashboard-cache'
+import { registerCollectionIpc } from './collections/desktop'
 import {
   exportFeedback,
   getDailyFeedbackStates,
@@ -76,6 +77,7 @@ app.whenReady().then(() => {
   }
   const databasePath = join(dataDir, 'private-radar.db')
   const db = openDatabase(databasePath, process.env.PRIVATE_RADAR_SEED_DEMO === 'true')
+  registerCollectionIpc(ipcMain, db)
   let radarDirty = false
   const summaryCache = new DashboardSummaryCache(db, databasePath, () => {
     radarDirty = true
