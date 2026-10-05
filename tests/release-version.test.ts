@@ -19,15 +19,15 @@ vi.mock('../src/main/deployment', () => ({
   isWorkBuddyConnectorRegistered: () => false
 }))
 
-// 桌面 alpha.15.3 修复自然语言 Search；Connector、MCP 和 Skill 内容未变，保留各自正式版本。
+// 桌面 alpha.15.4 修复 Search 日期语义与日期文本清理；Connector、MCP 和 Skill 内容未变，保留各自正式版本。
 // 各组件保护明确的独立版本，不要求所有组件版本相等，也不接受任意版本。
-const productVersion = '0.2.0-alpha.15.3'
+const productVersion = '0.2.0-alpha.15.4'
 const connectorVersion = '0.2.0-alpha.15.1'
 const mcpVersion = '0.2.0-alpha.15.1'
 const skillVersion = '0.2.0-alpha.15-skill.3'
 const readSource = (path: string): string => readFileSync(new URL(path, import.meta.url), 'utf8')
 
-describe('alpha.15.3 Search 修复发布的独立组件版本契约', () => {
+describe('alpha.15.4 Search 日期修复发布的独立组件版本契约', () => {
   it('产品与 lockfile 顶层和根包版本一致', () => {
     expect(product.version).toBe(productVersion)
     expect(lockfile.version).toBe(productVersion)
@@ -97,6 +97,6 @@ describe('alpha.15.3 Search 修复发布的独立组件版本契约', () => {
   it('安装包命名由产品版本推导但不制作安装包', () => {
     expect(product.build.win.artifactName).toBe('PrivateRadar-Setup-${version}-x64.${ext}')
     const artifact = product.build.win.artifactName.replace('${version}', product.version).replace('${ext}', 'exe')
-    expect(artifact).toBe('PrivateRadar-Setup-0.2.0-alpha.15.3-x64.exe')
+    expect(artifact).toBe('PrivateRadar-Setup-0.2.0-alpha.15.4-x64.exe')
   })
 })
