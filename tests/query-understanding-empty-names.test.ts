@@ -163,10 +163,9 @@ describe('空名称消息的检索与时间语义', () => {
     addMessage(db, 'known', 'unnamed', '', '2026-09-19T09:00:00+08:00')
     const understanding = understandQuery(db, '资格认证', anchorDate)
     const dated = understandQuery(db, '2026-09-19 资格认证', anchorDate)
-    // 保留普通查询内容词，独立验证真实日期筛选，避免日期字面量影响召回。
-    const response = await hybridSearch(db, '资格认证', {
-      ...understanding, dateRange: dated.dateRange, timeIntent: dated.timeIntent
-    }, null)
+    // 直接使用日期查询的实际规划；日期文本清理后内容词应与普通查询一致。
+    expect(dated.searchTerms).toEqual(understanding.searchTerms)
+    const response = await hybridSearch(db, '2026-09-19 资格认证', dated, null)
     expect(response.results.map((item) => item.messageId)).toEqual(['known'])
     expect(response.results[0].timeVerification).toBe('verified')
     expect(response.unverifiedTimeResults).toEqual([])
@@ -243,7 +242,7 @@ describe('纯符号名称不参与查询理解', () => {
     const response = await askChat(db, query, searchOptions)
     expect(response.understanding.senderIds).toEqual([])
     expect(response.understanding.senderNames).toEqual([])
-    expect(response.understanding.coreTopics).toEqual([query])
+    expect(response.understanding.coreTopics).toEqual(['GitHub'])
     expect(response.understanding.dateRange).toMatchObject({ start: '2026-09-20', end: '2026-09-20' })
     expect(response.understanding.timeIntent).toBe('strict')
     expect(response.results.map((item) => item.messageId)).toEqual(['github-known'])

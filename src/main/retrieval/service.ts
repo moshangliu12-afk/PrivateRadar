@@ -1,4 +1,3 @@
-import { reliableTimestampSql } from '../time-semantics'
 import { createHash, randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import type { ChatQueryResponse, EvidenceMessage, MessageContext } from '../../shared/models'
@@ -17,13 +16,14 @@ const MAX_AI_TEXT_LENGTH = 360
 export interface AskChatOptions {
   aiProvider?: AIProvider | null
   embeddingProvider?: EmbeddingProvider | null
+  // 测试可注入固定参考日期；生产请求默认使用当前本地日历日期。
   anchorDate?: string
 }
 
 export async function askChat(db: DatabaseSync, question: string, options: AskChatOptions = {}): Promise<ChatQueryResponse> {
   const normalizedQuestion = question.normalize('NFKC').replace(/\s+/g, ' ').trim()
   if (!normalizedQuestion) throw new Error('请输入问题')
-  const anchorDate = options.anchorDate ?? latestMessageDate(db)
+  const anchorDate = options.anchorDate ?? currentLocalDate()
   const topicCount = db.prepare('SELECT COUNT(*) AS count FROM topic_daily_metrics WHERE metric_date = ?').get(anchorDate) as { count: number }
   if (topicCount.count === 0) {
     const d1 = runDailyIntelligence(db, anchorDate)
@@ -216,9 +216,7 @@ function saveAnswerRun(db: DatabaseSync, question: string, provider: AIProvider,
   `).run(randomUUID(), queryHash, provider.id, provider.model, JSON.stringify(sourceIds), JSON.stringify({ status: 'generated' }), new Date().toISOString())
 }
 
-function latestMessageDate(db: DatabaseSync): string {
-  const row = db.prepare(`SELECT MAX(date(timestamp, 'localtime')) AS date FROM messages WHERE ${reliableTimestampSql()}`).get() as { date: string | null }
-  if (row.date) return row.date
+function currentLocalDate(): string {
   const now = new Date()
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 }

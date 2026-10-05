@@ -276,12 +276,16 @@ describe('alpha.14 聊天日期与导入日期分离', () => {
     expect(getTopicRadarSummary(unknownOnly)).toMatchObject({ date: null, topics: [] })
   })
 
-  it('Search 相对日期以最新可靠聊天日期为基准', async () => {
+  it('Search 相对日期以当前本地日历为基准，不被聊天或导入日期替代', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 9, 5, 12))
     const db = database()
     addMessage(db, 'known', knownTime, importOn20, '物业通知：请保持消防通道畅通。')
     addMessage(db, 'unknown', null, importOn27, '原始时间未知')
     const response = await askChat(db, '今天物业通知', { aiProvider: null, embeddingProvider: null })
-    expect(response.understanding.dateRange).toMatchObject({ start: '2026-09-20', end: '2026-09-20' })
+    expect(response.understanding.dateRange).toMatchObject({ start: '2026-10-05', end: '2026-10-05' })
+    expect(response.results).toEqual([])
+    expect(response.unverifiedTimeResults).toEqual([])
   })
 
   it('Search 明确日期过滤继续排除未知时间消息', async () => {

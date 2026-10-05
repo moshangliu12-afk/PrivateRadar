@@ -21,8 +21,9 @@ export function understandQuery(db: DatabaseSync, question: string, anchorDate: 
   const dateRange = parseDateRange(question, anchorDate)
   const timeIntent = inferTimeIntent(question, dateRange)
   const personIntent = /谁在|谁提到|谁发|谁分享|谁推荐|哪个人|哪位/.test(question) ? 'who' : 'none'
-  const strippedQuestion = stripQuestionShell(question, [...matchedConversations, ...matchedSenders].map((item) => item.name))
-  const entityKeys = extractQueryEntityKeys(question)
+  const contentQuestion = stripParsedExplicitDates(question, dateRange)
+  const strippedQuestion = stripQuestionShell(contentQuestion, [...matchedConversations, ...matchedSenders].map((item) => item.name))
+  const entityKeys = extractQueryEntityKeys(contentQuestion)
   const hasQuestionShell = /[？?]|什么|哪些|怎么|如何|有没有|请问/.test(question)
   const isQuestion = strippedQuestion !== question || hasQuestionShell
     || timeIntent !== 'none'
@@ -57,8 +58,7 @@ export function understandQuery(db: DatabaseSync, question: string, anchorDate: 
 
 export function parseDateRange(question: string, anchorDate: string): QueryDateRange {
   const compactQuestion = question.replace(/\s+/g, '')
-  const explicit = [...question.matchAll(/(20\d{2})[-年/](\d{1,2})[-月/](\d{1,2})日?/g)]
-    .map((match) => formatDate(Number(match[1]), Number(match[2]), Number(match[3])))
+  const explicit = matchExplicitDates(question).map((match) => match.date)
   if (explicit.length >= 2) return { label: `${explicit[0]} 至 ${explicit[1]}`, start: explicit[0], end: explicit[1] }
   if (explicit.length === 1) return { label: explicit[0], start: explicit[0], end: explicit[0] }
 
@@ -81,9 +81,35 @@ export function parseDateRange(question: string, anchorDate: string): QueryDateR
     const yesterday = shiftDays(anchorDate, -1)
     return { label: '昨天', start: yesterday, end: yesterday }
   }
+  if (/前天/.test(compactQuestion)) {
+    const dayBeforeYesterday = shiftDays(anchorDate, -2)
+    return { label: '前天', start: dayBeforeYesterday, end: dayBeforeYesterday }
+  }
   if (/今天/.test(compactQuestion)) return { label: '今天', start: anchorDate, end: anchorDate }
   if (/最近|近期/.test(compactQuestion)) return { label: '最近30天', start: shiftDays(anchorDate, -29), end: anchorDate }
   return { label: '全部时间', start: null, end: anchorDate }
+}
+
+function matchExplicitDates(question: string): Array<{ start: number; end: number; date: string }> {
+  // 沿用原语法；单日期或范围只消费前两个匹配，后续文本不能顺带清理。
+  return [...question.matchAll(/(20\d{2})[-年/](\d{1,2})[-月/](\d{1,2})日?/g)].slice(0, 2)
+    .map((match) => ({
+      start: match.index!, end: match.index! + match[0].length,
+      date: formatDate(Number(match[1]), Number(match[2]), Number(match[3]))
+    }))
+}
+
+function stripParsedExplicitDates(question: string, dateRange: QueryDateRange): string {
+  const matches = matchExplicitDates(question)
+  if (matches.length === 0 || matches[0].date !== dateRange.start || matches.at(-1)!.date !== dateRange.end) return question
+  let spans = matches.map(({ start, end }) => ({ start, end }))
+  if (matches.length === 2 && /^\s*(?:至|到|和|与|以及|及|[-~～—–,，、])?\s*$/u.test(question.slice(matches[0].end, matches[1].start))) {
+    // 只清理两个已消费日期之间的范围连接符；中间业务内容必须保留。
+    spans = [{ start: matches[0].start, end: matches[1].end }]
+  }
+  let content = question
+  for (const { start, end } of spans.reverse()) content = content.slice(0, start) + ' ' + content.slice(end)
+  return content
 }
 
 function extractSearchTerms(question: string, entityKeys: string[], conversationNames: string[], senderNames: string[]): string[] {
@@ -129,8 +155,7 @@ function segmentNaturalLanguageFallback(question: string, dateRange: QueryDateRa
   let content = question.replace(/(?:聊|说|讨论|提到)(?:了|过)?(?:什么|哪些)|怎么(?:说|看)|有没有|请问/gu, ' ')
   if (dateRange.label !== '全部时间') {
     content = content
-      .replace(/20\d{2}[-年/]\d{1,2}[-月/]\d{1,2}日?/gu, ' ')
-      .replace(/最近\s*(?:\d+\s*天|三个月|一个月)|今天|昨天|本周|这周|上周|本月|这个月|上个月|近期|最近/gu, ' ')
+      .replace(/最近\s*(?:\d+\s*天|三个月|一个月)|今天|昨天|前天|本周|这周|上周|本月|这个月|上个月|近期|最近/gu, ' ')
   }
   const words: string[] = []
   const compounds: string[] = []
@@ -171,7 +196,7 @@ function segmentNaturalLanguageFallback(question: string, dateRange: QueryDateRa
 
 function stripQuestionShell(question: string, knownNames: string[]): string {
   let value = knownNames.filter(isUsableName).reduce((current, name) => current.replaceAll(name, ' '), question)
-    .replace(/^\s*(最近|近期|之前|以前|今天|昨天|本周|上周|本月|上个月|最近\s*\d+\s*天)?\s*/u, '')
+    .replace(/^\s*(最近|近期|之前|以前|今天|昨天|前天|本周|上周|本月|上个月|最近\s*\d+\s*天)?\s*/u, '')
     .replace(/^\s*(谁在找|谁提到过|谁提到|谁发过|谁发|谁分享过|谁分享|谁推荐过|谁推荐|有没有人讨论|大家有没有讨论|最近有人提到什么|有人提到什么|哪个群说过|我之前看过)\s*/u, '')
     .replace(/[？?！!。]+$/gu, '')
     .replace(/\s+/g, ' ')
