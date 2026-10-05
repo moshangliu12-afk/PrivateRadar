@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite'
 
 // 旧版数据库没有显式版本号，user_version = 0 对应本次迁移前的结构。
-const BATCH_IMPORT_SCHEMA_VERSION = 4
+const BATCH_IMPORT_SCHEMA_VERSION = 5
 
 export function migrateBatchImportSchema(db: DatabaseSync): void {
   const row = db.prepare('PRAGMA user_version').get() as { user_version: number }
@@ -10,6 +10,35 @@ export function migrateBatchImportSchema(db: DatabaseSync): void {
   if (row.user_version < 2) migrateEvidenceErrorState(db)
   if (row.user_version < 3) migrateEffectiveJob(db)
   if (row.user_version < 4) migrateEvidenceSourceKind(db)
+  if (row.user_version < 5) migrateCollections(db)
+}
+
+function migrateCollections(db: DatabaseSync): void {
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS collections (
+        id TEXT PRIMARY KEY,
+        display_name TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('collecting', 'completed')),
+        created_at TEXT NOT NULL,
+        completed_at TEXT
+      );
+    `)
+    const columns = db.prepare('PRAGMA table_info(batch_import_sessions)').all() as Array<{ name: string }>
+    if (!columns.some((column) => column.name === 'collection_id')) {
+      db.exec('ALTER TABLE batch_import_sessions ADD COLUMN collection_id TEXT REFERENCES collections(id) ON DELETE RESTRICT')
+    }
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_batch_import_sessions_collection
+        ON batch_import_sessions(collection_id, created_at, id);
+      PRAGMA user_version = 5;
+      COMMIT;
+    `)
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
 }
 
 function migrateEvidenceSourceKind(db: DatabaseSync): void {

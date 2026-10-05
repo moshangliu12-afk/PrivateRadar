@@ -5,6 +5,7 @@ export type BatchImportStatus = 'pending' | 'preparing' | 'in_progress' | 'succe
 
 export interface BatchImportSession {
   id: string
+  collection_id: string | null
   source: string
   status: BatchImportStatus
   created_at: string
