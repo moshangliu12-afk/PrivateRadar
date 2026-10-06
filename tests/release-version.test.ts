@@ -21,9 +21,9 @@ vi.mock('../src/main/deployment', () => ({
 
 // 来源关系、迁移和统计适配进入桌面与连接服务；技能内容不变，保留原版本与哈希。
 // 各组件保护明确的独立版本，不要求所有组件版本相等，也不接受任意版本。
-const productVersion = '0.2.0-alpha.16.2'
-const connectorVersion = '0.2.0-alpha.16.2'
-const mcpVersion = '0.2.0-alpha.16.2'
+const productVersion = '0.2.0-alpha.17'
+const connectorVersion = '0.2.0-alpha.17'
+const mcpVersion = '0.2.0-alpha.17'
 const skillVersion = '0.2.0-alpha.16-skill.1'
 const readSource = (path: string): string => readFileSync(new URL(path, import.meta.url), 'utf8')
 
@@ -97,6 +97,6 @@ describe('alpha.16.2 来源关系候选的独立组件版本契约', () => {
   it('安装包命名由产品版本推导但不制作安装包', () => {
     expect(product.build.win.artifactName).toBe('PrivateRadar-Setup-${version}-x64.${ext}')
     const artifact = product.build.win.artifactName.replace('${version}', product.version).replace('${ext}', 'exe')
-    expect(artifact).toBe('PrivateRadar-Setup-0.2.0-alpha.16.2-x64.exe')
+    expect(artifact).toBe('PrivateRadar-Setup-0.2.0-alpha.17-x64.exe')
   })
 })
