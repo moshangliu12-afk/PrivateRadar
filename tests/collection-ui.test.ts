@@ -86,7 +86,7 @@ describe('批量收集最小界面契约', () => {
   })
   it('仅新增批量收集导航及创建入口，原四页和既有操作保留', () => {
     const source = readFileSync(new URL('../src/renderer/src/App.tsx', import.meta.url), 'utf8')
-    expect(source).toContain("['今日情报', '话题雷达', '问我的聊天', '设置', '批量收集']")
+    expect(source).toContain("['今日情报', '话题雷达', '问我的聊天', '设置', '批量收集', '关键词雷达']")
     expect(source).toContain("page === 'collections' && <CollectionPage />")
     for (const component of ['SearchPage', 'SettingsPage', 'RadarPage', 'MissingImportantFeedback']) expect(source).toContain(`export function ${component}`)
     const pageSource = readFileSync(new URL('../src/renderer/src/collection-page.tsx', import.meta.url), 'utf8')

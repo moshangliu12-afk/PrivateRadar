@@ -1,8 +1,24 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { CollectionDesktopApi } from '../shared/collections'
+import type { KeywordRadarDesktopApi } from '../shared/keyword-radar'
 import type { CandidateEvidence, ChatQueryResponse, ConnectorSetupResult, DailyBriefItem, DashboardSummary, FeedbackExportResult, FeedbackState, FirstUseStatus, ImportResult, MessageContext, TopicEvidence, TopicRadarSummary } from '../shared/models'
 
 contextBridge.exposeInMainWorld('privateRadar', {
+  keywordRadar: {
+    listGroups: () => ipcRenderer.invoke('keyword-radar:groups'),
+    createGroup: (name: string) => ipcRenderer.invoke('keyword-radar:create-group', name),
+    renameGroup: (id: string, name: string) => ipcRenderer.invoke('keyword-radar:rename-group', id, name),
+    setGroupEnabled: (id: string, enabled: boolean) => ipcRenderer.invoke('keyword-radar:group-enabled', id, enabled),
+    archiveGroup: (id: string) => ipcRenderer.invoke('keyword-radar:archive-group', id),
+    addTerm: (id: string, term: string) => ipcRenderer.invoke('keyword-radar:add-term', id, term),
+    setTermEnabled: (id: string, enabled: boolean) => ipcRenderer.invoke('keyword-radar:term-enabled', id, enabled),
+    listRecentHits: (limit?: number) => ipcRenderer.invoke('keyword-radar:hits', limit),
+    getStatusCounts: () => ipcRenderer.invoke('keyword-radar:status'),
+    retryFailedRuns: () => ipcRenderer.invoke('keyword-radar:retry-failed'),
+    getHitContext: (id: string) => ipcRenderer.invoke('keyword-radar:context', id),
+    getHitSource: (id: string) => ipcRenderer.invoke('keyword-radar:source', id),
+    openHitEvidence: (id: string) => ipcRenderer.invoke('keyword-radar:open-evidence', id)
+  } satisfies KeywordRadarDesktopApi,
   ...({
     createCollection: (name: string) => ipcRenderer.invoke('collections:create', name),
     listCollections: () => ipcRenderer.invoke('collections:list'),

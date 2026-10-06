@@ -13,6 +13,8 @@ import { prepareWorkBuddyConnector, runtimeDataDirectory, writeOperationalLog } 
 import { DashboardSummaryCache } from './dashboard-cache'
 import { registerCollectionIpc } from './collections/desktop'
 import { schedulePendingKeywordRadarRuns } from './keyword-radar/recovery'
+import { registerKeywordRadarIpc } from './keyword-radar/desktop'
+import { openKeywordHitEvidence } from './keyword-radar/evidence-navigation'
 // 主进程内部仓储入口：调用方显式传入数据库，不新增渲染层通信或公开工具。
 export { listItemMessageSources, listMessageSources } from './batch-import/message-sources'
 import {
@@ -81,6 +83,7 @@ app.whenReady().then(() => {
   const databasePath = join(dataDir, 'private-radar.db')
   const db = openDatabase(databasePath, process.env.PRIVATE_RADAR_SEED_DEMO === 'true')
   registerCollectionIpc(ipcMain, db)
+  registerKeywordRadarIpc(ipcMain, db, hitId => openKeywordHitEvidence(db, databasePath, hitId, path => shell.openPath(path)))
   let radarDirty = false
   const summaryCache = new DashboardSummaryCache(db, databasePath, () => {
     radarDirty = true
