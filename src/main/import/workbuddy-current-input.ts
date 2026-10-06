@@ -80,7 +80,7 @@ export function normalizeWorkBuddyCurrentInput(
       throw new WorkBuddyCurrentInputError('TRUNCATED_CURRENT_CONTEXT', firstIndex, '聊天上下文已截断，停止处理')
     }
     let firstParsed: WorkBuddyChatParseResult | undefined
-    let firstComparisonText: string | undefined
+    let firstComparisonSequence: string | undefined
     for (const { block, index } of group.contexts) {
       const text = transportText(block.transcript)
       let parsed: WorkBuddyChatParseResult
@@ -98,15 +98,14 @@ export function normalizeWorkBuddyCurrentInput(
           group.contexts.length > 1 ? 'DUPLICATE_CONTEXT_CONFLICT' : 'INVALID_CURRENT_CONTEXT', index,
           '首条消息与当前卡片元数据不一致')
       }
-      // 仅忽略文档末尾一个行终止符；多余空行仍是正文，不能用 trim 清除。
-      const comparisonText = text.endsWith('\n') ? text.slice(0, -1) : text
+      const comparisonSequence = messageSequenceForComparison(parsed)
       if (firstParsed) {
-        if (firstComparisonText !== comparisonText || JSON.stringify(firstParsed) !== JSON.stringify(parsed)) {
+        if (firstComparisonSequence !== comparisonSequence) {
           throw new WorkBuddyCurrentInputError('DUPLICATE_CONTEXT_CONFLICT', index, '同一路径的聊天正文或消息顺序不一致')
         }
       } else {
         firstParsed = parsed
-        firstComparisonText = comparisonText
+        firstComparisonSequence = comparisonSequence
       }
     }
     attachments.push({
@@ -139,6 +138,25 @@ export function gateWorkBuddyBatchCurrentInput(
 function transportText(text: string): string {
   // 首个发送人行不能为空，开头的纯换行可确认为外层包裹；不移除空格、缩进或正文空行。
   return text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/^\n+/, '')
+}
+
+/** 复用已验证的消息边界，仅生成副本比较键，不改 parser 输出或首份来源正文。 */
+function messageSequenceForComparison(parsed: WorkBuddyChatParseResult): string {
+  return JSON.stringify({ ...parsed, messages: parsed.messages.map(message => ({
+    ...message, content: withoutTrailingSeparatorLines(message.content)
+  })) })
+}
+
+/** 只跳过消息尾部的纯分隔行；正文字符、行末空格及内部换行仍逐字符比较。 */
+function withoutTrailingSeparatorLines(content: string): string {
+  let boundary = content.length
+  for (;;) {
+    let start = boundary
+    while (start > 0 && (content[start - 1] === ' ' || content[start - 1] === '\t')) start -= 1
+    if (start === 0 || content[start - 1] !== '\n') break
+    boundary = start - 1
+  }
+  return content.slice(0, boundary)
 }
 
 function validateBlock(block: WorkBuddyCurrentContextBlock, index: number): void {

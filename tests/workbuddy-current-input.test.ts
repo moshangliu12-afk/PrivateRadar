@@ -68,9 +68,12 @@ describe('当前输入附件实例归一化', () => {
     expect(attachment.messages[4].content).toMatch(/虚构服务中心\n2001年1月17日$/)
   })
 
-  it('正文额外末尾空行不视为外层包裹差异', () => {
-    expect(errorFor(() => normalizeWorkBuddyCurrentInput([card(), card({ transcript: `${lf}\n\n` })])).code)
-      .toBe('DUPLICATE_CONTEXT_CONFLICT')
+  it('文档末尾纯分隔空行允许折叠，但不改首份解析结果', () => {
+    const result = normalizeWorkBuddyCurrentInput([card(), card({ transcript: `${lf}\n\n` })])
+    expect(result.logical_attachments).toHaveLength(1)
+    expect(result.logical_attachments[0].transcript).toBe(transcript)
+    expect(result.logical_attachments[0].messages).toEqual(
+      parseWorkBuddyChatHistoryText(transcript, { expectedMessageCount: 7 }).messages)
   })
 
   it('省略截断标记与明确 false 都表示未截断', () => {

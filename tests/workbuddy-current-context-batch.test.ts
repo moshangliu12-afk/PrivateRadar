@@ -7,6 +7,7 @@ import { Client } from '@modelcontextprotocol/client'
 import { InMemoryTransport } from '@modelcontextprotocol/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { initializeDatabase } from '../src/main/schema'
+import { createCollection, listCollectionSessions } from '../src/main/collections/service'
 import { createWorkBuddyMcpServer } from '../src/main/integrations/workbuddy/tool'
 import { ingestWorkBuddyCurrentContextBatch, prepareWorkBuddyCurrentContextBatch } from '../src/main/integrations/workbuddy/batch-tool'
 import { WORKBUDDY_CURRENT_CONTEXT_LIMITS, workBuddyCurrentContextBatchSchema } from '../src/main/integrations/workbuddy/validation'
@@ -91,6 +92,53 @@ function removeSources(f: Fixture) {
 }
 
 describe('当前卡片上下文到目录证据的完整批量链路', () => {
+  it('四份序列化中图片记录边界空行不同，仍按原首份正文归集两项并完整保留媒体证据', async () => {
+    const f = fixture()
+    const collection = createCollection(f.db, '序列化空行隔离归集')
+    const first = context(f.paths[0], '普通文本卡', 10)
+    const bodies = ['第一条正文', '第二条\n正文内部换行', '第三条\n\n正文内部段落',
+      '[图片] 隔离图片一.png', '图片后文本', '[图片] 隔离图片二.png', '最后一条正文']
+    const records = bodies.map((body, index) => `·隔离发送人\n2026年10月6日 08:0${index}\n${body}`)
+    const second: WorkBuddyCurrentContextBlock = { extracted_dir_path: f.paths[1], file: '隔离图片卡.zip',
+      message_count: 7, first_sender: '·隔离发送人', first_message_at: '2026年10月6日 08:00',
+      transcript: records.join('\n\n') }
+    const mediaRoot = join(f.paths[1], '聊天记录内的图片、视频和文件')
+    mkdirSync(mediaRoot)
+    // 合成小 PNG 仅用于验证文件字节保全；不包含真实用户图片，也不做内容理解。
+    const picture = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j7xkAAAAASUVORK5CYII=', 'base64')
+    for (const name of ['隔离图片一.png', '隔离图片二.png']) writeFileSync(join(mediaRoot, name), picture)
+    const contexts = [first, second, { ...first }, { ...second, transcript: records.join('\n\n\n') }]
+    const normalized = gateWorkBuddyBatchCurrentInput(contexts)
+    expect(normalized.logical_attachments.map(a => a.context_indexes)).toEqual([[0, 2], [1, 3]])
+    const result = await ingestWorkBuddyCurrentContextBatch(f.db, f.options, {
+      ...request(contexts), collection_id: collection.id
+    })
+    expect(result).toMatchObject({ status: 'success', collection_id: collection.id, summary: {
+      attachments_total: 2, attachments_completed: 2, input_messages_total: 17, imported_total: 17,
+      duplicate_total: 0, updated_total: 0, invalid_total: 0
+    } })
+    expect(result.items.map(item => item.imported)).toEqual([10, 7])
+    expect([count(f, 'batch_import_sessions'), count(f, 'batch_import_items'), count(f, 'import_jobs'),
+      count(f, 'messages'), count(f, 'messages_fts')]).toEqual([1, 2, 2, 17, 17])
+    expect(listCollectionSessions(f.db, collection.id)).toHaveLength(1)
+    expect(f.db.prepare('SELECT status FROM collections WHERE id=?').get(collection.id)).toEqual({ status: 'collecting' })
+    expect(result.items[0].effective_job_id).not.toBe(result.items[1].effective_job_id)
+    const imageItem = result.items[1]
+    const evidenceRoot = join(f.data, 'evidence', imageItem.item_id)
+    const snapshot = JSON.parse(readFileSync(join(evidenceRoot, 'messages.json'), 'utf8')).input
+    expect(snapshot.current_context).toMatchObject({ transcript: second.transcript, context_indexes: [1, 3], raw_context_count: 4 })
+    expect(snapshot.messages.map((m: { content: string }) => m.content)).toEqual(bodies)
+    const rows = f.db.prepare('SELECT content,source_position FROM messages WHERE source_batch_id=? ORDER BY source_position').all(imageItem.source_batch_id)
+    expect(rows).toEqual(bodies.map((content, source_position) => ({ content, source_position })))
+    for (const name of ['隔离图片一.png', '隔离图片二.png']) {
+      expect(readFileSync(join(evidenceRoot, 'source', '聊天记录内的图片、视频和文件', name))).toEqual(picture)
+    }
+    const verified = await verifyBatchEvidence(f.db, f.options.databasePath, imageItem.item_id)
+    expect(verified.status).toBe('available')
+    expect(f.db.prepare('PRAGMA integrity_check').get()).toEqual({ integrity_check: 'ok' })
+    expect(f.db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+  }, 120000)
+
   it('标准 MCP 接收原始四块上下文，3+4 只形成两项、两套证据、两个任务及七条消息', async () => {
     const f = fixture()
     const server = createWorkBuddyMcpServer(f.db, undefined, f.options)
