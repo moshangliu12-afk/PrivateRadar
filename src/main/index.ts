@@ -12,6 +12,7 @@ import { seedDemoData } from './demo'
 import { prepareWorkBuddyConnector, runtimeDataDirectory, writeOperationalLog } from './deployment'
 import { DashboardSummaryCache } from './dashboard-cache'
 import { registerCollectionIpc } from './collections/desktop'
+import { schedulePendingKeywordRadarRuns } from './keyword-radar/recovery'
 // 主进程内部仓储入口：调用方显式传入数据库，不新增渲染层通信或公开工具。
 export { listItemMessageSources, listMessageSources } from './batch-import/message-sources'
 import {
@@ -172,6 +173,7 @@ app.whenReady().then(() => {
     return result
   })
   createWindow()
+  schedulePendingKeywordRadarRuns(db)
 
   app.once('before-quit', () => {
     writeOperationalLog(logDirectory, 'APP_STOPPED')

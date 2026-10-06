@@ -41,10 +41,13 @@ function listRuns(db: DatabaseSync, status: 'pending' | 'failed'): KeywordRadarR
 export function listPendingKeywordRadarRuns(db: DatabaseSync): KeywordRadarRun[] { return listRuns(db, 'pending') }
 export function listFailedKeywordRadarRuns(db: DatabaseSync): KeywordRadarRun[] { return listRuns(db, 'failed') }
 /** 代次就是乐观并发屏障；重试仅改执行状态，不重冻规则或来源集合。 */
-export function markKeywordRadarAttemptStarted(db: DatabaseSync, batchItemId: string): number | null {
+export function markKeywordRadarAttemptStarted(
+  db: DatabaseSync, batchItemId: string, expectedStatus?: 'pending' | 'failed'
+): number | null {
   const row = db.prepare(`UPDATE keyword_radar_runs SET status='pending',attempt_count=attempt_count+1,
     processed_at=NULL,error_summary=NULL WHERE batch_item_id=? AND status IN ('pending','failed')
-    RETURNING attempt_count`).get(batchItemId) as { attempt_count: number } | undefined
+    AND (? IS NULL OR status=?)
+    RETURNING attempt_count`).get(batchItemId, expectedStatus ?? null, expectedStatus ?? null) as { attempt_count: number } | undefined
   return row?.attempt_count ?? null
 }
 export function markKeywordRadarComplete(db: DatabaseSync, batchItemId: string, attempt: number): boolean {
@@ -55,6 +58,8 @@ export function markKeywordRadarComplete(db: DatabaseSync, batchItemId: string, 
 const errorSummaries = {
   INVALID_SNAPSHOT: 'INVALID_SNAPSHOT: 冻结快照无效',
   PROCESSING_FAILED: 'PROCESSING_FAILED: 派生处理失败',
+  OCCURRENCE_INTEGRITY_FAILED: 'OCCURRENCE_INTEGRITY_FAILED: 冻结来源关联不完整',
+  HIT_CONFLICT: 'HIT_CONFLICT: 已有命中与冻结规则不一致',
   UNKNOWN: 'UNKNOWN: 派生处理异常'
 } as const
 export function markKeywordRadarFailed(db: DatabaseSync, batchItemId: string, attempt: number, errorCode: unknown): boolean {

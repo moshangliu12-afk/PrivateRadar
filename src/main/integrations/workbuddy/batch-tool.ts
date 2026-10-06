@@ -9,6 +9,8 @@ import { saveOriginalZip, saveStructuredSnapshot, verifyBatchEvidence } from '..
 import { saveDirectoryEvidence } from '../../batch-import/directory-evidence'
 import { safeAbsolutePath, WindowsPathLease, withRequestScopedWindowsPathLeaseRuntime } from '../../batch-import/windows-path-lease'
 import { executeBatchImportSession } from '../../batch-import/session'
+import { schedulePendingKeywordRadarRuns } from '../../keyword-radar/recovery'
+import { logKeywordRadarFailure } from '../../keyword-radar/processor'
 import { gateWorkBuddyBatchCurrentInput, WorkBuddyCurrentInputError } from '../../import/workbuddy-current-input'
 import { workBuddyBatchIngestSchema, workBuddyBatchResultSchema, workBuddyCurrentContextBatchSchema,
   workBuddyIngestSchema, type WorkBuddyIngestInput, type WorkBuddyBatchIngestInput, type WorkBuddyBatchResult } from './validation'
@@ -91,7 +93,9 @@ export async function ingestWorkBuddyBatch(
     displayName: attachment.display_name ?? basename(sourcePaths[index]), sourceHint: attachment.source_hint ?? null,
     input: { import_mode: attachment.import_mode, batch_metadata: attachment.batch_metadata, messages: attachment.messages }
   })))
-  return executeAndReportBatch(db, options, sessionId)
+  const output = await executeAndReportBatch(db, options, sessionId)
+  scheduleRadarAfterImport(db, output)
+  return output
 }
 
 /** 输入预检及证据准备阶段；恢复阶段直接使用既有会话 API 和持久快照。 */
@@ -134,10 +138,18 @@ export async function prepareWorkBuddyCurrentContextBatch(
 export async function ingestWorkBuddyCurrentContextBatch(
   db: DatabaseSync, options: WorkBuddyBatchToolOptions, rawInput: unknown
 ): Promise<WorkBuddyBatchResult> {
-  return withRequestScopedWindowsPathLeaseRuntime(async () => {
+  const output = await withRequestScopedWindowsPathLeaseRuntime(async () => {
     const sessionId = await prepareWorkBuddyCurrentContextBatch(db, options, rawInput)
     return executeAndReportBatch(db, options, sessionId)
   })
+  scheduleRadarAfterImport(db, output)
+  return output
+}
+
+function scheduleRadarAfterImport(db: DatabaseSync, output: WorkBuddyBatchResult): void {
+  // 派生触发本身也隔离异常；核心成功或部分成功结果不受影响。
+  try { schedulePendingKeywordRadarRuns(db, output.items.map(item => item.item_id)) }
+  catch { logKeywordRadarFailure('RECOVERY_FAILED') }
 }
 
 interface PreparedBatchAttachment {
