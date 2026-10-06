@@ -17,7 +17,7 @@ it('真实生产主进程入口可执行双向来源查询，不注册额外通�
   const db = new DatabaseSync(databasePath)
   try {
     initializeDatabase(db)
-    expect(db.prepare('PRAGMA user_version').get()!.user_version).toBe(6)
+    expect(db.prepare('PRAGMA user_version').get()!.user_version).toBe(7)
     const session = createBatchImportSession(db, 'workbuddy')
     const items = [createBatchImportItem(db, session.id, 0), createBatchImportItem(db, session.id, 1)]
     for (const [ordinal, numbers] of [[0, [1, 2]], [1, [2]]] as const) {
@@ -79,7 +79,9 @@ it('真实生产主进程入口可执行双向来源查询，不注册额外通�
     }))
     expect(result).toEqual({ ...expected, communicationCount: 0,
       exports: ['listItemMessageSources', 'listMessageSources'] })
-    expect(Object.keys(result.a[0]).sort()).toEqual(['batch_item_id', 'created_at', 'message_id', 'source_position'])
+    expect(Object.keys(result.a[0]).sort()).toEqual(['batch_item_id', 'created_at', 'message_id',
+      'source_conversation_name', 'source_conversation_name_source', 'source_position',
+      'source_sender_name', 'source_sender_name_source', 'source_timestamp', 'source_timestamp_source'])
     expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
   } finally {
     db.close()

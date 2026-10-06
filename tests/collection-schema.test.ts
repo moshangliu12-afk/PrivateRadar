@@ -85,7 +85,7 @@ describe('归集结构版本 5 隔离迁移', () => {
     const ftsBefore = db.prepare("SELECT rowid FROM messages_fts WHERE messages_fts MATCH 'legacyfts' ORDER BY rowid").all()
 
     migrateBatchImportSchema(db)
-    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 6 })
+    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 7 })
     expect(tableFingerprints(db, tables)).toEqual(before)
     expect(db.prepare('SELECT * FROM batch_import_sessions ORDER BY id').all())
       .toEqual(sessionsBefore.map((session) => ({ ...session, collection_id: null })))
@@ -102,10 +102,10 @@ describe('归集结构版本 5 隔离迁移', () => {
     healthy(db)
   })
 
-  it('全新数据库初始化版本 6，保留五个归集字段、两种状态、可空外键与查询索引', () => {
+  it('全新数据库初始化版本 7，保留五个归集字段、两种状态、可空外键与查询索引', () => {
     const db = database()
     initializeDatabase(db)
-    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 6 })
+    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 7 })
     expect(db.prepare('PRAGMA table_info(collections)').all().map((column) => [column.name, column.type, column.notnull, column.pk]))
       .toEqual([['id', 'TEXT', 0, 1], ['display_name', 'TEXT', 1, 0], ['status', 'TEXT', 1, 0],
         ['created_at', 'TEXT', 1, 0], ['completed_at', 'TEXT', 0, 0]])

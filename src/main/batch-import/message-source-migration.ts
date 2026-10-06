@@ -2,7 +2,6 @@ import { createHash } from 'node:crypto'
 import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, realpathSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
-import { bindItemMessageSource } from './message-sources'
 
 interface LegacyItem {
   id: string
@@ -105,7 +104,13 @@ export function migrateMessageSourceSchema(db: DatabaseSync): void {
       const raw = snapshots.get(item.id)![message.source_position]
       if (!raw || typeof raw.content !== 'string' || raw.content.trim() !== message.content ||
           (raw.source_position !== undefined && raw.source_position !== message.source_position)) migrationError('快照位置或消息正文不一致')
-      bindItemMessageSource(db, item.id, message.source_position, message.id, message.imported_at)
+      // 仅用于旧版结构 6 的确定性绑定回填；新版运行写入必须走含来源事实的 binder。
+      db.prepare(`INSERT INTO batch_item_message_sources (batch_item_id,source_position,message_id,created_at)
+        VALUES (?,?,?,?) ON CONFLICT(batch_item_id,source_position) DO NOTHING`)
+        .run(item.id, message.source_position, message.id, message.imported_at)
+      const stored = db.prepare('SELECT message_id FROM batch_item_message_sources WHERE batch_item_id=? AND source_position=?')
+        .get(item.id, message.source_position)
+      if (stored?.message_id !== message.id) migrationError('历史来源位置已绑定其他消息')
     }
     if (db.prepare('PRAGMA foreign_key_check(batch_item_message_sources)').all().length) migrationError('来源关系外键无效')
     db.exec('PRAGMA user_version = 6; COMMIT')

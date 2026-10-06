@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { initializeDatabase } from '../src/main/schema'
-import { migrateBatchImportSchema } from '../src/main/batch-import/schema'
+import { migrateMessageSourceSchema } from '../src/main/batch-import/message-source-migration'
+import { prepareSchemaV6Fixture } from './schema-v6-fixture'
 import { createBatchImportItem, createBatchImportSession, attachImportJobToBatchItem } from '../src/main/batch-import/repository'
 import { importChatContent } from '../src/main/import/importer'
 import { listItemMessageSources } from '../src/main/batch-import/message-sources'
@@ -19,6 +20,7 @@ function legacyFixture() {
   const db = new DatabaseSync(join(directory, 'private-radar.db'))
   fixtures.push({db,directory})
   initializeDatabase(db)
+  prepareSchemaV6Fixture(db)
   db.exec('DROP TABLE batch_item_message_sources; PRAGMA user_version = 5')
   const items: Array<{id:string; path:string; sourceBatchId:string}> = []
   for (let round=0;round<6;round++) {
@@ -71,7 +73,7 @@ function changeSnapshot(f: ReturnType<typeof legacyFixture>, edit: (messages: Ar
 describe('结构版本 6 确定性来源回填',()=>{
   it('281 条历史中只回填可核验的 76 条，其余 205 条不伪造 Item 或关系，所有旧表及 FTS 不变',()=>{
     const f=legacyFixture(),before=fingerprints(f.db),evidence=f.items.map(item=>hash(readFileSync(item.path)))
-    migrateBatchImportSchema(f.db)
+    migrateMessageSourceSchema(f.db)
     expect(f.db.prepare('PRAGMA user_version').get()).toEqual({user_version:6})
     expect(f.db.prepare('SELECT count(*) AS n FROM batch_item_message_sources').get()).toEqual({n:76})
     expect(f.db.prepare('SELECT count(*) AS n FROM messages').get()).toEqual({n:281})
@@ -82,7 +84,7 @@ describe('结构版本 6 确定性来源回填',()=>{
     expect(f.items.map(item=>listItemMessageSources(f.db,item.id).length)).toEqual([...Array(11).fill(6),10])
     expect(f.db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
     expect(f.db.prepare('PRAGMA integrity_check').get()).toEqual({integrity_check:'ok'})
-    migrateBatchImportSchema(f.db)
+    migrateMessageSourceSchema(f.db)
     expect(f.db.prepare('SELECT count(*) AS n FROM batch_item_message_sources').get()).toEqual({n:76})
   })
 
@@ -104,17 +106,18 @@ describe('结构版本 6 确定性来源回填',()=>{
       f.db.prepare('INSERT INTO batch_item_message_sources VALUES (?,0,?,?)').run(f.items[0].id,String(wrong.id),'原记录')
     }
     const before=fingerprints(f.db)
-    expect(()=>migrateBatchImportSchema(f.db)).toThrow()
+    expect(()=>migrateMessageSourceSchema(f.db)).toThrow()
     expect(f.db.prepare('PRAGMA user_version').get()).toEqual({user_version:5})
     expect(fingerprints(f.db)).toEqual(before)
     expect(f.db.prepare("SELECT count(*) AS n FROM sqlite_master WHERE name='batch_item_message_sources'").get()).toEqual({n:kind==='关系冲突'?1:0})
     if(kind==='关系冲突')expect(f.db.prepare('SELECT count(*) AS n FROM batch_item_message_sources').get()).toEqual({n:1})
   })
 
-  it('新库表结构只有四字段、两个限制删除外键、位置主键和反查索引',()=>{
+  it('版本 6 来源表只有四字段、两个限制删除外键、位置主键和反查索引',()=>{
     const db=new DatabaseSync(':memory:')
     try {
       initializeDatabase(db)
+      prepareSchemaV6Fixture(db)
       expect(db.prepare('PRAGMA table_info(batch_item_message_sources)').all().map(row=>[row.name,row.pk])).toEqual([
         ['batch_item_id',1],['source_position',2],['message_id',0],['created_at',0]])
       expect(db.prepare('PRAGMA foreign_key_list(batch_item_message_sources)').all()).toEqual(expect.arrayContaining([
@@ -127,7 +130,7 @@ describe('结构版本 6 确定性来源回填',()=>{
     const f=legacyFixture()
     f.db.exec('CREATE TABLE batch_item_message_sources (batch_item_id TEXT, source_position INTEGER, message_id TEXT, created_at TEXT)')
     const before=fingerprints(f.db)
-    expect(()=>migrateBatchImportSchema(f.db)).toThrow('SOURCE_PROVENANCE_MIGRATION_CONFLICT')
+    expect(()=>migrateMessageSourceSchema(f.db)).toThrow('SOURCE_PROVENANCE_MIGRATION_CONFLICT')
     expect(f.db.prepare('PRAGMA user_version').get()).toEqual({user_version:5})
     expect(fingerprints(f.db)).toEqual(before)
     expect(f.db.prepare("SELECT name FROM sqlite_master WHERE name='idx_batch_item_message_sources_message'").get()).toBeUndefined()

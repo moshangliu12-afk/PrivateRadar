@@ -17,6 +17,12 @@ import { getFirstUseStatus } from '../src/main/first-use'
 import { understandQuery } from '../src/main/retrieval/query-understanding'
 import { hybridSearch } from '../src/main/retrieval/hybrid-search'
 import type { WorkBuddyMessageInput } from '../src/main/integrations/workbuddy/validation'
+import type { OccurrenceSourceFacts } from '../src/main/batch-import/message-sources'
+
+const unknownFacts: OccurrenceSourceFacts = {
+  senderName:'',senderNameSource:'unknown',timestamp:'',timestampSource:'unknown',
+  conversationName:'',conversationNameSource:'unknown'
+}
 
 const fixtures: Array<{db:DatabaseSync;directory:string}>=[]
 afterEach(()=>{for(const f of fixtures.splice(0)){f.db.close();rmSync(f.directory,{recursive:true,force:true})}})
@@ -127,9 +133,9 @@ describe('消息来源出现与 canonical 分离',()=>{
   it('同来源同位置同 message 幂等且 created_at 不变，其他 message 冲突绝不改绑',async()=>{
     const f=fixture();await prepare(f,0,messages([1,2]));await importSavedBatchItem(f.db,f.path,f.items[0].id)
     const rows=listItemMessageSources(f.db,f.items[0].id)
-    bindItemMessageSource(f.db,f.items[0].id,0,rows[0].message_id,'新时间')
+    expect(bindItemMessageSource(f.db,f.items[0].id,0,rows[0].message_id,'新时间',unknownFacts)).toBe(false)
     expect(listItemMessageSources(f.db,f.items[0].id)).toEqual(rows)
-    expect(()=>bindItemMessageSource(f.db,f.items[0].id,0,rows[1].message_id,'改绑')).toThrow('SOURCE_RELATION_CONFLICT')
+    expect(()=>bindItemMessageSource(f.db,f.items[0].id,0,rows[1].message_id,'改绑',unknownFacts)).toThrow('SOURCE_RELATION_CONFLICT')
     expect(listItemMessageSources(f.db,f.items[0].id)).toEqual(rows)
     expect(()=>f.db.prepare('DELETE FROM messages WHERE id=?').run(rows[0].message_id)).toThrow()
     expect(()=>f.db.prepare('DELETE FROM batch_import_items WHERE id=?').run(f.items[0].id)).toThrow()
@@ -150,7 +156,7 @@ describe('消息来源出现与 canonical 分离',()=>{
   it('已有关系指向不同 canonical 时，导入事务失败关闭',async()=>{
     const f=fixture();await prepare(f,0,messages([1]));await prepare(f,1,messages([2]));await importSavedBatchItem(f.db,f.path,f.items[0].id)
     const first=listItemMessageSources(f.db,f.items[0].id)[0]
-    bindItemMessageSource(f.db,f.items[1].id,0,first.message_id,'既有绑定')
+    expect(bindItemMessageSource(f.db,f.items[1].id,0,first.message_id,'既有绑定',unknownFacts)).toBe(true)
     const result=ingestWorkBuddyMessages(f.db,{messages:messages([2])},0,{batchItemId:f.items[1].id,sourceBatchId:`workbuddy:item:${f.items[1].id}`})
     expect(result.status).toBe('failed');expect(result.errors[0]).toContain('SOURCE_RELATION_CONFLICT')
     expect(count(f.db,'messages')).toBe(1);expect(count(f.db,'messages_fts')).toBe(1)
@@ -198,7 +204,7 @@ describe('消息来源出现与 canonical 分离',()=>{
     const workerModule=join(f.directory,'source-worker.mjs');writeFileSync(workerModule,module.code)
     const barrier=new SharedArrayBuffer(4)
     const run=(messageId:string)=>new Promise<{ok:boolean;error?:string}>((resolve,reject)=>{
-      const worker=new Worker(`const {workerData,parentPort}=require('node:worker_threads');const {DatabaseSync}=require('node:sqlite');const {pathToFileURL}=require('node:url');(async()=>{const {bindItemMessageSource}=await import(pathToFileURL(workerData.module).href);const db=new DatabaseSync(workerData.path);db.exec('PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000');parentPort.postMessage({ready:true});Atomics.wait(new Int32Array(workerData.barrier),0,0);try{bindItemMessageSource(db,workerData.item,0,workerData.message,'并发');parentPort.postMessage({ok:true})}catch(error){parentPort.postMessage({ok:false,error:error.message})}finally{db.close()}})()`,{eval:true,workerData:{module:workerModule,path:f.path,item:f.items[1].id,message:messageId,barrier}})
+      const worker=new Worker(`const {workerData,parentPort}=require('node:worker_threads');const {DatabaseSync}=require('node:sqlite');const {pathToFileURL}=require('node:url');(async()=>{const {bindItemMessageSource}=await import(pathToFileURL(workerData.module).href);const db=new DatabaseSync(workerData.path);db.exec('PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000');parentPort.postMessage({ready:true});Atomics.wait(new Int32Array(workerData.barrier),0,0);try{bindItemMessageSource(db,workerData.item,0,workerData.message,'并发',workerData.facts);parentPort.postMessage({ok:true})}catch(error){parentPort.postMessage({ok:false,error:error.message})}finally{db.close()}})()`,{eval:true,workerData:{module:workerModule,path:f.path,item:f.items[1].id,message:messageId,barrier,facts:unknownFacts}})
       worker.on('message',value=>{if(value.ready){ready++;if(ready===2){Atomics.store(new Int32Array(barrier),0,1);Atomics.notify(new Int32Array(barrier),0)}}else resolve(value)})
       worker.on('error',reject)
       worker.on('exit',code=>{if(code!==0)reject(new Error(`并发工作线程异常退出：${code}`))})

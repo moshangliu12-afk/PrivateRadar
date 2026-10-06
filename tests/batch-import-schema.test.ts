@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { initializeDatabase } from '../src/main/schema'
 import { importChatContent } from '../src/main/import/importer'
+import { prepareSchemaV6Fixture } from './schema-v6-fixture'
 import {
   attachImportJobToBatchItem,
   createBatchImportItem,
@@ -133,11 +134,12 @@ describe('alpha.15 批量数据模型', () => {
       snapshot_relative_path = ?, snapshot_sha256 = ?, source_batch_id = ?, effective_job_id = ? WHERE id = ?`
     ).run(`evidence/${item.id}/original.zip`, `evidence/${item.id}/messages.json`, snapshotHash,
       db.prepare('SELECT source_batch_id FROM messages').get()!.source_batch_id, job.jobId, item.id)
+    prepareSchemaV6Fixture(db)
     db.exec('ALTER TABLE batch_import_items DROP COLUMN evidence_source_kind; PRAGMA user_version = 3')
     const before = db.prepare('SELECT * FROM batch_import_items').get()
     initializeDatabase(db)
     initializeDatabase(db)
-    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 6 })
+    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 7 })
     expect(db.prepare('SELECT * FROM batch_import_items').get()).toEqual({ ...before, evidence_source_kind: 'zip' })
     expect(db.prepare('SELECT COUNT(*) AS count FROM messages').get()).toEqual({ count: 1 })
     expect(db.prepare('SELECT COUNT(*) AS count FROM messages_fts').get()).toEqual({ count: 1 })
@@ -150,14 +152,14 @@ describe('alpha.15 批量数据模型', () => {
     const session = createBatchImportSession(db, 'workbuddy')
     const item = createBatchImportItem(db, session.id, 0)
     expect(item.evidence_source_kind).toBe('zip')
-    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 6 })
+    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 7 })
     db.prepare("UPDATE batch_import_items SET evidence_source_kind = 'directory' WHERE id = ?").run(item.id)
     expect(() => db.prepare("UPDATE batch_import_items SET evidence_source_kind = 'invalid' WHERE id = ?").run(item.id)).toThrow()
     initializeDatabase(db)
     expect(listBatchImportItems(db, session.id)[0].evidence_source_kind).toBe('directory')
-    db.exec('PRAGMA user_version = 7')
+    db.exec('PRAGMA user_version = 8')
     initializeDatabase(db)
-    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 7 })
+    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 8 })
   })
 
   it('升级隔离 alpha.14 数据库并在重新打开后保留旧消息、任务、批次和全文索引', () => {
@@ -172,7 +174,7 @@ describe('alpha.15 批量数据模型', () => {
     databases.push(upgraded)
     initializeDatabase(upgraded)
     initializeDatabase(upgraded)
-    expect(upgraded.prepare('PRAGMA user_version').get()).toEqual({ user_version: 6 })
+    expect(upgraded.prepare('PRAGMA user_version').get()).toEqual({ user_version: 7 })
     expect(upgraded.prepare('SELECT id, source_batch_id, source_position, fingerprint FROM messages').get()).toEqual({
       id: 'legacy-message', source_batch_id: 'legacy-batch', source_position: 0, fingerprint: 'legacy-fingerprint'
     })
@@ -219,7 +221,7 @@ describe('alpha.15 批量数据模型', () => {
     expect(listBatchImportItems(db, session.id)[1].evidence_status).toBe('error')
   })
 
-  it('结构版本 1 升至 6 后保留已有附件项和任务关联', () => {
+  it('结构版本 1 升至 7 后保留已有附件项和任务关联', () => {
     const db = database()
     const session = createBatchImportSession(db, 'workbuddy')
     const batchItem = createBatchImportItem(db, session.id, 0)
@@ -228,10 +230,11 @@ describe('alpha.15 批量数据模型', () => {
     ]))
     attachImportJobToBatchItem(db, job.jobId, batchItem.id)
     recordSnapshot(db, batchItem.id)
+    prepareSchemaV6Fixture(db)
     db.exec('PRAGMA user_version = 1')
 
     initializeDatabase(db)
-    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 6 })
+    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 7 })
     expect(listBatchImportItems(db, session.id).map((value) => value.id)).toEqual([batchItem.id])
     expect(listBatchItemJobs(db, batchItem.id).map((value) => value.id)).toEqual([job.jobId])
     db.prepare("UPDATE batch_import_items SET evidence_status = 'error' WHERE id = ?").run(batchItem.id)
@@ -239,14 +242,15 @@ describe('alpha.15 批量数据模型', () => {
     expect(db.prepare('SELECT effective_job_id FROM batch_import_items WHERE id = ?').get(batchItem.id)).toEqual({ effective_job_id: null })
   })
 
-  it('结构版本 2 升至 6 后增加有效任务指针且保留原有记录', () => {
+  it('结构版本 2 升至 7 后增加有效任务指针且保留原有记录', () => {
     const db = database()
     const session = createBatchImportSession(db, 'workbuddy')
     const item = createBatchImportItem(db, session.id, 0)
+    prepareSchemaV6Fixture(db)
     db.exec('ALTER TABLE batch_import_items DROP COLUMN effective_job_id')
     db.exec('PRAGMA user_version = 2')
     initializeDatabase(db)
-    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 6 })
+    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 7 })
     expect(db.prepare('SELECT id, effective_job_id FROM batch_import_items WHERE id = ?').get(item.id)).toEqual({
       id: item.id, effective_job_id: null
     })

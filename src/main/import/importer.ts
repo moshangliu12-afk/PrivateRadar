@@ -7,6 +7,7 @@ import type { ImportResult, MetadataProvenance } from '../../shared/models'
 import { fileTypeFromName, parseByFileType, type FileType } from './adapters'
 import { normalizeMessage, type NormalizedMessage } from './normalize'
 import { bindItemMessageSource } from '../batch-import/message-sources'
+import { registerKeywordRadarRun } from '../keyword-radar/runs'
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024
 const MAX_REPORTED_ERRORS = 20
@@ -93,6 +94,7 @@ export function importChatContent(
     let sqliteWriteAndFtsMs = 0
     db.exec('BEGIN IMMEDIATE')
     try {
+      const newSourcePositions: number[] = []
       const statements = prepareStatements(db)
       const cacheStarted = performance.now()
       const caches = prepareCaches(db)
@@ -112,13 +114,17 @@ export function importChatContent(
             duplicateCount += 1
           } else if (enrichExistingMessage(statements, caches, existing, item, startedAt)) updatedCount += 1
           else duplicateCount += 1
-          if (options.batchItemId) bindItemMessageSource(db, options.batchItemId, item.message.sourcePosition, existing.id, startedAt)
+          if (options.batchItemId && bindItemMessageSource(db, options.batchItemId, item.message.sourcePosition, existing.id, startedAt, item.message)) {
+            newSourcePositions.push(item.message.sourcePosition)
+          }
           sqliteWriteAndFtsMs += performance.now() - updateStarted
           continue
         }
         const insertStarted = performance.now()
         insertNormalizedMessage(statements, caches, item, jobId, startedAt)
-        if (options.batchItemId) bindItemMessageSource(db, options.batchItemId, item.message.sourcePosition, item.message.messageId, startedAt)
+        if (options.batchItemId && bindItemMessageSource(db, options.batchItemId, item.message.sourcePosition, item.message.messageId, startedAt, item.message)) {
+          newSourcePositions.push(item.message.sourcePosition)
+        }
         sqliteWriteAndFtsMs += performance.now() - insertStarted
         importedCount += 1
       }
@@ -137,6 +143,7 @@ export function importChatContent(
         errors: errors.slice(0, MAX_REPORTED_ERRORS)
       }
       const finishStarted = performance.now()
+      if (options.batchItemId) registerKeywordRadarRun(db, options.batchItemId, jobId, newSourcePositions, startedAt)
       finishJob(db, result, parsed.totalCount)
       db.exec('COMMIT')
       importJobMs += performance.now() - finishStarted
