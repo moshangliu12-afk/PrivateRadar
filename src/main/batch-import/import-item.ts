@@ -26,6 +26,7 @@ export function claimBatchItemForFirstImport(db: DatabaseSync, batchItemId: stri
     SET status = 'in_progress', error_summary = NULL, updated_at = ?, completed_at = NULL
     WHERE id = ? AND status IN ('pending', 'preparing') AND effective_job_id IS NULL
       AND NOT EXISTS (SELECT 1 FROM import_jobs WHERE batch_item_id = batch_import_items.id)
+      AND NOT EXISTS (SELECT 1 FROM batch_item_message_sources WHERE batch_item_id = batch_import_items.id)
       AND NOT EXISTS (
         SELECT 1 FROM messages WHERE source_batch_id = batch_import_items.source_batch_id
       )

@@ -204,7 +204,7 @@ describe('alpha.15 双附件会话编排', () => {
     expect(count(f.db, 'messages')).toBe(before)
   })
 
-  it('仅发生补充更新的成功任务也保持成功', async () => {
+  it('跨来源强身份重复不补写旧时间，仍通过来源关系保持成功', async () => {
     const f = fixture()
     for (const item of [f.a, f.b]) {
       const sourceId = `updated:${item.id}`
@@ -217,9 +217,11 @@ describe('alpha.15 双附件会话编排', () => {
           timestamp: '2026-09-26T10:00:00+08:00', timestamp_source: 'source_native' }
       ] })
     }
+    const before = f.db.prepare('SELECT * FROM messages ORDER BY id').all()
     const result = await executeBatchImportSession(f.db, f.databasePath, f.session.id)
-    expect(result).toMatchObject({ status: 'success', imported_total: 0, updated_total: 2,
+    expect(result).toMatchObject({ status: 'success', imported_total: 0, duplicate_total: 2, updated_total: 0,
       failed_attachments: 0, attention_required_attachments: 0 })
+    expect(f.db.prepare('SELECT * FROM messages ORDER BY id').all()).toEqual(before)
   })
 
   it('中断后只恢复尚未开始的第二附件，第一附件任务和消息保持不变', async () => {

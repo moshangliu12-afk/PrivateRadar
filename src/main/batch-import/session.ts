@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite'
+import { countItemMessageSources } from './message-sources'
 import { loadStructuredSnapshot, verifyBatchEvidence } from './evidence'
 import { BatchItemClaimError, importSavedBatchItem } from './import-item'
 import { listBatchImportItems, type BatchImportItem, type BatchImportSession, type BatchImportStatus } from './repository'
@@ -7,6 +8,7 @@ export type BatchItemOutcome = 'success' | 'failed_zero_write' | 'needs_attentio
 
 interface JobRow {
   id: string
+  recognized_count: number
   status: string
   imported_count: number
   duplicate_count: number
@@ -235,7 +237,7 @@ export async function getBatchImportSessionSummary(
     let outcome: BatchItemOutcome
     if (item.status === 'pending' || item.status === 'preparing') outcome = 'pending'
     else if (item.status === 'in_progress') outcome = 'processing'
-    else if (item.status === 'success' && job?.status === 'success' && indexed === written && written >= job.imported_count) outcome = 'success'
+    else if (item.status === 'success' && job?.status === 'success' && indexed === written && written === job.recognized_count && written >= job.imported_count) outcome = 'success'
     else if (item.status === 'failed' && indexed === 0 && written === 0 &&
       (!job || (job.status === 'failed' && job.imported_count === 0 && job.updated_count === 0)) &&
       (!historyExists || job !== null)) outcome = 'failed_zero_write'
@@ -276,23 +278,15 @@ function jobIds(db: DatabaseSync, itemId: string): string[] {
 
 function loadJob(db: DatabaseSync, jobId: string, itemId: string): JobRow | null {
   return db.prepare(`
-    SELECT id, status, imported_count, duplicate_count, updated_count, error_count
+    SELECT id, status, recognized_count, imported_count, duplicate_count, updated_count, error_count
     FROM import_jobs WHERE id = ? AND batch_item_id = ?
   `).get(jobId, itemId) as unknown as JobRow | null
 }
 
 function linkedMessageCount(db: DatabaseSync, item: BatchImportItem): number {
-  return (db.prepare(`
-    SELECT COUNT(*) AS count FROM messages m
-    WHERE (m.source_batch_id = ? AND ? IS NOT NULL)
-      OR m.import_job_id IN (SELECT id FROM import_jobs WHERE batch_item_id = ?)
-  `).get(item.source_batch_id, item.source_batch_id, item.id) as { count: number }).count
+  return countItemMessageSources(db, item.id)
 }
 
 function linkedIndexedMessageCount(db: DatabaseSync, item: BatchImportItem): number {
-  return (db.prepare(`
-    SELECT COUNT(*) AS count FROM messages m JOIN messages_fts f ON f.rowid = m.rowid
-    WHERE (m.source_batch_id = ? AND ? IS NOT NULL)
-      OR m.import_job_id IN (SELECT id FROM import_jobs WHERE batch_item_id = ?)
-  `).get(item.source_batch_id, item.source_batch_id, item.id) as { count: number }).count
+  return countItemMessageSources(db, item.id, true)
 }

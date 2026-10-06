@@ -6,6 +6,7 @@ import type { DatabaseSync, StatementSync } from 'node:sqlite'
 import type { ImportResult, MetadataProvenance } from '../../shared/models'
 import { fileTypeFromName, parseByFileType, type FileType } from './adapters'
 import { normalizeMessage, type NormalizedMessage } from './normalize'
+import { bindItemMessageSource } from '../batch-import/message-sources'
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024
 const MAX_REPORTED_ERRORS = 20
@@ -90,7 +91,7 @@ export function importChatContent(
     let updatedCount = 0
     let dedupeMs = 0
     let sqliteWriteAndFtsMs = 0
-    db.exec('BEGIN')
+    db.exec('BEGIN IMMEDIATE')
     try {
       const statements = prepareStatements(db)
       const cacheStarted = performance.now()
@@ -102,13 +103,22 @@ export function importChatContent(
         dedupeMs += performance.now() - dedupeStarted
         if (existing) {
           const updateStarted = performance.now()
-          if (enrichExistingMessage(statements, caches, existing, item, startedAt)) updatedCount += 1
+          const crossItemSource = options.batchItemId && existing.source_batch_id !== item.message.sourceBatchId
+          if (options.batchItemId && existing.content !== item.message.content) {
+            throw new Error('SOURCE_IDENTITY_CONFLICT: 来源身份与正文不一致')
+          }
+          // 强身份跨附件复用只增加来源，不补全或覆盖已有 canonical 的字段。
+          if (crossItemSource) {
+            duplicateCount += 1
+          } else if (enrichExistingMessage(statements, caches, existing, item, startedAt)) updatedCount += 1
           else duplicateCount += 1
+          if (options.batchItemId) bindItemMessageSource(db, options.batchItemId, item.message.sourcePosition, existing.id, startedAt)
           sqliteWriteAndFtsMs += performance.now() - updateStarted
           continue
         }
         const insertStarted = performance.now()
         insertNormalizedMessage(statements, caches, item, jobId, startedAt)
+        if (options.batchItemId) bindItemMessageSource(db, options.batchItemId, item.message.sourcePosition, item.message.messageId, startedAt)
         sqliteWriteAndFtsMs += performance.now() - insertStarted
         importedCount += 1
       }
@@ -216,6 +226,8 @@ interface ImportCaches {
 
 interface ExistingMessage {
   id: string
+  content: string
+  source_batch_id: string
   platform: string
   conversation_id: string
   conversation_name: string
@@ -266,7 +278,7 @@ function prepareStatements(db: DatabaseSync): ImportStatements {
 
 function prepareCaches(db: DatabaseSync): ImportCaches {
   const messages = db.prepare(`
-    SELECT id, platform, conversation_id, COALESCE(conversation_name, '') AS conversation_name, conversation_name_source,
+    SELECT id, content, source_batch_id, platform, conversation_id, COALESCE(conversation_name, '') AS conversation_name, conversation_name_source,
            sender_id, COALESCE(sender_name, '') AS sender_name, sender_name_source,
            COALESCE(timestamp, '') AS timestamp, timestamp_source,
            content_source, source_message_id, stable_identity, fingerprint
@@ -432,6 +444,8 @@ function toExistingMessage(item: NormalizedMessage): ExistingMessage {
   const message = item.message
   return {
     id: message.messageId,
+    content: message.content,
+    source_batch_id: message.sourceBatchId,
     platform: message.platform,
     conversation_id: message.conversationId,
     conversation_name: message.conversationName,

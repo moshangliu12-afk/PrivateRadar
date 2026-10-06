@@ -1,4 +1,5 @@
 import { reliableTimestampSql } from '../../time-semantics'
+import { batchMessageMembershipSql } from '../../batch-import/message-sources'
 import type { DatabaseSync } from 'node:sqlite'
 import type { MetadataProvenance } from '../../../shared/models'
 import type { WorkBuddyCompletenessLevel, WorkBuddyIngestInput } from './validation'
@@ -112,8 +113,8 @@ function batchMessageStats(db: DatabaseSync, sourceBatchId: string): BatchStats 
       SUM(CASE WHEN conversation_name_source <> 'unknown' AND conversation_name IS NOT NULL AND conversation_name <> '' THEN 1 ELSE 0 END) AS conversation_known,
       SUM(CASE WHEN sender_name_source IN ('source_native', 'user_supplied') AND sender_name IS NOT NULL AND sender_name <> '' THEN 1 ELSE 0 END) AS sender_known,
       SUM(CASE WHEN ${reliableTimestampSql()} THEN 1 ELSE 0 END) AS timestamp_known
-    FROM messages WHERE source_batch_id = ?
-  `).get(sourceBatchId) as unknown as BatchStatsRow
+    FROM messages m WHERE ${batchMessageMembershipSql()}
+  `).get(sourceBatchId, sourceBatchId, sourceBatchId) as unknown as BatchStatsRow
   return toBatchStats(row)
 }
 

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -63,9 +63,16 @@ describe('归集结构版本 5 隔离迁移', () => {
       { conversation_name: '旧群', sender_name: '乙', timestamp: '2026-10-04 09:01', content: 'legacyfts 主动安全' }
     ]))
     attachImportJobToBatchItem(db, job.jobId, item.id)
-    db.prepare(`UPDATE batch_import_items SET evidence_relative_path = 'evidence/旧附件/original.zip',
-      snapshot_relative_path = 'evidence/旧附件/messages.json', snapshot_sha256 = ?,
-      evidence_status = 'available', effective_job_id = ? WHERE id = ?`).run('a'.repeat(64), job.jobId, item.id)
+    const snapshot = Buffer.from(JSON.stringify({ schema_version: 1, input: { messages:
+      db.prepare('SELECT content, source_position FROM messages ORDER BY source_position').all() } }))
+    mkdirSync(join(directory, 'evidence', item.id), { recursive: true })
+    writeFileSync(join(directory, 'evidence', item.id, 'messages.json'), snapshot)
+    db.prepare(`UPDATE batch_import_items SET evidence_relative_path = ?,
+      snapshot_relative_path = ?, snapshot_sha256 = ?, source_batch_id = ?,
+      evidence_status = 'available', effective_job_id = ? WHERE id = ?`).run(
+      `evidence/${item.id}/original.zip`, `evidence/${item.id}/messages.json`,
+      createHash('sha256').update(snapshot).digest('hex'),
+      db.prepare('SELECT source_batch_id FROM messages LIMIT 1').get()!.source_batch_id, job.jobId, item.id)
     const evidencePath = join(directory, '隔离证据.zip')
     writeFileSync(evidencePath, Buffer.from('仅用于隔离迁移验证的合成证据'))
     const evidenceBefore = createHash('sha256').update(readFileSync(evidencePath)).digest('hex')
@@ -78,7 +85,7 @@ describe('归集结构版本 5 隔离迁移', () => {
     const ftsBefore = db.prepare("SELECT rowid FROM messages_fts WHERE messages_fts MATCH 'legacyfts' ORDER BY rowid").all()
 
     migrateBatchImportSchema(db)
-    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 5 })
+    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 6 })
     expect(tableFingerprints(db, tables)).toEqual(before)
     expect(db.prepare('SELECT * FROM batch_import_sessions ORDER BY id').all())
       .toEqual(sessionsBefore.map((session) => ({ ...session, collection_id: null })))
@@ -95,10 +102,10 @@ describe('归集结构版本 5 隔离迁移', () => {
     healthy(db)
   })
 
-  it('全新数据库直接初始化版本 5，仅有五个归集字段、两种状态、可空外键与查询索引', () => {
+  it('全新数据库初始化版本 6，保留五个归集字段、两种状态、可空外键与查询索引', () => {
     const db = database()
     initializeDatabase(db)
-    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 5 })
+    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 6 })
     expect(db.prepare('PRAGMA table_info(collections)').all().map((column) => [column.name, column.type, column.notnull, column.pk]))
       .toEqual([['id', 'TEXT', 0, 1], ['display_name', 'TEXT', 1, 0], ['status', 'TEXT', 1, 0],
         ['created_at', 'TEXT', 1, 0], ['completed_at', 'TEXT', 0, 0]])
