@@ -89,7 +89,7 @@ describe('WorkBuddy 微信导入最短路径', () => {
   })
 
   it('升级只改变内容版本，不改变正式 Connector ID 或启动配置', () => {
-    expect(metadata).toMatchObject({ source: 'privateradar-workbuddy', version: '0.2.0-alpha.16.1' })
+    expect(metadata).toMatchObject({ source: 'privateradar-workbuddy', version: '0.2.0-alpha.16.2' })
     expect(mcpConfig).toContain('privateradar-workbuddy')
     expect(mcpConfig).toContain('dist/server.mjs')
     expect(mcpConfig).not.toContain('privateradar-local-spike')
