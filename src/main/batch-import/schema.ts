@@ -1,9 +1,10 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { migrateMessageSourceSchema } from './message-source-migration'
 import { migrateKeywordRadarSchema } from '../keyword-radar/schema'
+import { migrateCommitmentSchema } from '../commitment/schema'
 
 // 旧版数据库没有显式版本号，user_version = 0 对应本次迁移前的结构。
-const BATCH_IMPORT_SCHEMA_VERSION = 7
+const BATCH_IMPORT_SCHEMA_VERSION = 8
 
 export function migrateBatchImportSchema(db: DatabaseSync): void {
   const row = db.prepare('PRAGMA user_version').get() as { user_version: number }
@@ -15,6 +16,7 @@ export function migrateBatchImportSchema(db: DatabaseSync): void {
   if (row.user_version < 5) migrateCollections(db)
   if (row.user_version < 6) migrateMessageSourceSchema(db)
   if (row.user_version < 7) migrateKeywordRadarSchema(db)
+  if (row.user_version < 8) migrateCommitmentSchema(db)
 }
 
 function migrateCollections(db: DatabaseSync): void {

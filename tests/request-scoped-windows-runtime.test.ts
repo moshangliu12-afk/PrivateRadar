@@ -159,7 +159,7 @@ describe('单请求共享执行载体，租约和原生句柄仍独立', () => {
       expect(['messages', 'messages_fts', 'messages_fts_docsize', 'import_jobs',
         'message_import_batches', 'batch_import_sessions', 'batch_import_items'].map((table) => count(f.db, table)))
         .toEqual([12, 12, 12, 2, 2, 1, 2])
-      expect(f.db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 7 })
+      expect(f.db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 8 })
       expect(f.db.prepare('PRAGMA integrity_check').get()).toEqual({ integrity_check: 'ok' })
       expect(f.db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
       // 只删除本测试创建且已确认位于隔离根目录下的源，验证持久证据可独立恢复。

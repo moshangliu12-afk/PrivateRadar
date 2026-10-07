@@ -12,10 +12,11 @@ import { prepareSchemaV6Fixture } from './schema-v6-fixture'
 
 afterEach(cleanupRadarFixtures)
 const tables = ['keyword_groups', 'keyword_terms', 'keyword_hits', 'keyword_radar_runs']
+const laterTables = ['commitment_candidates', 'commitment_extractor_runs']
 const hash = (bytes: string | Buffer) => createHash('sha256').update(bytes).digest('hex')
 function fingerprints(db: DatabaseSync) {
   return Object.fromEntries(db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all()
-    .filter(row => !tables.includes(String(row.name))).map(row => {
+    .filter(row => ![...tables, ...laterTables].includes(String(row.name))).map(row => {
       const table = String(row.name)
       const columns = table === 'batch_item_message_sources' ? 'batch_item_id,source_position,message_id,created_at' : '*'
       const rows = db.prepare(`SELECT ${columns} FROM "${table}"`).all()
@@ -64,7 +65,7 @@ describe('结构版本 7 仅建立持久化基础', () => {
     const f = legacyFixture(), before = fingerprints(f.db), evidence = f.paths.map(path => hash(readFileSync(path)))
     const bindings = f.db.prepare('SELECT * FROM batch_item_message_sources ORDER BY batch_item_id,source_position').all()
     migrateBatchImportSchema(f.db)
-    expect(f.db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 7 })
+    expect(f.db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 8 })
     expect(fingerprints(f.db)).toEqual(before)
     expect(radarCount(f.db, 'messages')).toBe(294); expect(radarCount(f.db, 'messages_fts')).toBe(294)
     expect(f.db.prepare("SELECT count(*) AS n FROM messages_fts WHERE messages_fts MATCH 'legacyradarfts'").get()).toEqual({ n: 294 })
@@ -86,8 +87,8 @@ describe('结构版本 7 仅建立持久化基础', () => {
     const before = schema(f.db), data = fingerprints(f.db)
     initializeDatabase(f.db); initializeDatabase(f.db)
     expect(schema(f.db)).toEqual(before); expect(fingerprints(f.db)).toEqual(data)
-    f.db.exec('PRAGMA user_version=8'); initializeDatabase(f.db)
-    expect(f.db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 8 })
+    f.db.exec('PRAGMA user_version=9'); initializeDatabase(f.db)
+    expect(f.db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 9 })
   })
   it('迁移中途失败整体回滚新增列、表和版本，不丢旧来源', () => {
     const f = legacyFixture(), before = fingerprints(f.db)

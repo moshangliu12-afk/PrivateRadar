@@ -1,7 +1,9 @@
 import type { DatabaseSync } from 'node:sqlite'
+import { prepareSchemaV7Fixture } from './schema-v7-fixture'
 
 /** 仅为旧版本迁移测试恢复真实四列结构；拒绝删除任何已有 Radar 测试数据。 */
 export function prepareSchemaV6Fixture(db: DatabaseSync): void {
+  prepareSchemaV7Fixture(db)
   for (const table of ['keyword_hits', 'keyword_radar_runs', 'keyword_terms', 'keyword_groups']) {
     if (Number(db.prepare(`SELECT count(*) AS n FROM ${table}`).get()!.n) !== 0) throw new Error('不能丢弃已有 Radar 测试数据')
     db.exec(`DROP TABLE ${table}`)

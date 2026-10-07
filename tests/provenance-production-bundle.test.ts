@@ -17,7 +17,7 @@ it('真实生产主进程入口可执行双向来源查询，不注册额外通�
   const db = new DatabaseSync(databasePath)
   try {
     initializeDatabase(db)
-    expect(db.prepare('PRAGMA user_version').get()!.user_version).toBe(7)
+    expect(db.prepare('PRAGMA user_version').get()!.user_version).toBe(8)
     const session = createBatchImportSession(db, 'workbuddy')
     const items = [createBatchImportItem(db, session.id, 0), createBatchImportItem(db, session.id, 1)]
     for (const [ordinal, numbers] of [[0, [1, 2]], [1, [2]]] as const) {
