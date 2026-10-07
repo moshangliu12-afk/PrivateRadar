@@ -13,6 +13,7 @@ import { prepareWorkBuddyConnector, runtimeDataDirectory, writeOperationalLog } 
 import { DashboardSummaryCache } from './dashboard-cache'
 import { registerCollectionIpc } from './collections/desktop'
 import { schedulePendingKeywordRadarRuns } from './keyword-radar/recovery'
+import { schedulePendingCommitmentExtractorRuns } from './commitment/recovery'
 import { registerKeywordRadarIpc } from './keyword-radar/desktop'
 import { openKeywordHitEvidence } from './keyword-radar/evidence-navigation'
 // 主进程内部仓储入口：调用方显式传入数据库，不新增渲染层通信或公开工具。
@@ -177,6 +178,7 @@ app.whenReady().then(() => {
   })
   createWindow()
   schedulePendingKeywordRadarRuns(db)
+  schedulePendingCommitmentExtractorRuns(db)
 
   app.once('before-quit', () => {
     writeOperationalLog(logDirectory, 'APP_STOPPED')

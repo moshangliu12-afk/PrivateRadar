@@ -11,6 +11,8 @@ import { safeAbsolutePath, WindowsPathLease, withRequestScopedWindowsPathLeaseRu
 import { executeBatchImportSession } from '../../batch-import/session'
 import { schedulePendingKeywordRadarRuns } from '../../keyword-radar/recovery'
 import { logKeywordRadarFailure } from '../../keyword-radar/processor'
+import { schedulePendingCommitmentExtractorRuns } from '../../commitment/recovery'
+import { logCommitmentFailure } from '../../commitment/processor'
 import { gateWorkBuddyBatchCurrentInput, WorkBuddyCurrentInputError } from '../../import/workbuddy-current-input'
 import { workBuddyBatchIngestSchema, workBuddyBatchResultSchema, workBuddyCurrentContextBatchSchema,
   workBuddyIngestSchema, type WorkBuddyIngestInput, type WorkBuddyBatchIngestInput, type WorkBuddyBatchResult } from './validation'
@@ -150,6 +152,8 @@ function scheduleRadarAfterImport(db: DatabaseSync, output: WorkBuddyBatchResult
   // 派生触发本身也隔离异常；核心成功或部分成功结果不受影响。
   try { schedulePendingKeywordRadarRuns(db, output.items.map(item => item.item_id)) }
   catch { logKeywordRadarFailure('RECOVERY_FAILED') }
+  try { schedulePendingCommitmentExtractorRuns(db, output.items.map(item => item.item_id)) }
+  catch { logCommitmentFailure('RECOVERY_FAILED') }
 }
 
 interface PreparedBatchAttachment {

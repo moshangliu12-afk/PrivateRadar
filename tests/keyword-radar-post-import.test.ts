@@ -25,7 +25,7 @@ function prepared() {
   return { ...f, root, attachments, options: { databasePath: f.path, chatHistoryRoot: root } }
 }
 function coreState(f: ReturnType<typeof prepared>) {
-  return f.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'keyword_%' ORDER BY name")
+  return f.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'keyword_%' AND name NOT LIKE 'commitment_%' ORDER BY name")
     .all().map(row => String(row.name))
     .map(table => [table, f.db.prepare(`SELECT * FROM ${table}`).all().map(row => JSON.stringify(row)).sort()])
 }

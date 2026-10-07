@@ -5,6 +5,8 @@ export const commitmentVersion = '承诺规则测试版本一'
 export function commitmentFixture() {
   const f = radarFixture()
   const jobs = f.items.map((_item, index) => ingestRadarItem(f, index).jobId)
+  // 持久化单元测试自行登记规则版本；移除导入接缝登记的空派生任务，保留核心数据。
+  f.db.exec('DELETE FROM commitment_extractor_runs')
   return { ...f, jobs }
 }
 export function registerFixtureRun(f: ReturnType<typeof commitmentFixture>, index = 0, positions = [0, 1], version = commitmentVersion) {

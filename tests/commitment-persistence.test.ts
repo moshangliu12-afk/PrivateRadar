@@ -39,6 +39,7 @@ describe('来源锚定的承诺候选项', () => {
       sender_name_source: 'user_supplied' as const, timestamp: '2026-10-07T10:00:00+08:00',
       timestamp_source: 'user_supplied' as const, conversation_name: '另一个来源会话' }))
     const secondJob = ingestRadarItem(fixture, 1, secondMessages).jobId
+    fixture.db.exec('DELETE FROM commitment_extractor_runs')
     const f = { ...fixture, jobs: [firstJob, secondJob] }
     registerFixtureRun(f, 0); registerFixtureRun(f, 1)
     const first = createCommitmentCandidate(f.db, candidateInput(f, 0))

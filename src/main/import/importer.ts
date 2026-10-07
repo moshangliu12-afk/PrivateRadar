@@ -8,6 +8,8 @@ import { fileTypeFromName, parseByFileType, type FileType } from './adapters'
 import { normalizeMessage, type NormalizedMessage } from './normalize'
 import { bindItemMessageSource } from '../batch-import/message-sources'
 import { registerKeywordRadarRun } from '../keyword-radar/runs'
+import { registerCommitmentExtractorRun } from '../commitment/runs'
+import { COMMITMENT_RULE_VERSION } from '../commitment/matcher'
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024
 const MAX_REPORTED_ERRORS = 20
@@ -144,6 +146,10 @@ export function importChatContent(
       }
       const finishStarted = performance.now()
       if (options.batchItemId) registerKeywordRadarRun(db, options.batchItemId, jobId, newSourcePositions, startedAt)
+      // 只登记结构八启用后本次真正新增的来源；旧结构迁移测试不补建任务。
+      if (options.batchItemId && newSourcePositions.length > 0 && Number(db.prepare('PRAGMA user_version').get()!.user_version) >= 8) {
+        registerCommitmentExtractorRun(db, options.batchItemId, jobId, COMMITMENT_RULE_VERSION, newSourcePositions, startedAt)
+      }
       finishJob(db, result, parsed.totalCount)
       db.exec('COMMIT')
       importJobMs += performance.now() - finishStarted
