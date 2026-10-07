@@ -64,7 +64,7 @@ export function addDesktopKeywordTerm(db: DatabaseSync, groupId: unknown, value:
     return result
   } catch (reason) { db.exec('ROLLBACK'); throw reason }
 }
-interface OccurrenceRow {
+export interface OccurrenceRow {
   batch_item_id: string; source_position: number; message_id: string; content: string | null
   source_sender_name: string | null; source_timestamp: string | null; source_timestamp_source: string | null
   source_conversation_name: string | null
@@ -79,7 +79,7 @@ function chatTime(value: string | null, source: string | null): string | null {
   if (!Number.isFinite(day.getTime()) || day.toISOString().slice(0, 10) !== date) return null
   return new Date(time).toISOString()
 }
-function occurrence(row: OccurrenceRow): KeywordOccurrenceView {
+export function occurrence(row: OccurrenceRow): KeywordOccurrenceView {
   if (typeof row.content !== 'string') throw new KeywordRadarDesktopError('HIT_UNAVAILABLE')
   return { batchItemId: row.batch_item_id, sourcePosition: row.source_position, messageId: row.message_id, body: row.content,
     senderName: row.source_sender_name?.trim() ? row.source_sender_name : null,
@@ -123,13 +123,25 @@ export function getKeywordRadarStatus(db: DatabaseSync): KeywordRadarStatus {
 export function getKeywordHitSource(db: DatabaseSync, hitId: unknown): KeywordHitSource { return sourceView(getHit(db, hitId)) }
 export function getKeywordHitContext(db: DatabaseSync, hitId: unknown): KeywordHitContext {
   const hit = getHit(db, hitId)
+  return { hitId: hit.id, batchItemId: hit.batch_item_id,
+    entries: readItemOccurrenceContext(db, hit.batch_item_id, hit.source_position) }
+}
+/** 复用附件来源窗口；传入会话时先限制来源会话，未知会话仅保留中心。 */
+export function readItemOccurrenceContext(
+  db: DatabaseSync, batchItemId: string, sourcePosition: number, conversationName?: string | null
+): Array<KeywordOccurrenceView & { isCurrent: boolean }> {
+  let restriction = '', arguments_: Array<string | number> = [batchItemId]
+  if (conversationName !== undefined) {
+    restriction = conversationName?.trim() ? ' AND s.source_conversation_name=?' : ' AND s.source_position=?'
+    arguments_.push(conversationName?.trim() ? conversationName : sourcePosition)
+  }
   const rows = db.prepare(`SELECT s.*,m.content FROM batch_item_message_sources s
-    LEFT JOIN messages m ON m.id=s.message_id WHERE s.batch_item_id=? ORDER BY s.source_position`)
-    .all(hit.batch_item_id) as unknown as OccurrenceRow[]
-  const index = rows.findIndex(row => row.source_position === hit.source_position)
+    LEFT JOIN messages m ON m.id=s.message_id WHERE s.batch_item_id=?${restriction} ORDER BY s.source_position`)
+    .all(...arguments_) as unknown as OccurrenceRow[]
+  const index = rows.findIndex(row => row.source_position === sourcePosition)
   if (index < 0) throw new KeywordRadarDesktopError('HIT_UNAVAILABLE')
-  return { hitId: hit.id, batchItemId: hit.batch_item_id, entries: rows.slice(Math.max(0, index - 2), index + 3)
-    .map(row => ({ ...occurrence(row), isCurrent: row.source_position === hit.source_position })) }
+  return rows.slice(Math.max(0, index - 2), index + 3)
+    .map(row => ({ ...occurrence(row), isCurrent: row.source_position === sourcePosition }))
 }
 export async function retryFailedDesktopKeywordRuns(db: DatabaseSync): Promise<KeywordRetryResult> {
   const ids = db.prepare("SELECT batch_item_id FROM keyword_radar_runs WHERE status='failed' ORDER BY created_at,batch_item_id").all()

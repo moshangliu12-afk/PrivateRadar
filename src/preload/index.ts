@@ -1,9 +1,17 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { CollectionDesktopApi } from '../shared/collections'
 import type { KeywordRadarDesktopApi } from '../shared/keyword-radar'
+import type { CommitmentDesktopApi } from '../shared/commitment'
 import type { CandidateEvidence, ChatQueryResponse, ConnectorSetupResult, DailyBriefItem, DashboardSummary, FeedbackExportResult, FeedbackState, FirstUseStatus, ImportResult, MessageContext, TopicEvidence, TopicRadarSummary } from '../shared/models'
 
 contextBridge.exposeInMainWorld('privateRadar', {
+  commitmentCandidates: {
+    listCommitmentCandidates: () => ipcRenderer.invoke('commitment-candidates:list'),
+    confirmCommitmentCandidate: (id: string) => ipcRenderer.invoke('commitment-candidates:confirm', id),
+    ignoreCommitmentCandidate: (id: string) => ipcRenderer.invoke('commitment-candidates:ignore', id),
+    getCommitmentCandidateContext: (id: string) => ipcRenderer.invoke('commitment-candidates:context', id),
+    openCommitmentCandidateEvidence: (id: string) => ipcRenderer.invoke('commitment-candidates:open-evidence', id)
+  } satisfies CommitmentDesktopApi,
   keywordRadar: {
     listGroups: () => ipcRenderer.invoke('keyword-radar:groups'),
     createGroup: (name: string) => ipcRenderer.invoke('keyword-radar:create-group', name),
