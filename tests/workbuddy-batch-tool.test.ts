@@ -250,7 +250,7 @@ describe('alpha.15 WorkBuddy 双附件批量 Tool', () => {
     expect(count(f.db, 'import_jobs')).toBe(2)
   })
 
-  it('同一连接器中的旧单附件 Tool 继续工作且不创建批量会话', async () => {
+  it('同一连接器中的旧消息工具明确拒绝且没有持久化写入', async () => {
     const f = fixture()
     const server = createWorkBuddyMcpServer(f.db, undefined, f.options)
     const client = new Client({ name: 'legacy-tool-test', version: '0.1.0' })
@@ -261,9 +261,12 @@ describe('alpha.15 WorkBuddy 双附件批量 Tool', () => {
       const result = await client.callTool({ name: 'privateradar_ingest_messages', arguments: {
         messages: [{ content: '旧入口消息' }]
       } })
-      expect(result.structuredContent).toMatchObject({ imported_count: 1, status: 'success' })
-      expect(count(f.db, 'batch_import_sessions')).toBe(0)
-      expect(count(f.db, 'messages')).toBe(1)
+      expect(result.isError).toBe(true)
+      expect(result.structuredContent).toBeUndefined()
+      expect((result.content[0] as { text: string }).text).toContain('RAW_CURRENT_CONTEXT_REQUIRED')
+      for (const table of ['batch_import_sessions', 'batch_import_items', 'import_jobs', 'messages', 'messages_fts'] as const) {
+        expect(count(f.db, table)).toBe(0)
+      }
     } finally {
       await client.close()
       await server.close()

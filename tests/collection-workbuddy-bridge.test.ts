@@ -171,17 +171,17 @@ describe('显式归集到当前双卡导入桥接', () => {
     noSideEffects(f, before)
   })
 
-  it('无归集字段的单卡仍正常导入，不进入会话附件证据链', async () => {
+  it('旧消息单卡入口明确拒绝且没有持久化写入', async () => {
     const f = fixture()
+    const before = snapshot(f)
     await withClient(f, async (client) => {
       const response = await client.callTool({ name: 'privateradar_ingest_messages',
         arguments: { messages: [{ content: '隔离单卡原行为' }] } })
-      expect(response.isError).not.toBe(true)
-      expect(response.structuredContent).toMatchObject({ status: 'success', imported_count: 1 })
+      expect(response.isError).toBe(true)
+      expect(response.structuredContent).toBeUndefined()
+      expect((response.content[0] as { text: string }).text).toContain('RAW_CURRENT_CONTEXT_REQUIRED')
     })
-    expect(f.db.prepare('SELECT COUNT(*) AS count FROM batch_import_sessions').get()).toEqual({ count: 0 })
-    expect(f.db.prepare('SELECT COUNT(*) AS count FROM batch_import_items').get()).toEqual({ count: 0 })
-    expect(existsSync(join(f.data, 'evidence'))).toBe(false)
+    noSideEffects(f, before)
   })
 
   it('同一归集多次调用产生独立会话、附件、任务和证据，不引入跨附件去重', async () => {

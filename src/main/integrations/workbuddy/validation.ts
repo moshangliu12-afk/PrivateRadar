@@ -69,9 +69,9 @@ export const workBuddyCurrentContextSchema = z.strictObject({
 
 export const workBuddyCurrentContextBatchSchema = z.strictObject({
   mode: z.literal('current_context'),
-  collection_id: collectionIdSchema.optional().describe('仅转交本次用户明确提供的完整 Collection UUID；未提供时不猜测'),
+  collection_id: collectionIdSchema.optional().describe('仅双卡支持归集；只转交本次用户明确提供的完整 Collection UUID，单卡提供此字段必须拒绝'),
   contexts: z.array(workBuddyCurrentContextSchema).min(1).max(WORKBUDDY_CURRENT_CONTEXT_LIMITS.maxRawContexts)
-    .describe('同一次当前输入的原始上下文，不由 Agent 去重；归组后必须恰好两个逻辑附件，总正文最多 4 MiB UTF-8')
+    .describe('同一次当前输入的原始上下文，不由 Agent 去重；归组后必须是一个或两个逻辑附件，总正文最多 4 MiB UTF-8')
 }).refine((input) => input.contexts.reduce((total, block) => total + Buffer.byteLength(block.transcript, 'utf8'), 0)
   <= WORKBUDDY_CURRENT_CONTEXT_LIMITS.maxTotalTranscriptBytes, '当前输入正文总字节数超限')
 
@@ -108,7 +108,7 @@ export const workBuddyBatchResultSchema = z.object({
     invalid: z.number().int(),
     error_summary: z.string().nullable(),
     errors: z.array(z.string())
-  })).length(2)
+  })).min(1).max(2)
 })
 
 export const workBuddyResultSchema = z.object({

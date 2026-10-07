@@ -1,6 +1,6 @@
 # WorkBuddyAdapter
 
-正式接入通过 WorkBuddy 官方本地 stdio MCP Connector。正式 `tools/list` 只公开两个入口：单卡片使用 `privateradar_ingest_messages`，双卡片使用 `privateradar_ingest_current_context_batch`。旧 ZIP 批量 handler 仅保留内部兼容性与回归测试，不对 WorkBuddy 公开。运行时代码由以下部分组成：
+正式接入通过 WorkBuddy 官方本地 stdio MCP Connector。单卡与双卡统一使用 `privateradar_ingest_current_context_batch`，只转交本次真实提供的原始上下文。`tools/list` 保留两个既有工具名称，但 `privateradar_ingest_messages` 公开旧入口无写入拒绝仅含规范消息的调用，不能作为降级路径。旧 ZIP 批量处理函数仅保留内部兼容性与回归测试，不对 WorkBuddy 公开。运行时代码由以下部分组成：
 
 - `server.ts`：stdio 进程生命周期与不含正文的生命周期日志。
 - `tool.ts`：MCP Tool 注册及结构化输入、输出。
@@ -9,20 +9,27 @@
 - `batch-metadata.ts`：批次元数据、完整度计算和能力降级提示。
 - `batch-tool.ts`：当前上下文批量入口、Directory Evidence，以及内部 legacy ZIP handler 与现有会话编排的接线。
 
-当前上下文批量 Tool 接收本次输入真实提供的 raw context blocks。每个 block 原样携带 `file`、`extracted_dir_path`、`message_count` 与 inline `transcript`，并可携带 `first_sender`、`first_message_at`、`truncated`。Tool 自己完成重复 serialization 归组、确定性 Parser、Directory Evidence 与导入，最终必须恰好得到两个 logical attachments。Skill 不生成双卡 `messages`，不读取 `聊天记录.txt` 替代 inline transcript，也不扫描目录、猜测 ZIP 路径或按时间寻找附件。
+当前上下文工具接收本次输入真实提供的全部原始上下文块。每块原样携带 `file`、`extracted_dir_path`、`message_count` 与内联 `transcript`，并可携带 `first_sender`、`first_message_at`、`truncated`。工具完成重复序列化归组、确定性解析、目录证据与导入，归组后仅接受一个或两个逻辑附件。单卡可能被平台重复序列化为多份原始块，不能把原始块数量当作附件数量。Skill 不解析单卡或双卡正文、不生成 `messages`、不读取 `聊天记录.txt` 替代内联正文，也不扫描目录、猜测 ZIP 路径或按时间寻找附件。
 
-内部 legacy ZIP handler `privateradar_ingest_batch` 继续保留原有路径边界、ZIP Evidence、validation 和回归测试，但不注册到正式 MCP。它要求两个真实 ZIP 绝对路径和各自消息数组；这不是 alpha.15 Skill 的正式调用路径。
+当前路径先保存每个附件独立的原始目录证据与含原始文本的结构化快照，再沿用 Item → occurrence → canonical message 导入链。只有本次真实新增来源位置会登记承诺提取运行记录；重复规范消息仍可能有新的来源。旧的仅含规范消息的单卡导入不回扫、不补造附件项或证据、不自动补建承诺候选。缺少原始来源或解析失败时停止，不能改用公开旧入口。
 
-产品、Connector metadata 与 MCP Server 版本统一为 `0.2.0-alpha.15`；两份正式 Skill 保持 `0.2.0-alpha.15-skill.3`，用户级部署从 Connector 内嵌 Skill 取源。官方旧内容可原子升级，同内容不重写，自定义内容保留并返回明确状态。Step 5J 已完成真实双卡 5+5 验收，随后正式环境回滚验证通过；alpha.15 RC 安装版仍待构建与验收。
+内部旧 ZIP 处理函数 `privateradar_ingest_batch` 继续保留原有路径边界、ZIP 证据、校验和回归测试，但不注册到正式 MCP。它要求两个真实 ZIP 绝对路径和各自消息数组，不是当前 Skill 的正式调用路径。
 
-## 两种导入模式
+当前源码中产品、Connector 元数据与 MCP 服务版本为 `0.2.0-alpha.18`；两份 Skill 源同步为 `0.2.0-alpha.18-skill.1`。部署从 Connector 内嵌 Skill 取源，并校验独立版本及完整哈希。官方 alpha.16-skill.1 旧内容继续按精确哈希受管，允许原子升级；当前同内容不重写，自定义内容保留并返回明确状态。这份源码契约不代表本轮已更新正式用户 Skill、连接器或数据库。
 
-- 单卡快速导入：群名缺失时省略，不强制追问；发送人和时间允许保持缺失。
-- 完整导入：一次确认群名、大致日期和可用的发送人映射，不逐条询问。
+## 正式入口与内部兼容模式
+
+- 正式单卡与双卡入口均保持快速导入，不扩展 `complete`、元数据补全或未知时间解析能力；当前工具不接收 `import_mode`。
+- 内部规范消息适配器继续保留旧 `quick / complete` 和批次元数据语义，供既有持久快照及兼容调用使用，不恢复公开仅含规范消息的入口。
+- 单卡归组后不得携带 `collection_id`，必须拒绝且不得去掉编号再次调用；双卡继续只转交本轮明确的完整 Collection UUID，不新增单卡归集。
 
 `approximate_date` 和 `imported_at` 只属于批次，绝不复制到消息 `timestamp`。只有来源可逐条对应的时间才进入消息时间字段。
 
-单卡调用 Tool 前必须先检查当前材料是否包含可逐条对应的原始时间。快速导入只减少交互，不得跳过这项检查。源材料直接提供的时间标记为 `source_native`，用户明确提供的时间标记为 `user_supplied`；没有可靠时间时省略时间字段。双卡直接交付原始 contexts，当前确定性 Parser 要求逐条完整日期与时分，缺失时整批拒绝，Skill 不补造时间或改走两个单卡调用。
+单卡与双卡都直接交付原始上下文。当前确定性解析器要求逐条完整日期与时分，缺失时拒绝整个输入，Skill 不补造时间、不生成消息数组或改走旧入口。源材料直接提供的时间由既有解析逻辑标记为 `source_native`，时区解释另行保留；不改动解析语法。
+
+## 内部兼容的规范消息格式
+
+以下消息格式仅说明保留的内部适配器，不是公开工具调用或失败降级方案。源材料直接提供的时间为 `source_native`，用户明确提供的时间为 `user_supplied`；没有可靠逐条时间时，内部旧消息格式仍省略时间字段。这不表示当前原始上下文解析器已支持缺时间。
 
 带原始时间的最小消息示例：
 

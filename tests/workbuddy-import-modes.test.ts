@@ -163,7 +163,7 @@ describe('微信分享快速导入与完整导入', () => {
     expect(second.importedAt).toBe(first.importedAt)
   })
 
-  it('正式 MCP Tool 链路支持快速模式并返回完整度与降级提示', async () => {
+  it('旧公开快速消息入口明确拒绝，不创建任务或批次', async () => {
     const db = database()
     const server = createWorkBuddyMcpServer(db)
     const client = new Client({ name: 'workbuddy-import-mode-test', version: '0.2.0' })
@@ -178,12 +178,12 @@ describe('微信分享快速导入与完整导入', () => {
         messages: [{ content: '通过正式 MCP 链路导入。' }]
       }
     })
-    expect(response.structuredContent).toMatchObject({
-      imported_count: 1, import_mode: 'quick', completeness_level: 'conversation_known',
-      conversation_status: 'confirmed', sender_status: 'missing', timestamp_status: 'missing'
-    })
-    expect(db.prepare('SELECT COUNT(*) AS count FROM messages').get()).toEqual({ count: 1 })
-    expect(db.prepare('SELECT COUNT(*) AS count FROM message_import_batches').get()).toEqual({ count: 1 })
+    expect(response.isError).toBe(true)
+    expect(response.structuredContent).toBeUndefined()
+    expect((response.content[0] as { text: string }).text).toContain('RAW_CURRENT_CONTEXT_REQUIRED')
+    expect(db.prepare('SELECT COUNT(*) AS count FROM messages').get()).toEqual({ count: 0 })
+    expect(db.prepare('SELECT COUNT(*) AS count FROM message_import_batches').get()).toEqual({ count: 0 })
+    expect(db.prepare('SELECT COUNT(*) AS count FROM import_jobs').get()).toEqual({ count: 0 })
     await client.close()
     await server.close()
   })

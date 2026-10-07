@@ -151,7 +151,7 @@ describe('WorkBuddy MCP Connector Spike', () => {
     db.close()
   })
 
-  it('通过标准 MCP Tool 接收消息并返回结构化统计', async () => {
+  it('保留旧公开消息工具并在任何产品写入前明确拒绝', async () => {
     const db = new DatabaseSync(':memory:')
     initializeDatabase(db)
     const server = createWorkBuddyMcpServer(db)
@@ -162,21 +162,18 @@ describe('WorkBuddy MCP Connector Spike', () => {
 
     const tools = await client.listTools()
     expect(tools.tools.map((tool) => tool.name)).toContain('privateradar_ingest_messages')
+    const before = db.prepare('SELECT total_changes() AS count').get()
     const result = await client.callTool({
       name: 'privateradar_ingest_messages',
       arguments: { messages }
     })
-    expect(result.structuredContent).toMatchObject({
-      status: 'success',
-      imported_count: 4,
-      duplicate_count: 0,
-      invalid_count: 0,
-      timestamp_present_count: 4,
-      timestamp_missing_count: 0,
-      timestamp_invalid_count: 0
-    })
-    expect((result.content[0] as { type: 'text'; text: string }).text).toContain('时间：4 条已识别 · 0 条缺失')
-    expect((result.structuredContent as { timing_ms: { validation: number } }).timing_ms.validation).toBeGreaterThanOrEqual(0)
+    expect(result.isError).toBe(true)
+    expect(result.structuredContent).toBeUndefined()
+    expect((result.content[0] as { type: 'text'; text: string }).text).toContain('RAW_CURRENT_CONTEXT_REQUIRED')
+    expect((result.content[0] as { type: 'text'; text: string }).text).toContain('privateradar_ingest_current_context_batch')
+    expect(db.prepare('SELECT total_changes() AS count').get()).toEqual(before)
+    expect(db.prepare('SELECT COUNT(*) AS count FROM messages').get()).toEqual({ count: 0 })
+    expect(db.prepare('SELECT COUNT(*) AS count FROM import_jobs').get()).toEqual({ count: 0 })
 
     await client.close()
     await server.close()

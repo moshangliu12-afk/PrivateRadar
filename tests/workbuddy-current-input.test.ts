@@ -175,7 +175,7 @@ describe('同路径冲突整体停止', () => {
   })
 })
 
-describe('先归一化再判断恰好两个逻辑附件', () => {
+describe('先归一化再限定一个或两个逻辑附件', () => {
   it('甲乙卡片各重复两次，原始四份上下文允许形成两个逻辑附件', () => {
     const result = gateWorkBuddyBatchCurrentInput([
       card(), card({ extracted_dir_path: pathB }), card(), card({ extracted_dir_path: pathB })
@@ -185,18 +185,25 @@ describe('先归一化再判断恰好两个逻辑附件', () => {
     expect(result.logical_attachments).toHaveLength(2)
   })
 
-  it('只有甲卡片重复两次，原始两份上下文不能通过批量门禁', () => {
-    const error = errorFor(() => gateWorkBuddyBatchCurrentInput([card(), card()]))
-    expect(error.code).toBe('LOGICAL_ATTACHMENT_COUNT_MISMATCH')
-    expect(error.message).toContain('当前为 1 个')
+  it('只有甲卡片重复两次，按一个真实逻辑附件通过门禁', () => {
+    const result = gateWorkBuddyBatchCurrentInput([card(), card()])
+    expect(result.raw_context_count).toBe(2)
+    expect(result.logical_attachments).toHaveLength(1)
+    expect(result.logical_attachments[0].context_indexes).toEqual([0, 1])
   })
 
-  it.each([0, 1, 3])('%s 个独立附件不能改变当前产品数量限制', (count) => {
+  it('一份真实原始上下文也可独立通过门禁', () => {
+    const result = gateWorkBuddyBatchCurrentInput([card()])
+    expect(result.logical_attachments).toHaveLength(1)
+    expect(result.logical_attachments[0].context_indexes).toEqual([0])
+  })
+
+  it.each([0, 3])('%s 个独立附件仍在当前产品数量范围之外', (count) => {
     const input = Array.from({ length: count }, (_, index) => card({ extracted_dir_path: `${pathA}-${index}` }))
     expect(errorFor(() => gateWorkBuddyBatchCurrentInput(input)).code).toBe('LOGICAL_ATTACHMENT_COUNT_MISMATCH')
   })
 
-  it('归一化计数与已有批量接口的长度约束一致，不调用真实工具', () => {
+  it('当前上下文允许单卡，内部旧版压缩包接口继续只接受双卡', () => {
     function schemaAccepts(blocks: WorkBuddyCurrentContextBlock[]) {
       const result = normalizeWorkBuddyCurrentInput(blocks)
       return workBuddyBatchIngestSchema.safeParse({ attachments: result.logical_attachments.map((attachment, index) => ({
@@ -204,6 +211,7 @@ describe('先归一化再判断恰好两个逻辑附件', () => {
         source_zip_path: `C:\\隔离契约测试\\合成门禁-${index}.zip`, messages: attachment.messages
       })) }).success
     }
+    expect(gateWorkBuddyBatchCurrentInput([card(), card()]).logical_attachments).toHaveLength(1)
     expect(schemaAccepts([card(), card()])).toBe(false)
     expect(schemaAccepts([card(), card(), card({ extracted_dir_path: pathB }), card({ extracted_dir_path: pathB })])).toBe(true)
   })

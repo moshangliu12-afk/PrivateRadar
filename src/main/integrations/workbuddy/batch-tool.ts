@@ -32,7 +32,7 @@ export function registerWorkBuddyBatchTool(
     'privateradar_ingest_current_context_batch',
     {
       title: '从当前卡片上下文批量写入 PrivateRadar',
-      description: '接收当前同一次输入的原始卡片 contexts，不由 Agent 去重或生成 messages。使用明确 extracted_dir_path 保存目录证据，inline transcript 由确定性 Parser 解析。归组后必须恰好两个附件，每附件 1–500 条；路径缺失、截断或解析失败立即停止。不得扫描目录、猜测路径或补造时间。',
+      description: '接收当前同一次输入的原始卡片 contexts，不由 Agent 去重或生成 messages。使用明确 extracted_dir_path 保存目录证据，inline transcript 由确定性 Parser 解析。归组后必须是一个或两个附件，每附件 1–500 条；单卡不支持归集，路径缺失、截断或解析失败立即停止。不得扫描目录、猜测路径或补造时间。',
       inputSchema: workBuddyCurrentContextBatchSchema,
       outputSchema: workBuddyBatchResultSchema
     },
@@ -105,10 +105,16 @@ export async function prepareWorkBuddyCurrentContextBatch(
   db: DatabaseSync, options: WorkBuddyBatchToolOptions, rawInput: unknown
 ): Promise<string> {
   const input = workBuddyCurrentContextBatchSchema.parse(rawInput)
-  // 尽早拒绝无效归集，不启动路径租约或产生任何导入记录；创建事务内仍必须重新校验。
-  if (input.collection_id !== undefined) assertCollectingCollection(db, input.collection_id)
   // 既有 Gate 在归组时完成 Parser；不再解析第二遍，也不改写其消息结果。
   const normalized = gateWorkBuddyBatchCurrentInput(input.contexts)
+  if (input.collection_id !== undefined) {
+    // 按真实附件数拒绝单卡归集，先于路径租约、会话登记和证据持久化。
+    if (normalized.logical_attachments.length === 1) {
+      throw new Error('COLLECTION_NOT_SUPPORTED_FOR_SINGLE_IMPORT: 单卡导入暂不支持归集')
+    }
+    // 双卡仍尽早校验；创建事务内继续重新校验，保持既有并发边界。
+    assertCollectingCollection(db, input.collection_id)
+  }
   for (const [index, block] of input.contexts.entries()) {
     // 仅识别明确的独立截断标记；普通省略号可能是正文，不据此猜测截断。
     if (/^\s*(?:\[truncated\]|\[内容已截断\]|\[聊天记录已截断\]|<truncated\s*\/>)\s*$/mi.test(block.transcript)) {
@@ -168,7 +174,7 @@ async function prepareBatchAttachments(
   db: DatabaseSync, options: WorkBuddyBatchToolOptions, attachments: PreparedBatchAttachment[], collectionId?: string
 ): Promise<string> {
 
-  // 会话与两个附件项短事务登记；证据持久化及导入各自独立进行。
+  // 会话与本次真实附件项短事务登记；证据持久化及导入各自独立进行。
   db.exec('BEGIN IMMEDIATE')
   let sessionId: string
   try {

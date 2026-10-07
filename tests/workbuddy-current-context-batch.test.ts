@@ -201,10 +201,9 @@ describe('当前卡片上下文到目录证据的完整批量链路', () => {
     } finally { await client.close(); await server.close() }
   }, 120000)
 
-  it.each(['一个附件重复两次', '三个独立附件', '同路径正文冲突', '同路径截断标记冲突'])('%s 在任何写入前拒绝', async (kind) => {
+  it.each(['三个独立附件', '同路径正文冲突', '同路径截断标记冲突'])('%s 在任何写入前拒绝', async (kind) => {
     const f = fixture()
-    const contexts = kind === '一个附件重复两次' ? [f.contexts[0], { ...f.contexts[0] }]
-      : kind === '三个独立附件' ? [...f.contexts, { ...f.contexts[0], extracted_dir_path: join(f.options.chatHistoryRoot, '第三个') }]
+    const contexts = kind === '三个独立附件' ? [...f.contexts, { ...f.contexts[0], extracted_dir_path: join(f.options.chatHistoryRoot, '第三个') }]
         : [f.contexts[0], { ...f.contexts[0], transcript: kind === '同路径截断标记冲突'
           ? f.contexts[0].transcript + '[truncated]' : f.contexts[0].transcript.replace('消息', '不同') }, f.contexts[1]]
     await expect(ingestWorkBuddyCurrentContextBatch(f.db, f.options, request(contexts))).rejects.toMatchObject({

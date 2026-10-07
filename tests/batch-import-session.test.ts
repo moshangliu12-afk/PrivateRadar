@@ -50,7 +50,43 @@ function count(db: DatabaseSync, table: 'messages' | 'messages_fts' | 'import_jo
   return (db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number }).count
 }
 
-describe('alpha.15 双附件会话编排', () => {
+describe('单附件及双附件会话编排', () => {
+  it('一个真实附件复用同一会话与证据编排，汇总按一个附件计算', async () => {
+    const f = fixture()
+    f.db.prepare('DELETE FROM batch_import_items WHERE id=?').run(f.b.id)
+    await prepare(f, f.a.id, 4)
+    const result = await executeBatchImportSession(f.db, f.databasePath, f.session.id)
+    expect(result).toMatchObject({ status: 'success', attachments_total: 1, attachments_completed: 1,
+      input_messages_total: 4, imported_total: 4, failed_attachments: 0, attention_required_attachments: 0 })
+    expect(result.items).toHaveLength(1)
+    expect(result.items[0]).toMatchObject({ item_id: f.a.id, ordinal: 0, outcome: 'success' })
+    expect(f.db.prepare('SELECT batch_item_id FROM import_jobs').all()).toEqual([{ batch_item_id: f.a.id }])
+    expect(count(f.db, 'messages')).toBe(4)
+    expect(count(f.db, 'messages_fts')).toBe(4)
+  })
+
+  it('单附件显式中断恢复只使用已保存证据与原有任务边界', async () => {
+    const f = fixture()
+    f.db.prepare('DELETE FROM batch_import_items WHERE id=?').run(f.b.id)
+    await prepare(f, f.a.id, 3)
+    f.db.prepare("UPDATE batch_import_sessions SET status='in_progress',completed_at=NULL WHERE id=?").run(f.session.id)
+    const result = await resumeInterruptedBatchImportSession(f.db, f.databasePath, f.session.id)
+    expect(result).toMatchObject({ status: 'success', attachments_total: 1, attachments_completed: 1, imported_total: 3 })
+    expect(result.items).toHaveLength(1)
+    expect(count(f.db, 'import_jobs')).toBe(1)
+    expect(count(f.db, 'messages')).toBe(3)
+  })
+
+  it.each([0, 3])('%s 个附件的会话首次执行仍在写入前拒绝', async total => {
+    const f = fixture()
+    if (total === 0) f.db.prepare('DELETE FROM batch_import_items WHERE batch_session_id=?').run(f.session.id)
+    else createBatchImportItem(f.db, f.session.id, 2)
+    await expect(executeBatchImportSession(f.db, f.databasePath, f.session.id)).rejects.toThrow('一个或两个附件项')
+    expect(f.db.prepare('SELECT status FROM batch_import_sessions WHERE id=?').get(f.session.id)).toEqual({ status: 'pending' })
+    expect(count(f.db, 'import_jobs')).toBe(0)
+    expect(count(f.db, 'messages')).toBe(0)
+  })
+
   it('两个附件顺序执行并成功，汇总与数据库均为 3 + 6', async () => {
     const f = fixture()
     await prepare(f, f.a.id, 3)

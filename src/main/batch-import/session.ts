@@ -76,7 +76,7 @@ export async function executeBatchImportSession(
   try {
     const session = loadSession(db, sessionId)
     const items = listBatchImportItems(db, sessionId)
-    if (items.length !== 2) throw new Error('当前批量会话首次执行要求正好两个附件项')
+    if (items.length !== 1 && items.length !== 2) throw new Error('当前会话首次执行要求一个或两个附件项')
     if (session.status !== 'pending') throw new BatchSessionClaimError(session.status === 'in_progress' ? 'already_running' : 'not_pending')
     for (const item of items) {
       const unstarted = item.status === 'pending' || item.status === 'preparing'
@@ -86,7 +86,7 @@ export async function executeBatchImportSession(
         throw new Error('附件项已有导入记录，不能作为首次会话执行')
       }
     }
-    if (items[0].source_batch_id && items[0].source_batch_id === items[1].source_batch_id) {
+    if (items.length === 2 && items[0].source_batch_id && items[0].source_batch_id === items[1].source_batch_id) {
       throw new Error('两个附件项不能共用来源批次编号')
     }
     const claim = claimBatchSessionForFirstExecution(db, sessionId)
@@ -112,8 +112,8 @@ export async function resumeInterruptedBatchImportSession(
     const session = loadSession(db, sessionId)
     if (session.status !== 'in_progress') throw new Error('仅执行中的批量会话可以恢复')
     const items = listBatchImportItems(db, sessionId)
-    if (items.length !== 2) throw new Error('恢复要求正好两个附件项')
-    if (items[0].source_batch_id && items[0].source_batch_id === items[1].source_batch_id) {
+    if (items.length !== 1 && items.length !== 2) throw new Error('恢复要求一个或两个附件项')
+    if (items.length === 2 && items[0].source_batch_id && items[0].source_batch_id === items[1].source_batch_id) {
       throw new Error('两个附件项不能共用来源批次编号')
     }
     const ready: BatchImportItem[] = []

@@ -79,6 +79,8 @@ alpha.15 发布前仍需吸收 alpha.14.1 维护修复，本轮不 cherry-pick�
 
 允许的外层差异只有：开头 BOM、CRLF/LF、首个发送人前的纯换行、文档末尾最多一个行终止符。其余末尾空行、正文缩进、同行空格、Unicode、emoji、发送人及段落空行均保留；不使用 `trim()` 清洗 transcript 或正文。
 
-`gateWorkBuddyBatchCurrentInput(blocks)` 先调用归一化，再要求恰好两个逻辑附件。四份原始上下文可以对应两个独立附件；同一附件的两份副本仍只有一个逻辑附件，不能通过批量门禁。
+最初输入契约隔离验收时，`gateWorkBuddyBatchCurrentInput(blocks)` 先调用归一化，再要求恰好两个逻辑附件。四份原始上下文可以对应两个独立附件；同一附件的两份副本仍只有一个逻辑附件，当时不能通过批量门禁。
 
-本轮只实现并隔离验收输入契约。既有 Batch Tool、正式 Skill、Connector 与目录证据均未接线或修改；当前批量接口仍要求真实 ZIP 路径，不把解压目录当作 ZIP 路径。
+上述早期验收只实现输入契约。既有 Batch Tool、正式 Skill、Connector 与目录证据当时均未接线或修改；当时批量接口仍要求真实 ZIP 路径，不把解压目录当作 ZIP 路径。
+
+alpha.18 当前门禁仍先复用同一归一化与解析逻辑，再限定为一个或两个逻辑附件；同一附件的一致副本可以归为一个附件，零个或三个以上附件均拒绝。单卡、双卡都调用 `privateradar_ingest_current_context_batch`，原样提交本次真实原始上下文与明确目录；旧 `privateradar_ingest_messages` 只返回 `RAW_CURRENT_CONTEXT_REQUIRED`，不得降级调用。解析器的消息边界、来源事实及完整日期要求不变。

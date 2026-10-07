@@ -19,12 +19,12 @@ vi.mock('../src/main/deployment', () => ({
   isWorkBuddyConnectorRegistered: () => false
 }))
 
-// 承诺候选进入桌面与连接服务；技能内容不变，保留原版本与哈希。
+// 单卡与双卡统一转交原始来源；技能正文更新时递增独立版本并固定完整哈希。
 // 各组件保护明确的独立版本，不要求所有组件版本相等，也不接受任意版本。
 const productVersion = '0.2.0-alpha.18'
 const connectorVersion = '0.2.0-alpha.18'
 const mcpVersion = '0.2.0-alpha.18'
-const skillVersion = '0.2.0-alpha.16-skill.1'
+const skillVersion = '0.2.0-alpha.18-skill.1'
 const readSource = (path: string): string => readFileSync(new URL(path, import.meta.url), 'utf8')
 
 describe('alpha.18 承诺候选的独立组件版本契约', () => {
@@ -38,7 +38,7 @@ describe('alpha.18 承诺候选的独立组件版本契约', () => {
     expect(metadata.version).toBe(connectorVersion)
   })
 
-  it('内存 MCP 握手明确为 alpha.18 且只公开正式双工具', async () => {
+  it('内存 MCP 握手明确为 alpha.18 且保留两个既有工具名称', async () => {
     const db = new DatabaseSync(':memory:')
     initializeDatabase(db)
     const server = createWorkBuddyMcpServer(db, undefined, { databasePath: ':memory:' })
@@ -60,12 +60,12 @@ describe('alpha.18 承诺候选的独立组件版本契约', () => {
     }
   })
 
-  it('两份 Skill 字节同步并明确使用 alpha.16-skill.1', () => {
+  it('两份 Skill 字节同步并明确使用 alpha.18-skill.1', () => {
     const connector = readFileSync(new URL('../integrations/workbuddy/connector/skills/ingest-chat/SKILL.md', import.meta.url))
     const packaged = readFileSync(new URL('../integrations/workbuddy/skill-package/privateradar-ingest-chat/SKILL.md', import.meta.url))
     expect(connector.equals(packaged)).toBe(true)
     expect(createHash('sha256').update(connector).digest('hex'))
-      .toBe('1de8b841995b914a1fd9729442f635ca6169429254e07d1d45fed67fa1bf661e')
+      .toBe('fd9553cccc71aefab4cf58f79030293d8fd4bebc8475e2750a5eefe701d8c224')
     expect(connector.toString('utf8')).toMatch(new RegExp(`^version: ${skillVersion.replaceAll('.', '\\.')}$`, 'm'))
   })
 

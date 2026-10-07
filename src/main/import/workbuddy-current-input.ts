@@ -123,14 +123,14 @@ export function normalizeWorkBuddyCurrentInput(
   return { raw_context_count: blocks.length, logical_attachments: attachments }
 }
 
-/** 独立批量门禁：先归一化，再保持当前产品恰好两个附件的限制。 */
+/** 先归一化当前输入，再限定为一个或两个真实附件，不扩展任意数量导入。 */
 export function gateWorkBuddyBatchCurrentInput(
   blocks: readonly WorkBuddyCurrentContextBlock[]
 ): WorkBuddyCurrentInput {
   const result = normalizeWorkBuddyCurrentInput(blocks)
-  if (result.logical_attachments.length !== 2) {
+  if (result.logical_attachments.length !== 1 && result.logical_attachments.length !== 2) {
     throw new WorkBuddyCurrentInputError('LOGICAL_ATTACHMENT_COUNT_MISMATCH', null,
-      `批量入口要求恰好两个独立附件，当前为 ${result.logical_attachments.length} 个`)
+      `当前上下文入口要求一个或两个独立附件，当前为 ${result.logical_attachments.length} 个`)
   }
   return result
 }
