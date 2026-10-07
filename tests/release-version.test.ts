@@ -19,26 +19,26 @@ vi.mock('../src/main/deployment', () => ({
   isWorkBuddyConnectorRegistered: () => false
 }))
 
-// 来源关系、迁移和统计适配进入桌面与连接服务；技能内容不变，保留原版本与哈希。
+// 承诺候选进入桌面与连接服务；技能内容不变，保留原版本与哈希。
 // 各组件保护明确的独立版本，不要求所有组件版本相等，也不接受任意版本。
-const productVersion = '0.2.0-alpha.17'
-const connectorVersion = '0.2.0-alpha.17'
-const mcpVersion = '0.2.0-alpha.17'
+const productVersion = '0.2.0-alpha.18'
+const connectorVersion = '0.2.0-alpha.18'
+const mcpVersion = '0.2.0-alpha.18'
 const skillVersion = '0.2.0-alpha.16-skill.1'
 const readSource = (path: string): string => readFileSync(new URL(path, import.meta.url), 'utf8')
 
-describe('alpha.16.2 来源关系候选的独立组件版本契约', () => {
+describe('alpha.18 承诺候选的独立组件版本契约', () => {
   it('产品与 lockfile 顶层和根包版本一致', () => {
     expect(product.version).toBe(productVersion)
     expect(lockfile.version).toBe(productVersion)
     expect(lockfile.packages[''].version).toBe(productVersion)
   })
 
-  it('Connector 元数据明确为 alpha.16.2，独立保护版本', () => {
+  it('Connector 元数据明确为 alpha.18，独立保护版本', () => {
     expect(metadata.version).toBe(connectorVersion)
   })
 
-  it('内存 MCP 握手明确为 alpha.16.2 且只公开正式双工具', async () => {
+  it('内存 MCP 握手明确为 alpha.18 且只公开正式双工具', async () => {
     const db = new DatabaseSync(':memory:')
     initializeDatabase(db)
     const server = createWorkBuddyMcpServer(db, undefined, { databasePath: ':memory:' })
@@ -97,6 +97,6 @@ describe('alpha.16.2 来源关系候选的独立组件版本契约', () => {
   it('安装包命名由产品版本推导但不制作安装包', () => {
     expect(product.build.win.artifactName).toBe('PrivateRadar-Setup-${version}-x64.${ext}')
     const artifact = product.build.win.artifactName.replace('${version}', product.version).replace('${ext}', 'exe')
-    expect(artifact).toBe('PrivateRadar-Setup-0.2.0-alpha.17-x64.exe')
+    expect(artifact).toBe('PrivateRadar-Setup-0.2.0-alpha.18-x64.exe')
   })
 })
