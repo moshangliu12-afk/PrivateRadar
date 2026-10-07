@@ -27,6 +27,42 @@ function corruptSnapshot(f: ReturnType<typeof processingFixture>, positions: str
 }
 
 describe('承诺提取登记与独立原子处理', () => {
+  it('明确接手的两种语序与有限对象复用均生成来源锚定的同规则候选项', () => {
+    const f = processingFixture(['我来处理这个问题', '这个问题我来处理', '这个模块我来修改', '这项任务我来核对', '这件事我来确认'])
+    expect(processCommitmentExtractorRun(f.db, f.itemId)).toMatchObject({ status: 'complete', candidateCount: 5 })
+    expect(processingCandidates(f)).toMatchObject(Array.from({ length: 5 }, (_value, source_position) => ({
+      batch_item_id: f.itemId, source_position, rule_version: 'commitment-v1',
+      rule_id: 'self_take_action', reason_code: 'explicit_self_take_action', status: 'pending', reviewed_at: null
+    })))
+  })
+  it('四个锁定样本仅作隔离预检，两个正例生成候选，负例与弱意向不生成候选', () => {
+    const f = processingFixture(['我会把文件整理好发给你', '这个问题我来处理', '我已经发给你了', '我尽量处理一下'])
+    expect(processCommitmentExtractorRun(f.db, f.itemId)).toMatchObject({ status: 'complete', candidateCount: 2 })
+    expect(processingCandidates(f)).toMatchObject([
+      { batch_item_id: f.itemId, source_position: 0, rule_id: 'self_will_action', reason_code: 'explicit_self_will_action', rule_version: 'commitment-v1' },
+      { batch_item_id: f.itemId, source_position: 1, rule_id: 'self_take_action', reason_code: 'explicit_self_take_action', rule_version: 'commitment-v1' }
+    ])
+  })
+  it('同一来源包含两种接手语序仍只有一个候选项，重放保留身份和生成时间', () => {
+    const f = processingFixture(['我来处理这个问题，这个问题我来处理'])
+    expect(processCommitmentExtractorRun(f.db, f.itemId)).toMatchObject({ status: 'complete', candidateCount: 1 })
+    const candidates = processingCandidates(f), frozen = processingRun(f)
+    expect(candidates).toHaveLength(1)
+    expect(candidates[0]).toMatchObject({ batch_item_id: f.itemId, source_position: 0, rule_version: 'commitment-v1' })
+    expect(ingestRadarItem(f, 0, f.messages)).toMatchObject({ status: 'success', importedCount: 0, duplicateCount: 1 })
+    expect(processCommitmentExtractorRun(f.db, f.itemId).status).toBe('already_complete')
+    expect(processingCandidates(f)).toEqual(candidates)
+    expect(processingRun(f)).toEqual(frozen)
+  })
+  it('对象前置负例及不同来源中的残缺分句均不生成候选项，零候选运行正常完成', () => {
+    const f = processingFixture([
+      '这个问题我来处理吗？', '这个问题我来处理不了', '如果需要，这个问题我来处理',
+      '这个问题我来处理过了', '这个问题我来试试', '他说这个问题我来处理',
+      '这个问题你让我来处理', '这个问题我来处理器编程', '这个问题我来。处理', '这个问题我来', '处理'
+    ])
+    expect(processCommitmentExtractorRun(f.db, f.itemId)).toMatchObject({ status: 'complete', candidateCount: 0 })
+    expect(processingCandidates(f)).toEqual([])
+  })
   it('核心事务只冻结真实新增位置，匹配和候选项写入必须在提交后独立执行', () => {
     const f = radarFixture(), spy = vi.spyOn(matcher, 'matchCommitmentBody')
     const result = ingestRadarItem(f, 0, commitmentMessages())
@@ -104,8 +140,8 @@ describe('承诺提取登记与独立原子处理', () => {
     expect(processingRun(f)).toEqual(run)
     expect(processingCandidates(f)).toEqual(candidates)
   })
-  it('强身份重复只新增来源，两个附件共享规范消息仍各自拥有独立候选项', () => {
-    const f = processingFixture(['我会回复你'])
+  it.each(['我会回复你', '这个问题我来处理'])('强身份重复只新增来源，两个附件共享规范消息仍各自拥有独立候选项：%s', body => {
+    const f = processingFixture([body])
     expect(ingestRadarItem(f, 1, f.messages)).toMatchObject({ importedCount: 0, duplicateCount: 1, status: 'success' })
     expect(processCommitmentExtractorRun(f.db, f.itemId).candidateCount).toBe(1)
     expect(processCommitmentExtractorRun(f.db, f.items[1].id).candidateCount).toBe(1)
@@ -172,8 +208,11 @@ describe('承诺派生失败、重试与执行权', () => {
     f.db.exec('DROP TRIGGER reject_failed')
     expect(processCommitmentExtractorRun(f.db, f.itemId).status).toBe('complete')
   })
-  it.each(['confirmed', 'ignored'] as const)('显式失败重试保持 %s 审核结果、时间、原因和标识，不重新冻结或扫描来源', status => {
-    const f = processingFixture(['我会回复你', '我会补充资料'], [0]), candidate = insertExisting(f)
+  it.each([
+    ['confirmed', '我会回复你'], ['ignored', '我会回复你'],
+    ['confirmed', '这个问题我来处理'], ['ignored', '这个问题我来处理']
+  ] as const)('显式失败重试保持 %s 审核结果、时间、原因和标识，不重新冻结或扫描来源：%s', (status, body) => {
+    const f = processingFixture([body, '我会补充资料'], [0]), candidate = insertExisting(f)
     reviewCommitmentCandidate(f.db, candidate.id, status)
     const before = processingCandidates(f), frozen = processingRun(f)
     vi.spyOn(matcher, 'matchCommitmentBody').mockImplementationOnce(() => { throw new Error('秘密') })

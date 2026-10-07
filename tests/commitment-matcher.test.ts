@@ -10,6 +10,8 @@ describe('承诺候选项固定规则匹配', () => {
     ['我来处理这个问题', 'self_take_action'], ['我来处理', 'self_take_action'], ['我来确认', 'self_take_action'],
     ['我来整理', 'self_take_action'], ['我来回复', 'self_take_action'], ['我来联系', 'self_take_action'],
     ['我来修改', 'self_take_action'], ['我来提交', 'self_take_action'], ['我来补充', 'self_take_action'], ['我来核对', 'self_take_action'],
+    ['这个问题我来处理', 'self_take_action'], ['这个模块我来修改', 'self_take_action'],
+    ['这项任务我来核对', 'self_take_action'], ['这件事我来确认', 'self_take_action'],
     ['我负责这个部分', 'self_responsibility'], ['我负责后端修改', 'self_responsibility'],
     ['这块我负责', 'self_responsibility'], ['这个部分我负责', 'self_responsibility'], ['这个问题我负责处理', 'self_responsibility'],
     ['我晚点给你发', 'self_future_action'], ['我等会把资料发你', 'self_future_action'],
@@ -40,6 +42,29 @@ describe('承诺候选项固定规则匹配', () => {
     '我会处理这个问题。但是我没时间。', '如果需要。\n我会处理这个问题', '', '   '
   ])('负例或模糊表达保守跳过：%s', body => {
     expect(matchCommitmentBody(body)).toBeNull()
+  })
+  it.each([
+    '这个问题我来处理吗？', '这个问题我来处理?',
+    '这个问题我不来处理', '这个问题我来处理不了',
+    '如果需要，这个问题我来处理', '这个问题我来处理，需要的话',
+    '这个问题我已经处理了', '这个问题我来处理过了',
+    '这个问题我尽量处理', '这个问题我来试试', '这个问题我可能会处理',
+    '他说这个问题我来处理', '“这个问题我来处理”',
+    '这个问题来处理', '这个问题我们来处理', '这个问题你让我来处理', '领导让我来处理这个问题',
+    '这个问题我来', '这个问题我来处理器编程', '这个问题我来确认键设置',
+    '这个问题我来。处理',
+    '我觉得这个问题我来处理', '有人让这个问题我来处理', '临时议题我来处理',
+    '这个问题我来游泳', '这个问题我来安排他处理'
+  ])('对象前置仍受整条过滤、有限对象与明确行动限制：%s', body => {
+    expect(matchCommitmentBody(body)).toBeNull()
+  })
+  it('两种明确语序返回同一接手规则、原因和版本，保持原规则优先级', () => {
+    const expected = { rule_id: 'self_take_action', reason_code: 'explicit_self_take_action', rule_version: 'commitment-v1' }
+    expect(matchCommitmentBody('我来处理这个问题')).toEqual(expected)
+    expect(matchCommitmentBody('这个问题我来处理')).toEqual(expected)
+    expect(matchCommitmentBody('这个问题我来处理，我会回复你')).toEqual(matchCommitmentBody('我会回复你'))
+    expect(matchCommitmentBody('这个问题我来处理，我稍后回复你')).toEqual(matchCommitmentBody('我稍后回复你'))
+    expect(matchCommitmentBody('这个问题我来处理，这块我负责')).toEqual(matchCommitmentBody('这块我负责'))
   })
   it('固定版本、规则标识、解释代码和顺序稳定；多规则命中仅返回优先结果', () => {
     expect(COMMITMENT_RULE_VERSION).toBe('commitment-v1')

@@ -16,6 +16,7 @@ function explicitAction(body: string): boolean {
 const responsibilityObject = '(?:这个部分|这部分|这块|这个问题|这个模块|这个项目|这项任务|这件事|这项工作|这个需求|后端修改|前端修改|资料整理|文件整理|接口修改|测试核对)'
 const selfResponsibility = new RegExp(`^我负责${responsibilityObject}$`, 'u')
 const objectResponsibility = new RegExp(`^${responsibilityObject}我负责(.*)$`, 'u')
+const objectTakeAction = new RegExp(`^${responsibilityObject}我来(.+)$`, 'u')
 
 // 任一分句存在这些线索时整条跳过，避免用另一分句补齐或猜测当前发言者的意图。
 const conservativeFilters = [
@@ -42,8 +43,12 @@ const rules = [
   } },
   { rule_id: 'self_will_action', reason_code: 'explicit_self_will_action', matches: (clause: string) =>
     clause.startsWith('我会') && explicitAction(clause.slice(2)) },
-  { rule_id: 'self_take_action', reason_code: 'explicit_self_take_action', matches: (clause: string) =>
-    clause.startsWith('我来') && explicitAction(clause.slice(2)) }
+  { rule_id: 'self_take_action', reason_code: 'explicit_self_take_action', matches: (clause: string) => {
+    if (clause.startsWith('我来') && explicitAction(clause.slice(2))) return true
+    // 对象前置仅复用既有有限对象与行动，不搜索任意前缀或补全分句。
+    const reversed = objectTakeAction.exec(clause)
+    return Boolean(reversed && explicitAction(reversed[1]))
+  } }
 ] as const
 export const COMMITMENT_RULE_IDS: readonly string[] = Object.freeze(rules.map(rule => rule.rule_id))
 
