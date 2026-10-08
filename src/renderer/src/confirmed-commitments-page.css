@@ -1,0 +1,7 @@
+.confirmed-commitment > .commitment-body { margin-top: 0; font-size: 16px; line-height: 1.9; }
+.confirmed-commitment .commitment-occurrence { margin-top: 12px; color: var(--muted); }
+.confirmed-commitment .commitment-source { margin-top: 6px; }
+.confirmed-review-time { color: var(--muted); font-size: 11px; margin: 8px 0 0; }
+.confirmed-commitments-page .confirmed-secondary { background: transparent; border-color: transparent; color: var(--muted); }
+.confirmed-reason { margin: 16px 0 0; }
+.confirmed-reason p { line-height: 1.7; }

@@ -9,6 +9,11 @@
 .commitment-refresh { margin-bottom: 18px; }
 .commitment-list { display: grid; gap: 14px; }
 .commitment-list > .commitment-muted { margin: 0 0 4px; }
+.commitment-review-section { display: grid; gap: 14px; }
+.commitment-review-section + .commitment-review-section { margin-top: 12px; }
+.commitment-review-section h2 { margin: 0; font-size: 16px; }
+.commitment-review-section h2 small { font-size: 12px; color: var(--muted); margin-left: 6px; font-weight: 400; }
+.commitment-review-section > .commitment-muted { margin: 0; }
 .commitment-candidate { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 22px; min-width: 0; }
 .commitment-candidate h3 { margin: 0; font-size: 16px; }
 .commitment-status { border-radius: 8px; padding: 5px 9px; font-size: 12px; background: var(--sand); color: var(--ink-3); }

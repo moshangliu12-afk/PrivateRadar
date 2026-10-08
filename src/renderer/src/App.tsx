@@ -25,15 +25,17 @@ import { CollectionPage } from './collection-page'
 import { KeywordRadarPage } from './keyword-radar-page'
 import { CommitmentCandidatesPage } from './commitment-candidates-page'
 import './commitment-candidates-page.css'
+import { ConfirmedCommitmentsPage } from './confirmed-commitments-page'
+import './confirmed-commitments-page.css'
 
-const NAV_ITEMS = ['今日情报', '话题雷达', '问我的聊天', '设置', '批量收集', '关键词雷达'].concat('承诺候选')
+const NAV_ITEMS = ['今日情报', '话题雷达', '问我的聊天', '设置', '批量收集', '关键词雷达'].concat('承诺候选').concat('承诺表达（已确认）')
 
 export function App(): React.JSX.Element {
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [latestDate, setLatestDate] = useState<string | null>(null)
   const [dailyLoading, setDailyLoading] = useState(false)
-  const [page, setPage] = useState<'welcome' | 'import-guide' | 'import-complete' | 'daily' | 'radar' | 'search' | 'settings' | 'collections' | 'keywords' | 'commitments'>('daily')
+  const [page, setPage] = useState<'welcome' | 'import-guide' | 'import-complete' | 'daily' | 'radar' | 'search' | 'settings' | 'collections' | 'keywords' | 'commitments' | 'confirmed-commitments'>('daily')
   const [firstUse, setFirstUse] = useState<FirstUseStatus | null>(null)
   const [bootstrapped, setBootstrapped] = useState(false)
   const [importBaselineJobId, setImportBaselineJobId] = useState<string | null>(null)
@@ -299,13 +301,13 @@ export function App(): React.JSX.Element {
         <nav aria-label="页面导航">
           {NAV_ITEMS.map((item, index) => (
             <button
-              className={(page === 'daily' && index === 0) || (page === 'radar' && index === 1) || (page === 'search' && index === 2) || (page === 'settings' && index === 3) || (page === 'collections' && index === 4) || (page === 'keywords' && index === 5) || (page === 'commitments' && index === 6) ? 'active' : ''}
+              className={(page === 'daily' && index === 0) || (page === 'radar' && index === 1) || (page === 'search' && index === 2) || (page === 'settings' && index === 3) || (page === 'collections' && index === 4) || (page === 'keywords' && index === 5) || (page === 'commitments' && index === 6) || (page === 'confirmed-commitments' && index === 7) ? 'active' : ''}
               key={item}
               type="button"
-              aria-current={(page === 'daily' && index === 0) || (page === 'radar' && index === 1) || (page === 'search' && index === 2) || (page === 'settings' && index === 3) || (page === 'collections' && index === 4) || (page === 'keywords' && index === 5) || (page === 'commitments' && index === 6) ? 'page' : undefined}
-              onClick={index === 0 ? () => void openDaily() : index === 1 ? () => void openRadar() : index === 2 ? () => setPage('search') : index === 4 ? () => { setError(''); setPage('collections') } : index === 5 ? () => { setError(''); setPage('keywords') } : index === 6 ? () => { setError(''); setPage('commitments') } : () => { setPage('settings'); void refreshFirstUse() }}
+              aria-current={(page === 'daily' && index === 0) || (page === 'radar' && index === 1) || (page === 'search' && index === 2) || (page === 'settings' && index === 3) || (page === 'collections' && index === 4) || (page === 'keywords' && index === 5) || (page === 'commitments' && index === 6) || (page === 'confirmed-commitments' && index === 7) ? 'page' : undefined}
+              onClick={index === 0 ? () => void openDaily() : index === 1 ? () => void openRadar() : index === 2 ? () => setPage('search') : index === 4 ? () => { setError(''); setPage('collections') } : index === 5 ? () => { setError(''); setPage('keywords') } : index === 6 ? () => { setError(''); setPage('commitments') } : index === 7 ? () => { setError(''); setPage('confirmed-commitments') } : () => { setPage('settings'); void refreshFirstUse() }}
             >
-              <UiIcon name={(['radar', 'topics', 'search', 'settings', 'folder', 'spark', 'check'] as const)[index]} /><span>{item}</span><i className="nav-indicator" />
+              <UiIcon name={(['radar', 'topics', 'search', 'settings', 'folder', 'spark', 'check', 'chat'] as const)[index]} /><span>{item}</span><i className="nav-indicator" />
             </button>
           ))}
         </nav>
@@ -329,9 +331,9 @@ export function App(): React.JSX.Element {
                   <button type="button" aria-label="下一天" onClick={() => void loadSelectedDate(shiftLocalDateKey(selectedDate, 1))} disabled={dailyLoading || !canNavigateToNextDate(selectedDate, latestDate)}>›</button>
                   {shouldShowReturnToLatest(selectedDate, latestDate) && <button className="return-latest-button" type="button" onClick={() => void goToLatestDate()} disabled={dailyLoading}>回到最新</button>}
                 </div></div>
-              : <div className="eyebrow"><span className="eyebrow-mark" />{page === 'commitments' ? <>原话审核<span className="eyebrow-divider">/</span>承诺候选</> : page === 'keywords' ? <>关键词检查<span className="eyebrow-divider">/</span>新导入的聊天</> : page === 'collections' ? <>批量收集<span className="eyebrow-divider">/</span>固定归集身份</> : page === 'settings' ? <>数据与隐私<span className="eyebrow-divider">/</span>系统状态</> : page === 'radar' ? <>话题脉冲<span className="eyebrow-divider">/</span>{radar ? radar.date?.replaceAll('-', '.') ?? '无可靠聊天日期' : '正在读取日期'}</> : page === 'search' ? <>私有检索<span className="eyebrow-divider">/</span>{firstUse ? `数据最新至 ${firstUse.dataStatus.latestMessageDate?.replaceAll('-', '.') ?? '时间未知'}` : '正在读取日期'}</> : '每日简报'}</div>}
-            <h1>{page === 'commitments' ? '承诺候选' : page === 'keywords' ? '关键词雷达' : page === 'collections' ? '批量收集' : page === 'daily' ? '今日情报' : page === 'radar' ? '话题雷达' : page === 'search' ? '问我的聊天' : '设置'}</h1>
-            <p>{page === 'commitments' ? '查看原话、上下文和证据，确认或忽略已有候选。' : page === 'keywords' ? '设置你关心的词，之后新导入的聊天命中时会出现在这里。' : page === 'collections' ? '为多次聊天导入保留一个明确的收集记录。' : page === 'daily' ? '从噪音里，找到今天真正值得看的信息。' : page === 'radar' ? '识别相对过去七天正在突然升温的跨群话题。' : page === 'search' ? '先检索本地证据，再基于证据回答。' : '查看数据来源、存储状态与隐私说明。'}</p>
+              : <div className="eyebrow"><span className="eyebrow-mark" />{page === 'confirmed-commitments' ? <>原话回看<span className="eyebrow-divider">/</span>你的确认记录</> : page === 'commitments' ? <>原话审核<span className="eyebrow-divider">/</span>承诺候选</> : page === 'keywords' ? <>关键词检查<span className="eyebrow-divider">/</span>新导入的聊天</> : page === 'collections' ? <>批量收集<span className="eyebrow-divider">/</span>固定归集身份</> : page === 'settings' ? <>数据与隐私<span className="eyebrow-divider">/</span>系统状态</> : page === 'radar' ? <>话题脉冲<span className="eyebrow-divider">/</span>{radar ? radar.date?.replaceAll('-', '.') ?? '无可靠聊天日期' : '正在读取日期'}</> : page === 'search' ? <>私有检索<span className="eyebrow-divider">/</span>{firstUse ? `数据最新至 ${firstUse.dataStatus.latestMessageDate?.replaceAll('-', '.') ?? '时间未知'}` : '正在读取日期'}</> : '每日简报'}</div>}
+            <h1>{page === 'confirmed-commitments' ? '承诺表达（已确认）' : page === 'commitments' ? '承诺候选' : page === 'keywords' ? '关键词雷达' : page === 'collections' ? '批量收集' : page === 'daily' ? '今日情报' : page === 'radar' ? '话题雷达' : page === 'search' ? '问我的聊天' : '设置'}</h1>
+            <p>{page === 'confirmed-commitments' ? '仅表示你确认原话表达了承诺，不代表已完成或需要你执行。' : page === 'commitments' ? '查看原话、上下文和证据，确认或忽略已有候选。' : page === 'keywords' ? '设置你关心的词，之后新导入的聊天命中时会出现在这里。' : page === 'collections' ? '为多次聊天导入保留一个明确的收集记录。' : page === 'daily' ? '从噪音里，找到今天真正值得看的信息。' : page === 'radar' ? '识别相对过去七天正在突然升温的跨群话题。' : page === 'search' ? '先检索本地证据，再基于证据回答。' : '查看数据来源、存储状态与隐私说明。'}</p>
           </div>
         </header>
 
@@ -425,6 +427,7 @@ export function App(): React.JSX.Element {
         {page === 'collections' && <CollectionPage />}
         {page === 'keywords' && <KeywordRadarPage />}
         {page === 'commitments' && <CommitmentCandidatesPage />}
+        {page === 'confirmed-commitments' && <ConfirmedCommitmentsPage />}
       </main>
     </div>
   )

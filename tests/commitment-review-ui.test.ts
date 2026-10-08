@@ -259,7 +259,7 @@ describe('承诺候选按钮实际行为', () => {
     ;(content.props.onReviewed as (review: CommitmentCandidateReview) => void)({ id: candidate.id, status: 'confirmed', reviewedAt: '2035-01-01T01:00:00Z' })
     resolve(ok([candidate])); await settle()
     const html = renderToStaticMarkup(view.render(CommitmentCandidatesPage, { api }))
-    expect(html).toContain('已确认'); expect(html).not.toContain('待审核')
+    expect(html).toContain('已确认'); expect(html).toContain('当前没有待审核的候选。')
     expect(button(view.render(CommitmentCandidatesPage, { api }), '刷新').disabled).toBe(false)
   })
 })

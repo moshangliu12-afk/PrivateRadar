@@ -61,7 +61,7 @@ export function CommitmentCandidateCard({ candidate, api, onReviewed }: { candid
     locked.current = true; setBusy(target); setError(''); setNotice('')
     try {
       const next = await value(target === 'confirmed' ? api.confirmCommitmentCandidate(candidate.id) : api.ignoreCommitmentCandidate(candidate.id))
-      if (mounted.current) { onReviewed(next); setNotice(next.status === 'confirmed' ? '已确认这条原话表达了承诺。' : '已忽略这条候选。') }
+      if (mounted.current) { onReviewed(next); setNotice(next.status === 'confirmed' ? '已确认原话表达了承诺，可在「承诺表达（已确认）」回看。' : '已忽略这条候选。') }
     } catch (reason) { if (mounted.current) setError(commitmentCandidateError(reason)) }
     finally { locked.current = false; if (mounted.current) setBusy('') }
   }
@@ -102,9 +102,20 @@ export function CommitmentCandidateCard({ candidate, api, onReviewed }: { candid
   </article>
 }
 export function CommitmentCandidatesContent({ candidates, api, onReviewed }: { candidates: CommitmentCandidateView[]; api: CommitmentDesktopApi; onReviewed: (review: CommitmentCandidateReview) => void }): React.JSX.Element {
+  const pending = candidates.filter(candidate => candidate.status === 'pending')
+  const reviewed = candidates.filter(candidate => candidate.status !== 'pending')
   return <section className="commitment-list" aria-label="承诺候选列表">
     <p className="commitment-muted">候选需要人工审核；确认仅表示这条原话表达了承诺。</p>
-    {!candidates.length ? <div className="commitment-empty">还没有承诺候选。之后新导入的聊天产生候选时，会出现在这里。</div> : candidates.map(candidate => <CommitmentCandidateCard key={candidate.id} candidate={candidate} api={api} onReviewed={onReviewed} />)}
+    {!candidates.length && <div className="commitment-empty">还没有承诺候选。之后新导入的聊天产生候选时，会出现在这里。</div>}
+    <section className="commitment-review-section" aria-label="待审核">
+      <h2>待审核 <small>{pending.length}</small></h2>
+      {!pending.length ? <p className="commitment-muted">当前没有待审核的候选。</p> : pending.map(candidate => <CommitmentCandidateCard key={candidate.id} candidate={candidate} api={api} onReviewed={onReviewed} />)}
+    </section>
+    <section className="commitment-review-section" aria-label="已审核">
+      <h2>已审核 <small>{reviewed.length}</small></h2>
+      <p className="commitment-muted">已确认或已忽略的候选仍可在这里修正审核状态。</p>
+      {!reviewed.length ? <p className="commitment-muted">还没有已审核的候选。</p> : reviewed.map(candidate => <CommitmentCandidateCard key={candidate.id} candidate={candidate} api={api} onReviewed={onReviewed} />)}
+    </section>
   </section>
 }
 export function CommitmentCandidatesPage({ api = window.privateRadar.commitmentCandidates }: { api?: CommitmentDesktopApi }): React.JSX.Element {
@@ -115,6 +126,7 @@ export function CommitmentCandidatesPage({ api = window.privateRadar.commitmentC
   const mounted = useRef(true)
   const generation = useRef(0)
   const reviewRevision = useRef(0)
+  const [notice, setNotice] = useState('')
   async function refresh() {
     const current = ++generation.current; const revision = reviewRevision.current; setLoading(true); setError('')
     try {
@@ -126,10 +138,12 @@ export function CommitmentCandidatesPage({ api = window.privateRadar.commitmentC
   function reviewed(review: CommitmentCandidateReview) {
     reviewRevision.current++
     setCandidates(current => current.map(candidate => candidate.id === review.id ? { ...candidate, ...review } : candidate))
+    setNotice(review.status === 'confirmed' ? '已确认原话表达了承诺，可在「承诺表达（已确认）」回看。' : '已忽略这条候选。')
   }
   useEffect(() => { mounted.current = true; void refresh(); return () => { mounted.current = false; generation.current++ } }, [api])
   return <div className="commitment-candidates-page" aria-busy={loading}>
     <div className="commitment-refresh"><span>只读取已有候选，不扫描以前的聊天记录。</span><button type="button" disabled={loading} onClick={() => void refresh()}>{loading ? '读取中…' : '刷新'}</button></div>
+    {notice && <p className="commitment-notice" role="status">{notice}</p>}
     {error && <p className="commitment-error" role="alert">{error}</p>}
     {!loaded ? !error && <p role="status">正在读取承诺候选…</p> : <CommitmentCandidatesContent candidates={candidates} api={api} onReviewed={reviewed} />}
   </div>
