@@ -8,7 +8,7 @@ export function createWorkBuddyMcpServer(
   log?: (event: string, detail?: string) => void,
   batchOptions?: WorkBuddyBatchToolOptions
 ): McpServer {
-  const server = new McpServer({ name: 'privateradar-workbuddy-adapter', version: '0.2.0-alpha.18' })
+  const server = new McpServer({ name: 'privateradar-workbuddy-adapter', version: '0.2.0-alpha.19' })
   server.registerTool(
     'privateradar_ingest_messages',
     {
