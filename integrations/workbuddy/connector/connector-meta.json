@@ -7,7 +7,7 @@
   "description_en": "Safely import one or two WeChat cards from the current input into local PrivateRadar.",
   "source": "privateradar-workbuddy",
   "type": "mcp",
-  "version": "0.2.0-alpha.19",
+  "version": "0.2.0-alpha.20",
   "minWorkbuddyVersion": "5.0.0",
   "examples_zh": [
     "将这份聊天记录导入 PrivateRadar",
