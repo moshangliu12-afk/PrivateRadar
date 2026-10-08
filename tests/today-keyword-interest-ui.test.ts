@@ -6,7 +6,7 @@ import type { KeywordHitContext, KeywordRadarDesktopApi, KeywordRadarResult } fr
 import type { TodayKeywordInterest, TodayKeywordInterestItem } from '../src/shared/today-keyword-interest'
 import { TodayKeywordInterestCard, TodayKeywordInterestContent, TodayKeywordInterestSection } from '../src/renderer/src/today-keyword-interest-section'
 import type { TodayKeywordInterestState } from '../src/renderer/src/today-keyword-interest-section'
-import { App } from '../src/renderer/src/App'
+import { App, MissingImportantFeedback } from '../src/renderer/src/App'
 import { KeywordRadarPage } from '../src/renderer/src/keyword-radar-page'
 import { getTodayKeywordInterest } from '../src/main/intelligence/daily/keyword-interest'
 import { getKeywordHitContext, safeKeywordRadarAction } from '../src/main/keyword-radar/desktop'
@@ -178,6 +178,12 @@ describe('独立读取、刷新与导航行为', () => {
     expect(html(render())).toContain('今天没有值得关注的情报')
     const section = elements(render()).find(element => element.type === TodayKeywordInterestSection)!
     expect(section).toBeDefined()
+    expect(html(render())).toContain('class="highlights highlights-empty"')
+    const order = elements(render())
+    expect(order.findIndex(element => element.props.className === 'highlights highlights-empty'))
+      .toBeLessThan(order.findIndex(element => element.type === TodayKeywordInterestSection))
+    expect(order.findIndex(element => element.type === TodayKeywordInterestSection))
+      .toBeLessThan(order.findIndex(element => element.type === MissingImportantFeedback))
     const child = host(), props = { ...section.props, api: root, keywordApi: root.keywordRadar, onViewAll: section.props.onViewAll as () => void }
     child.render(TodayKeywordInterestSection, props); child.effects(); await settle()
     const text = html(child.render(TodayKeywordInterestSection, props))
@@ -195,6 +201,51 @@ describe('独立读取、刷新与导航行为', () => {
     expect(elements(render()).some(element => element.type === TodayKeywordInterestSection)).toBe(false)
     expect(root.getDashboardSummary).toHaveBeenCalledTimes(3)
     child.dispose(); view.dispose()
+  })
+  it('真实重要项保留既有卡片结构，空态紧凑样式不应用于非空重要项', async () => {
+    const root = {
+      getDashboardSummary: vi.fn(async () => ({
+        date: '2026-10-08', demoMode: false, messageCount: 1, conversationCount: 1,
+        totalMessageCount: 1, candidateCount: 1, finalIntelligenceCount: 1, telemetry: null, mode: 'rule',
+        items: [{ candidateId: '真实重要项', title: '重要情报原有标题', summary: '重要情报原有摘要',
+          whyItMatters: '重要情报原有依据', category: '产品 / 技术', importanceLevel: 'high',
+          reasonCodes: [], conversationCount: 1, messageCount: 1, firstSeenAt: '2026-10-08T01:00:00Z' }]
+      })),
+      getFirstUseStatus: vi.fn(async () => ({ firstLaunch: false, latestImport: null, dataStatus: { latestMessageDate: '2026-10-08' } })),
+      getTodayKeywordInterest: vi.fn(async () => ok(data)), keywordRadar: keywordApi()
+    }
+    vi.stubGlobal('window', { privateRadar: root, setInterval: vi.fn(() => 1), clearInterval: vi.fn() })
+    const view = host(), render = () => view.render(App, {})
+    render(); view.effects(); await settle()
+    const tree = render(), text = html(tree), order = elements(tree)
+    expect(text).toContain('class="highlights"')
+    expect(text).not.toContain('highlights-empty')
+    expect(text).not.toContain('daily-important-empty-heading')
+    for (const preserved of ['candidate-wrap', 'class="rank">01', 'card-copy', 'candidate-heading',
+      '重要情报原有标题', '重要情报原有摘要', '重要情报原有依据', 'candidate-actions', '查看依据']) expect(text).toContain(preserved)
+    expect(order.findIndex(element => element.props.className === 'highlights'))
+      .toBeLessThan(order.findIndex(element => element.type === TodayKeywordInterestSection))
+    expect(order.findIndex(element => element.type === TodayKeywordInterestSection))
+      .toBeLessThan(order.findIndex(element => element.type === MissingImportantFeedback))
+    view.dispose()
+  })
+  it('移动后的遗漏反馈仍支持选择、取消和通过原 IPC 保存日期与说明', async () => {
+    const save = vi.fn(async () => undefined)
+    vi.stubGlobal('window', { privateRadar: { saveMissingImportantFeedback: save } })
+    const view = host(), render = () => view.render(MissingImportantFeedback, { dateKey: '2026-10-08' })
+    button(render(), '没有').onClick()
+    expect(save).not.toHaveBeenCalled()
+    button(render(), '有').onClick()
+    expect(html(render())).toContain('遗漏重要内容说明')
+    button(render(), '取消').onClick()
+    expect(html(render())).not.toContain('遗漏重要内容说明')
+    button(render(), '有').onClick()
+    const input = elements(render()).find(element => element.type === 'input')!
+    ;(input.props.onChange as (event: { target: { value: string } }) => void)({ target: { value: '隔离反馈说明' } })
+    button(render(), '记录反馈').onClick(); await settle()
+    expect(save).toHaveBeenCalledExactlyOnceWith({ dateKey: '2026-10-08', note: '隔离反馈说明' })
+    expect(html(render())).toContain('感谢反馈')
+    view.dispose()
   })
   it('实际临时 DB 的 section打开、刷新、Context、Evidence、查看全部全链零写入', async () => {
     const f = interestFixture(); await interestEvidence(f, 0)

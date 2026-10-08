@@ -44,8 +44,8 @@ export function TodayKeywordInterestCard({ item, api }: {
   }
   return <article className="today-keyword-card" data-batch-item-id={item.batchItemId} data-source-position={item.sourcePosition}>
     <p className="today-keyword-body">{item.body}</p>
-    <KeywordOccurrence entry={item} />
     <p className="today-keyword-explanation">命中你关注的关键词：{item.matchedTerms.join('、')}</p>
+    <KeywordOccurrence entry={item} />
     <div className="today-keyword-source">
       <span>来源：{item.source.attachmentName ?? `附件 ${item.source.ordinal + 1}`}</span>
       {(!item.source.evidenceRecorded || item.source.evidenceStatus !== 'available') && <span>证据暂不可用</span>}

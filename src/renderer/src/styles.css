@@ -453,3 +453,22 @@ button:focus-visible, input:focus-visible, summary:focus-visible { outline: 3px 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
 }
+
+/* 今日重要项为空时收紧空态，真实重要情报卡片沿用既有布局。 */
+.page-daily .highlights-empty .empty-feature { grid-template-columns: 80px minmax(0,1fr); min-height: 110px; padding: 14px 20px; }
+.page-daily .highlights-empty .empty-feature::after { width: 160px; height: 160px; right: -60px; bottom: -100px; }
+.page-daily .highlights-empty .empty-illustration { width: 64px; height: 64px; transform: none; }
+.page-daily .highlights-empty .orbit-one { width: 32px; height: 32px; }
+.page-daily .highlights-empty .orbit-two { width: 46px; height: 46px; }
+.page-daily .highlights-empty .orbit-three { width: 62px; height: 62px; }
+.page-daily .highlights-empty .orbit-core { width: 28px; height: 28px; border-radius: 9px; }
+.page-daily .highlights-empty .node-one { top: 5px; right: 7px; }
+.page-daily .highlights-empty .node-two { bottom: 8px; left: 3px; }
+.page-daily .highlights-empty .empty-kicker { margin-bottom: 6px; }
+.page-daily .highlights-empty .empty-copy h3 { margin-bottom: 6px; font-size: 18px; line-height: 1.4; }
+.page-daily .missing-feedback.feedback-card { min-height: 56px; margin-top: 12px; padding: 10px 14px; }
+@media (max-height: 720px) {
+  .page-daily .daily-important-empty-heading { margin-top: 6px; }
+  .page-daily .highlights-empty .empty-feature { min-height: 94px; padding: 10px 16px; }
+  .page-daily .highlights-empty + .today-keyword-section { margin-top: 8px; padding-top: 8px; }
+}

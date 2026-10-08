@@ -367,12 +367,12 @@ export function App(): React.JSX.Element {
               </div>
             )}
 
-            <section className="section-heading">
+            <section className={summary.items.length === 0 ? 'section-heading daily-important-empty-heading' : 'section-heading'}>
               <div><span>今日价值筛选 · 优先级排序</span><h2>今天最重要</h2></div>
               <small>按今日价值、优先级与 D1 分数综合排序</small>
             </section>
 
-            <section className="highlights">
+            <section className={summary.items.length === 0 ? 'highlights highlights-empty' : 'highlights'}>
               {summary.items.map((item, index) => (
                 <div className="candidate-wrap" key={item.candidateId}>
                   <article>
@@ -403,10 +403,11 @@ export function App(): React.JSX.Element {
               ))}
               {summary.items.length === 0 && <EmptySignal title={summary.messageCount === 0 ? '当天没有聊天记录' : '今天没有值得关注的情报'} description={summary.messageCount === 0 ? '可以切换日期，查看已有聊天记录中的情报。' : '当日聊天已完成筛选，目前没有需要优先关注的信号。'} />}
             </section>
-            {summary.messageCount > 0 && <MissingImportantFeedback dateKey={summary.date} />}
           </>)}
         {page === 'daily' && <TodayKeywordInterestSection refreshRevision={keywordRefreshRevision}
           onViewAll={() => { setError(''); setPage('keywords') }} />}
+        {page === 'daily' && summary && !dailyLoading && summary.date !== null && summary.messageCount > 0 &&
+          <MissingImportantFeedback dateKey={summary.date} />}
         {page === 'radar' && !radar && !error && <div className="loading">正在计算过去 7 天历史基线……</div>}
         {page === 'radar' && radar && (
           <>
