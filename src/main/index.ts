@@ -11,6 +11,7 @@ import { getFirstUseStatus, markOnboardingComplete } from './first-use'
 import { seedDemoData } from './demo'
 import { prepareWorkBuddyConnector, runtimeDataDirectory, writeOperationalLog } from './deployment'
 import { DashboardSummaryCache } from './dashboard-cache'
+import { registerTodayKeywordInterestIpc } from './intelligence/daily/keyword-interest'
 import { registerCollectionIpc } from './collections/desktop'
 import { schedulePendingKeywordRadarRuns } from './keyword-radar/recovery'
 import { schedulePendingCommitmentExtractorRuns } from './commitment/recovery'
@@ -86,6 +87,7 @@ app.whenReady().then(() => {
   const databasePath = join(dataDir, 'private-radar.db')
   const db = openDatabase(databasePath, process.env.PRIVATE_RADAR_SEED_DEMO === 'true')
   registerCollectionIpc(ipcMain, db)
+  registerTodayKeywordInterestIpc(ipcMain, db)
   registerKeywordRadarIpc(ipcMain, db, hitId => openKeywordHitEvidence(db, databasePath, hitId, path => shell.openPath(path)))
   registerCommitmentCandidateIpc(ipcMain, db, id => openCommitmentCandidateEvidence(db, databasePath, id, path => shell.openPath(path)))
   let radarDirty = false

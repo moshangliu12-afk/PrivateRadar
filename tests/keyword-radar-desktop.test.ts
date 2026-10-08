@@ -157,6 +157,22 @@ describe('历史命中、来源事实与上下文', () => {
     expect(context.entries.filter(entry => entry.isCurrent).map(entry => entry.sourcePosition)).toEqual([5])
     expect(context.entries.every(entry => entry.batchItemId === hit.batchItemId)).toBe(true)
   })
+  it('关键词雷达上下文只读取同一附件同来源会话，不串入相邻会话', () => {
+    const f = radarFixture(), group = createKeywordGroup(f.db, '来源会话')
+    addKeywordTerm(f.db, group.id, 'Codex')
+    ingestRadarItem(f, 0, radarMessages([1, 2, 3, 4, 5]).map((message, index) => ({
+      ...message, conversation_name: index % 2 ? '乙会话' : '甲会话', conversation_name_source: 'source_native'
+    })))
+    processKeywordRadarRun(f.db, f.items[0].id)
+    const hit = listRecentKeywordHits(f.db).find(hit => hit.sourcePosition === 2)!
+    expect(getKeywordHitContext(f.db, hit.id).entries.map(entry => entry.sourcePosition)).toEqual([0, 2, 4])
+  })
+  it('关键词雷达来源会话 unknown 时即使保留名称也只读中心', () => {
+    const f = prepared([1, 2, 3])
+    replaceFixtureSources(f, 0, { source_conversation_name_source: 'unknown' })
+    const hit = listRecentKeywordHits(f.db).find(hit => hit.sourcePosition === 1)!
+    expect(getKeywordHitContext(f.db, hit.id).entries.map(entry => entry.sourcePosition)).toEqual([1])
+  })
   it('不连续位置 0/2/5 原样保留，不伪造连续序号', () => {
     const f = radarFixture(), group = createKeywordGroup(f.db, '词')
     addKeywordTerm(f.db, group.id, 'Codex')

@@ -1,0 +1,15 @@
+.today-keyword-section { margin-top: 32px; border-top: 1px solid var(--line); padding-top: 24px; }
+.today-keyword-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 16px; }
+.today-keyword-heading h2 { margin: 0 0 8px; font-size: 21px; }
+.today-keyword-heading small, .today-keyword-source, .today-keyword-empty { color: var(--muted); }
+.today-keyword-list { display: grid; gap: 12px; }
+.today-keyword-card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 20px; }
+.today-keyword-body { margin: 0 0 14px; color: var(--ink); line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.today-keyword-explanation { font-size: 13px; line-height: 1.6; }
+.today-keyword-source { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; }
+.today-keyword-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.today-keyword-section button { border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--ink); padding: 8px 12px; cursor: pointer; }
+.today-keyword-section button:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.today-keyword-section button:disabled { opacity: .5; cursor: default; }
+.today-keyword-section [role="alert"] { color: #9c3e31; }
+.today-keyword-section footer { display: flex; justify-content: flex-end; margin-top: 12px; }

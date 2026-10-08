@@ -4,6 +4,12 @@ const electron = vi.hoisted(() => ({ contextBridge: { exposeInMainWorld: vi.fn()
 vi.mock('electron', () => electron)
 beforeEach(() => { vi.resetModules(); vi.clearAllMocks() })
 describe('关键词雷达类型化预加载边界', () => {
+  it('关注词 Today 使用独立窄通道，不读取旧摘要或触发处理', async () => {
+    await import('../src/preload/index')
+    const [, root] = electron.contextBridge.exposeInMainWorld.mock.calls[0] as unknown as [string, Record<string, any>]
+    await root.getTodayKeywordInterest()
+    expect(electron.ipcRenderer.invoke.mock.calls).toEqual([['dashboard:keyword-interest']])
+  })
   it('仅开放 13 个产品动作，原接口保留，不开放路径或 SQL', async () => {
     await import('../src/preload/index')
     const [name, root] = electron.contextBridge.exposeInMainWorld.mock.calls[0] as unknown as [string, Record<string, any>]

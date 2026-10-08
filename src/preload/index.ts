@@ -1,10 +1,14 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { CollectionDesktopApi } from '../shared/collections'
 import type { KeywordRadarDesktopApi } from '../shared/keyword-radar'
+import type { TodayKeywordInterestApi } from '../shared/today-keyword-interest'
 import type { CommitmentDesktopApi } from '../shared/commitment'
 import type { CandidateEvidence, ChatQueryResponse, ConnectorSetupResult, DailyBriefItem, DashboardSummary, FeedbackExportResult, FeedbackState, FirstUseStatus, ImportResult, MessageContext, TopicEvidence, TopicRadarSummary } from '../shared/models'
 
 contextBridge.exposeInMainWorld('privateRadar', {
+  ...({
+    getTodayKeywordInterest: () => ipcRenderer.invoke('dashboard:keyword-interest')
+  } satisfies TodayKeywordInterestApi),
   commitmentCandidates: {
     listCommitmentCandidates: () => ipcRenderer.invoke('commitment-candidates:list'),
     confirmCommitmentCandidate: (id: string) => ipcRenderer.invoke('commitment-candidates:confirm', id),

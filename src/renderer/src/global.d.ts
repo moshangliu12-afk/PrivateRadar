@@ -1,11 +1,12 @@
 import type { CandidateEvidence, ChatQueryResponse, ConnectorSetupResult, DailyBriefItem, DashboardSummary, FeedbackExportResult, FeedbackState, FirstUseStatus, ImportResult, MessageContext, TopicEvidence, TopicRadarSummary } from '../../shared/models'
 import type { CollectionDesktopApi } from '../../shared/collections'
 import type { KeywordRadarDesktopApi } from '../../shared/keyword-radar'
+import type { TodayKeywordInterestApi } from '../../shared/today-keyword-interest'
 import type { CommitmentDesktopApi } from '../../shared/commitment'
 
 declare global {
   interface Window {
-    privateRadar: CollectionDesktopApi & {
+    privateRadar: CollectionDesktopApi & TodayKeywordInterestApi & {
       keywordRadar: KeywordRadarDesktopApi
       commitmentCandidates: CommitmentDesktopApi
       getDashboardSummary: (date?: string) => Promise<DashboardSummary>

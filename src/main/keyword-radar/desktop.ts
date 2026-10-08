@@ -87,13 +87,14 @@ export function occurrence(row: OccurrenceRow): KeywordOccurrenceView {
     conversationName: row.source_conversation_name?.trim() ? row.source_conversation_name : null }
 }
 interface HitRow extends OccurrenceRow {
+  source_conversation_name_source: string | null
   id: string; group_id: string; group_name_snapshot: string; matched_terms_snapshot: string; matched_at: string
   attachment_name: string | null; ordinal: number; evidence_source_kind: 'zip' | 'directory'
   evidence_status: KeywordHitSource['evidenceStatus']; evidence_relative_path: string | null
 }
 const hitSelect = `SELECT h.id,h.group_id,h.group_name_snapshot,h.matched_terms_snapshot,h.matched_at,
   s.batch_item_id,s.source_position,s.message_id,s.source_sender_name,s.source_timestamp,
-  s.source_timestamp_source,s.source_conversation_name,m.content,
+  s.source_timestamp_source,s.source_conversation_name,s.source_conversation_name_source,m.content,
   i.attachment_name,i.ordinal,i.evidence_source_kind,i.evidence_status,i.evidence_relative_path
   FROM keyword_hits h JOIN batch_item_message_sources s
     ON s.batch_item_id=h.batch_item_id AND s.source_position=h.source_position
@@ -123,8 +124,10 @@ export function getKeywordRadarStatus(db: DatabaseSync): KeywordRadarStatus {
 export function getKeywordHitSource(db: DatabaseSync, hitId: unknown): KeywordHitSource { return sourceView(getHit(db, hitId)) }
 export function getKeywordHitContext(db: DatabaseSync, hitId: unknown): KeywordHitContext {
   const hit = getHit(db, hitId)
+  const conversation = hit.source_conversation_name_source &&
+    isReliableTimestampSource(hit.source_conversation_name_source) ? hit.source_conversation_name : null
   return { hitId: hit.id, batchItemId: hit.batch_item_id,
-    entries: readItemOccurrenceContext(db, hit.batch_item_id, hit.source_position) }
+    entries: readItemOccurrenceContext(db, hit.batch_item_id, hit.source_position, conversation) }
 }
 /** 复用附件来源窗口；传入会话时先限制来源会话，未知会话仅保留中心。 */
 export function readItemOccurrenceContext(

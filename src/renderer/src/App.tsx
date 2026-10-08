@@ -23,6 +23,7 @@ import { EmptySignal, UiIcon } from './ui-components'
 import type { UiIconName } from './ui-components'
 import { CollectionPage } from './collection-page'
 import { KeywordRadarPage } from './keyword-radar-page'
+import { TodayKeywordInterestSection } from './today-keyword-interest-section'
 import { CommitmentCandidatesPage } from './commitment-candidates-page'
 import './commitment-candidates-page.css'
 import { ConfirmedCommitmentsPage } from './confirmed-commitments-page'
@@ -35,6 +36,7 @@ export function App(): React.JSX.Element {
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [latestDate, setLatestDate] = useState<string | null>(null)
   const [dailyLoading, setDailyLoading] = useState(false)
+  const [keywordRefreshRevision, setKeywordRefreshRevision] = useState(0)
   const [page, setPage] = useState<'welcome' | 'import-guide' | 'import-complete' | 'daily' | 'radar' | 'search' | 'settings' | 'collections' | 'keywords' | 'commitments' | 'confirmed-commitments'>('daily')
   const [firstUse, setFirstUse] = useState<FirstUseStatus | null>(null)
   const [bootstrapped, setBootstrapped] = useState(false)
@@ -93,6 +95,7 @@ export function App(): React.JSX.Element {
         observedImportJobId.current = nextJobId
         setFirstUse(status)
         if (isNewJob && isCompletedDataImport(status)) {
+          setKeywordRefreshRevision(value => value + 1)
           const latest = await loadDaily(window.privateRadar)
           const staysOnLatest = selectedDate === null || selectedDate === latestDate
           const refreshed = await refreshAfterExternalImport(window.privateRadar, page === 'radar', staysOnLatest ? undefined : selectedDate)
@@ -144,6 +147,7 @@ export function App(): React.JSX.Element {
     try {
       const result = await window.privateRadar.chooseAndImportFile()
       if (result) {
+        setKeywordRefreshRevision(value => value + 1)
         setImportResult(result)
         const nextSummary = await window.privateRadar.getDashboardSummary()
         setSummary(nextSummary)
@@ -171,6 +175,7 @@ export function App(): React.JSX.Element {
   async function openDaily(): Promise<void> {
     setPage('daily')
     setError('')
+    setKeywordRefreshRevision(value => value + 1)
     try {
       const nextSummary = await loadDaily(window.privateRadar)
       setSummary(nextSummary)
@@ -270,6 +275,7 @@ export function App(): React.JSX.Element {
   async function regenerate(): Promise<void> {
     setRegenerating(true)
     setError('')
+    setKeywordRefreshRevision(value => value + 1)
     try {
       setSummary(await window.privateRadar.regenerateDashboard(selectedDate ?? undefined))
     } catch (reason) {
@@ -399,6 +405,8 @@ export function App(): React.JSX.Element {
             </section>
             {summary.messageCount > 0 && <MissingImportantFeedback dateKey={summary.date} />}
           </>)}
+        {page === 'daily' && <TodayKeywordInterestSection refreshRevision={keywordRefreshRevision}
+          onViewAll={() => { setError(''); setPage('keywords') }} />}
         {page === 'radar' && !radar && !error && <div className="loading">正在计算过去 7 天历史基线……</div>}
         {page === 'radar' && radar && (
           <>
