@@ -7,7 +7,7 @@ PrivateRadar 是一个本地优先、证据优先的个人聊天情报系统。�
 - 最新完成并封板版本：[v0.2.0-alpha.20](https://github.com/moshangliu12-afk/PrivateRadar/tree/v0.2.0-alpha.20)，开发、隔离验收、正式部署与 GitHub 归档均已完成。
 - 当前验证平台：Windows 11 x64。macOS 尚不支持，仍在评估是否进入下一阶段；alpha.21 尚未启动。
 - 正式导入链：微信 → WorkBuddy → PrivateRadar。PrivateRadar 自己的原生微信分享入口已延期。
-- GitHub 采用源码与 annotated tag 归档；没有 alpha.20 GitHub Release，也没有上传 alpha.20 安装器下载资产。历史 Release 中的旧安装包不代表当前封板版本。
+- GitHub 已建立 [alpha.20 Pre-release 档案页](https://github.com/moshangliu12-afk/PrivateRadar/releases/tag/v0.2.0-alpha.20)，并继续保留源码与 annotated tag 封板记录；当前 Release 未上传 Windows 安装器、Skill 或 macOS 资产。历史 Release 中的旧安装包不代表当前封板版本。
 
 ## 当前核心能力
 
