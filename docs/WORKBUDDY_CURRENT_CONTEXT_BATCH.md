@@ -84,4 +84,6 @@
 
 Step 5K 已吸收 alpha.14.1 的时间语义、Daily 缓存、空名称及纯符号名称 Search 维护修复。Step 5L-B 的 Packaging Contract checkpoint 为 `74fc0c7d9bf7e6c43bec791f6a1907d902e8f556`。
 
-两个非阻塞已知问题继续保留：部分多行消息进入 messages.content 时末尾一个换行可能被规范化移除，但 messages.json 和 raw_metadata_json 保留完整来源；某些纯中文明确日期 Search 可能漏召回。详见根目录 KNOWN_ISSUES.md。
+多行正文末尾空白规范化的非阻塞限制继续保留：messages.content 末尾换行可能被裁剪，但 messages.json 和 raw_metadata_json 保留完整来源。
+
+“已被日期解析器消费的明确日期仍进入正文检索词，导致漏召回”这一具体问题已解决，代码与中文明确日期回归用例支持该状态。范围仅限现有解析器已消费的明确日期，不代表所有中文日期查询问题均已解决。当前问题与范围见 [KNOWN_ISSUES.md](../KNOWN_ISSUES.md)。

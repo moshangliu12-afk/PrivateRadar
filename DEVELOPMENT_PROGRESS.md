@@ -1,5 +1,27 @@
 # PrivateRadar 开发进度
 
+## 当前项目状态
+
+截至 2026-10-09，PrivateRadar `0.2.0-alpha.20` 已完成并封板。开发、隔离 UI 验收、界面调整、版本构建、正式部署、本地最终封板与 GitHub 归档均已完成。
+
+封板源码为 `34e0a292416e7720585e3aabf84e5f1d857cfc36`，[v0.2.0-alpha.20](https://github.com/moshangliu12-afk/PrivateRadar/tree/v0.2.0-alpha.20) 继续指向该提交。本轮归档后的文档同步是独立普通提交，不改变封板源码或标签。
+
+| 已完成版本 | 高层摘要 |
+|---|---|
+| alpha.18 | 承诺候选、确认 / 忽略审核、来源上下文与原始证据回看；正式单卡与双卡统一使用原始上下文来源链 |
+| alpha.19 | 承诺表达（已确认）：只读回看用户已确认的原话及来源 |
+| alpha.20 | 今日情报中的关注词区块，展示用户显式关注信号，独立于“今天最重要” |
+
+当前验证平台为 Windows 11 x64，正式导入链为微信 → WorkBuddy → PrivateRadar。GitHub 使用源码与 annotated tag 归档，没有 alpha.20 GitHub Release 或安装器下载资产。
+
+下一阶段尚待决定，仍在评估；alpha.21 尚未启动。macOS 当前不支持，尚未进入实现；PrivateRadar 原生微信分享入口已延期。
+
+当前使用与文档导航见 [README](README.md)，当前问题与范围见 [KNOWN_ISSUES](KNOWN_ISSUES.md)。
+
+## 早期开发日志（历史记录）
+
+以下原样保留早期开发日志。其中的“当前”“下一步”“未开始”和测试数字只描述当时阶段，不作为 alpha.20 当前状态或下一阶段计划。
+
 最后更新：2026-09-12
 
 ## 当前里程碑
