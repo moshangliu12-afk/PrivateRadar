@@ -175,7 +175,7 @@ app.whenReady().then(() => {
       filters: [{ name: '聊天记录', extensions: ['json', 'csv', 'txt'] }]
     })
     if (selection.canceled || selection.filePaths.length === 0) return null
-    const result = importChatFile(db, selection.filePaths[0])
+    const result = await importChatFile(db, selection.filePaths[0], databasePath)
     if (result.recognizedCount > 0 && result.status !== 'failed') markOnboardingComplete(db)
     radarDirty = true
     void summaryCache.refresh()

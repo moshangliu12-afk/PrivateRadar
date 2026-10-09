@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
-import { parseMatchedTermsSnapshot, parseRulesSnapshot, parseSourcePositionsSnapshot } from './contracts'
+import { parseMatchedTermsSnapshot, parseRulesSnapshot } from './contracts'
 import { matchKeywordSnapshot } from './matcher'
-import { markKeywordRadarAttemptStarted, markKeywordRadarComplete, markKeywordRadarFailed, type KeywordRadarRun } from './runs'
+import { markKeywordRadarAttemptStarted, markKeywordRadarComplete, markKeywordRadarFailed, parseKeywordRunSourcePositions, type KeywordRadarRun } from './runs'
 
 type FailureCode = 'INVALID_SNAPSHOT' | 'PROCESSING_FAILED' | 'OCCURRENCE_INTEGRITY_FAILED' | 'HIT_CONFLICT'
 export interface KeywordRadarProcessingResult {
@@ -39,7 +39,7 @@ function processRun(db: DatabaseSync, batchItemId: string, retry: boolean): Keyw
     attempt = markKeywordRadarAttemptStarted(db, batchItemId, retry ? 'failed' : 'pending')
     if (attempt === null) return result('stale_attempt')
     const rules = parseRulesSnapshot(run.rules_snapshot_json)
-    const positions = parseSourcePositionsSnapshot(run.source_positions_snapshot_json)
+    const positions = parseKeywordRunSourcePositions(db, batchItemId, run.source_positions_snapshot_json)
     code = 'PROCESSING_FAILED'
     db.exec('BEGIN IMMEDIATE')
     transaction = true

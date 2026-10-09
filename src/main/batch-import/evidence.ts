@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { copyFile, lstat, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { copyFile, link, lstat, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import { dirname, join, resolve, sep } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
@@ -8,6 +8,8 @@ import { workBuddyIngestSchema, type WorkBuddyIngestInput } from '../integration
 import type { BatchImportItem } from './repository'
 import { inspectDirectoryEvidence } from './directory-evidence'
 import { WindowsPathLease } from './windows-path-lease'
+import { createManualJsonZip, getManualJsonItem, MANUAL_JSON_MAX_BYTES, validateManualJsonSnapshot,
+  type ManualJsonSnapshotInput } from '../import/manual-json-contract'
 
 const ITEM_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const ZIP_NAME = 'original.zip'
@@ -39,6 +41,51 @@ export interface EvidenceVerification {
 export interface StoredEvidenceFile {
   relativePath: string
   sha256: string
+}
+
+export async function saveCapturedJsonEvidence(
+  db: DatabaseSync, databasePath: string, batchItemId: string, capturedBytes: Buffer
+): Promise<StoredEvidenceFile> {
+  if (!getManualJsonItem(db, batchItemId)) throw new Error('手动 JSON 来源身份未登记')
+  if (capturedBytes.length > MANUAL_JSON_MAX_BYTES) throw new Error('文件超过 50 MB，请拆分后再导入')
+  const item = loadItem(db, batchItemId), paths = itemPaths(databasePath, batchItemId)
+  const zipBytes = createManualJsonZip(capturedBytes), expectedHash = sha256Bytes(zipBytes)
+  let temporaryPath: string | null = null, published = false
+  try {
+    if (item.evidence_relative_path !== null) {
+      if (item.evidence_relative_path !== paths.zipRelative || item.attachment_identity !== expectedHash ||
+          (await inspectFile(paths.zipPath, expectedHash, paths)).status !== 'available') {
+        throw new EvidenceConflictError('原始 JSON 已有不同或不可验证的证据，禁止覆盖')
+      }
+      return { relativePath: paths.zipRelative, sha256: expectedHash }
+    }
+    await ensureSafeDirectory(paths)
+    temporaryPath = join(paths.itemDirectory, '.json-' + randomUUID() + '.tmp')
+    await writeFile(temporaryPath, zipBytes, { flag: 'wx' })
+    if (await sha256File(temporaryPath) !== expectedHash) throw new Error('原始 JSON ZIP 写入后校验失败')
+    // 硬链接的目标创建是原子的；不会覆盖已有目标。
+    await link(temporaryPath, paths.zipPath)
+    published = true
+    await rm(temporaryPath)
+    temporaryPath = null
+    if ((await inspectFile(paths.zipPath, expectedHash, paths)).status !== 'available') throw new Error('原始 JSON ZIP 发布后校验失败')
+    const registered = db.prepare(
+      "UPDATE batch_import_items SET attachment_identity=?,evidence_relative_path=?,evidence_status='available',updated_at=? " +
+      "WHERE id=? AND evidence_relative_path IS NULL AND evidence_source_kind='zip'"
+    ).run(expectedHash, paths.zipRelative, new Date().toISOString(), batchItemId)
+    if (registered.changes !== 1) throw new Error('原始 JSON ZIP 登记冲突')
+    published = false
+    return { relativePath: paths.zipRelative, sha256: expectedHash }
+  } catch (error) {
+    if (published) await rm(paths.zipPath, { force: true }).catch(() => undefined)
+    db.prepare(
+      "UPDATE batch_import_items SET evidence_status='error',status='failed',error_summary=?,updated_at=? " +
+      "WHERE id=? AND evidence_relative_path IS NULL"
+    ).run('原始 JSON 证据封存失败，未导入本来源', new Date().toISOString(), batchItemId)
+    throw error
+  } finally {
+    if (temporaryPath) await rm(temporaryPath, { force: true }).catch(() => undefined)
+  }
 }
 
 export async function saveOriginalZip(
@@ -110,13 +157,14 @@ export async function saveStructuredSnapshot(
   db: DatabaseSync,
   databasePath: string,
   batchItemId: string,
-  input: WorkBuddyIngestInput
+  input: WorkBuddyIngestInput | ManualJsonSnapshotInput
 ): Promise<StoredEvidenceFile> {
   const item = loadItem(db, batchItemId)
   const paths = itemPaths(databasePath, batchItemId)
   let temporaryPath: string | null = null
   let published = false
   let lease: WindowsPathLease | null = null
+  const manualJson = getManualJsonItem(db, batchItemId) !== null
   try {
     if (item.evidence_source_kind === 'directory') {
       lease = new WindowsPathLease()
@@ -129,14 +177,14 @@ export async function saveStructuredSnapshot(
     const serialized = `${JSON.stringify(payload)}\n`
     if (lease && Buffer.byteLength(serialized, 'utf8') > DIRECTORY_SNAPSHOT_MAX_BYTES) throw new Error('目录消息快照容量超限')
     const expectedHash = sha256Bytes(Buffer.from(serialized, 'utf8'))
-    validateSnapshot(serialized, input.messages.length)
+    validateSnapshot(serialized, input.messages.length, manualJson)
 
     if (item.snapshot_relative_path !== null) {
       if (item.snapshot_relative_path !== paths.snapshotRelative || item.snapshot_sha256 !== expectedHash) {
         throw new EvidenceConflictError('附件项已有不同的结构化快照记录')
       }
       if (lease) await lease.lock(paths.snapshotPath, false)
-      const existing = await inspectSnapshot(paths.snapshotPath, expectedHash, paths, lease)
+      const existing = await inspectSnapshot(paths.snapshotPath, expectedHash, paths, lease, manualJson)
       if (existing.status !== 'available') throw new EvidenceConflictError('已有结构化快照不可验证，禁止静默替换')
       return { relativePath: paths.snapshotRelative, sha256: expectedHash }
     }
@@ -146,14 +194,18 @@ export async function saveStructuredSnapshot(
     temporaryPath = join(paths.itemDirectory, `.messages-${randomUUID()}.tmp`)
     await writeFile(temporaryPath, serialized, { encoding: 'utf8', flag: 'wx' })
     const savedText = await readFile(temporaryPath, 'utf8')
-    validateSnapshot(savedText, input.messages.length)
+    validateSnapshot(savedText, input.messages.length, manualJson)
     if (sha256Bytes(Buffer.from(savedText, 'utf8')) !== expectedHash) throw new Error('结构化快照写入后哈希不一致')
     if (await lstatOrNull(paths.snapshotPath)) throw new EvidenceConflictError('结构化快照目标路径已存在，禁止覆盖')
-    await rename(temporaryPath, paths.snapshotPath)
+    if (manualJson) {
+      await link(temporaryPath, paths.snapshotPath)
+      published = true
+      await rm(temporaryPath)
+    } else await rename(temporaryPath, paths.snapshotPath)
     temporaryPath = null
     published = true
     if (lease) await lease.lock(paths.snapshotPath, false)
-    const verified = await inspectSnapshot(paths.snapshotPath, expectedHash, paths, lease)
+    const verified = await inspectSnapshot(paths.snapshotPath, expectedHash, paths, lease, manualJson)
     if (verified.status !== 'available' || verified.messageCount !== input.messages.length) {
       throw new Error('发布后的结构化快照未通过校验')
     }
@@ -214,7 +266,7 @@ export async function verifyBatchEvidence(
       : item.snapshot_relative_path !== paths.snapshotRelative || !item.snapshot_sha256
         ? { status: 'corrupt', relativePath: item.snapshot_relative_path,
             expectedSha256: item.snapshot_sha256, actualSha256: null, error: '结构化快照记录不完整或路径无效' } as EvidencePartResult
-        : await inspectSnapshot(paths.snapshotPath, item.snapshot_sha256, paths, lease)
+        : await inspectSnapshot(paths.snapshotPath, item.snapshot_sha256, paths, lease, getManualJsonItem(db, batchItemId) !== null)
     const status = ['corrupt', 'missing', 'error', 'pending'].find((state) => source.status === state || snapshot.status === state) as EvidenceState | undefined
     return { itemId: batchItemId, status: status ?? 'available', zip, snapshot,
       sourceKind: item.evidence_source_kind, source,
@@ -227,11 +279,23 @@ export async function verifyBatchEvidence(
   } finally { await lease?.close() }
 }
 
+export async function loadManualJsonSnapshot(
+  db: DatabaseSync, databasePath: string, batchItemId: string
+): Promise<ManualJsonSnapshotInput> {
+  if (!getManualJsonItem(db, batchItemId)) throw new Error('不是手动 JSON 来源')
+  if ((await verifyBatchEvidence(db, databasePath, batchItemId)).status !== 'available') throw new Error('手动 JSON 证据不可用')
+  const item = loadItem(db, batchItemId), paths = itemPaths(databasePath, batchItemId)
+  const bytes = await readFile(paths.snapshotPath)
+  if (sha256Bytes(bytes) !== item.snapshot_sha256) throw new Error('手动 JSON 快照读取时哈希改变')
+  return validateSnapshot(bytes.toString('utf8'), undefined, true).input as ManualJsonSnapshotInput
+}
+
 export async function loadStructuredSnapshot(
   db: DatabaseSync,
   databasePath: string,
   batchItemId: string
 ): Promise<WorkBuddyIngestInput> {
+  if (getManualJsonItem(db, batchItemId)) throw new Error('手动 JSON 来源需读取专属快照')
   const verified = await verifyBatchEvidence(db, databasePath, batchItemId)
   if (verified.status !== 'available') throw new Error(`附件证据不可用：${verified.status}`)
   const item = loadItem(db, batchItemId)
@@ -244,7 +308,7 @@ export async function loadStructuredSnapshot(
     }
     const bytes = lease ? await lease.readFile(paths.snapshotPath, DIRECTORY_SNAPSHOT_MAX_BYTES) : await readFile(paths.snapshotPath)
     if (sha256Bytes(bytes) !== item.snapshot_sha256) throw new Error('读取结构化快照时哈希发生变化')
-    return validateSnapshot(bytes.toString('utf8')).input
+    return validateSnapshot(bytes.toString('utf8')).input as WorkBuddyIngestInput
   } finally { await lease?.close() }
 }
 
@@ -308,7 +372,7 @@ async function inspectRecordedZip(item: BatchImportItem, paths: EvidencePaths): 
   return inspectFile(paths.zipPath, item.attachment_identity, paths)
 }
 
-async function inspectSnapshot(path: string, expectedHash: string, paths: EvidencePaths, lease: WindowsPathLease | null = null): Promise<EvidencePartResult> {
+async function inspectSnapshot(path: string, expectedHash: string, paths: EvidencePaths, lease: WindowsPathLease | null = null, manualJson = false): Promise<EvidencePartResult> {
   const actualSha256 = lease ? await lease.hashFile(path) : null
   const file = lease
     ? { status: actualSha256 === expectedHash ? 'available' : 'corrupt', relativePath: paths.snapshotRelative,
@@ -317,7 +381,7 @@ async function inspectSnapshot(path: string, expectedHash: string, paths: Eviden
   if (file.status !== 'available') return file
   try {
     const text = lease ? (await lease.readFile(path, DIRECTORY_SNAPSHOT_MAX_BYTES)).toString('utf8') : await readFile(path, 'utf8')
-    const snapshot = validateSnapshot(text)
+    const snapshot = validateSnapshot(text, undefined, manualJson)
     return { ...file, messageCount: snapshot.input.messages.length }
   } catch (error) {
     return { ...file, status: 'corrupt', error: `结构化快照无效：${errorMessage(error)}` }
@@ -364,11 +428,16 @@ function sha256Bytes(bytes: Buffer): string {
   return createHash('sha256').update(bytes).digest('hex')
 }
 
-function validateSnapshot(text: string, expectedCount?: number): { input: WorkBuddyIngestInput } {
+function validateSnapshot(text: string, expectedCount?: number, manualJson = false): { input: WorkBuddyIngestInput | ManualJsonSnapshotInput } {
   const value: unknown = JSON.parse(text)
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('结构化快照不是 JSON 对象')
   const record = value as Record<string, unknown>
   if (record.schema_version !== SNAPSHOT_VERSION) throw new Error('结构化快照版本不支持')
+  if (manualJson) {
+    const input = validateManualJsonSnapshot(record.input)
+    if (expectedCount !== undefined && input.messages.length !== expectedCount) throw new Error('手动 JSON 快照数量不一致')
+    return { input }
+  }
   const validated = workBuddyIngestSchema.safeParse(record.input)
   if (!validated.success) throw new Error('结构化快照消息格式无效')
   const input = record.input as WorkBuddyIngestInput

@@ -73,7 +73,7 @@ describe('PrivateRadar V0.1 性能验收', () => {
       initializeDatabase(db)
       const memoryBefore = process.memoryUsage().rss
       const importStart = performance.now()
-      const result = importChatFile(db, filePath)
+      const result = await importChatFile(db, filePath)
       const importTotalMs = performance.now() - importStart
       const memoryAfterImport = process.memoryUsage().rss
       db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
@@ -124,7 +124,7 @@ describe('PrivateRadar V0.1 性能验收', () => {
     const largeFile = path.join(outputDir, '100000', 'messages-100000.json')
 
     const repeatStart = performance.now()
-    const repeatResult = importChatFile(db, largeFile)
+    const repeatResult = await importChatFile(db, largeFile)
     const repeatMs = performance.now() - repeatStart
     expect(repeatResult.importedCount).toBe(0)
     expect(repeatResult.duplicateCount).toBe(99_900)
@@ -144,7 +144,7 @@ describe('PrivateRadar V0.1 性能验收', () => {
     const incrementPath = path.join(outputDir, '100000', 'increment-10000.json')
     writeFileSync(incrementPath, JSON.stringify({ messages: incrementRows }))
     const incrementStart = performance.now()
-    const incrementResult = importChatFile(db, incrementPath)
+    const incrementResult = await importChatFile(db, incrementPath)
     const incrementMs = performance.now() - incrementStart
     expect(incrementResult.importedCount).toBe(2_000)
     expect(incrementResult.duplicateCount).toBe(8_000)

@@ -15,6 +15,8 @@ export const rulesSnapshotSchema = z.object({
 }).strict()
 export const sourcePositionsSnapshotSchema = z.array(z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER))
   .min(1).max(500).refine(positions => positions.every((position, index) => index === 0 || positions[index - 1] < position), '来源位置必须递增且唯一')
+export const manualJsonSourcePositionsSnapshotSchema = z.array(z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER))
+  .min(1).refine(positions => positions.every((position, index) => index === 0 || positions[index - 1] < position), '来源位置必须递增且唯一')
 export const matchedTermsSnapshotSchema = z.object({
   snapshot_version: z.literal(1), terms: z.array(termSnapshot).min(1).refine(uniqueIds, '命中关键词标识重复')
 }).strict()

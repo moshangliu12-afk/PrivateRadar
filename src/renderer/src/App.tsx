@@ -1189,11 +1189,15 @@ function priorityShortLabel(value: 'high' | 'medium' | 'low'): string {
   return value === 'high' ? '高' : value === 'medium' ? '中' : '低'
 }
 
-function ImportReport({ result }: { result: ImportResult }): React.JSX.Element {
+export function ImportReport({ result }: { result: ImportResult }): React.JSX.Element {
   const state = result.status === 'success' ? '导入成功' : result.status === 'partial' ? '部分导入成功' : '导入失败'
+  const sourceFailure = result.fileType === 'JSON' && result.status === 'failed' &&
+    ['SOURCE_CONTENT_CONFLICT:', 'MANUAL_JSON_', 'NO_VALID_MESSAGES:'].some(prefix => result.errors[0]?.startsWith(prefix))
   return (
     <section className={`import-report ${result.status}`}>
       <div className="import-title"><div><span>导入结果</span><h2>{result.fileName}</h2></div><b>{state}</b></div>
+      {sourceFailure && <p role="alert">{result.errors[0]}</p>}
+      {result.errors.some(error => error.startsWith('POST_COMMIT_')) && <p role="status">{result.errors.find(error => error.startsWith('POST_COMMIT_'))}</p>}
       <div className="import-grid">
         <div><span>文件类型</span><strong>{result.fileType}</strong></div>
         <div><span>识别消息</span><strong>{result.recognizedCount}</strong></div>

@@ -1,6 +1,13 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { freezeKeywordRules } from './config'
-import { parseRulesSnapshot, parseSourcePositionsSnapshot, sourcePositionsSnapshotSchema } from './contracts'
+import { manualJsonSourcePositionsSnapshotSchema, parseRulesSnapshot, parseSourcePositionsSnapshot } from './contracts'
+import { getManualJsonItem } from '../import/manual-json-contract'
+
+export function parseKeywordRunSourcePositions(db: DatabaseSync, batchItemId: string, json: string): number[] {
+  return getManualJsonItem(db, batchItemId)
+    ? manualJsonSourcePositionsSnapshotSchema.parse(JSON.parse(json))
+    : parseSourcePositionsSnapshot(json)
+}
 
 export interface KeywordRadarRun {
   batch_item_id: string; core_import_job_id: string; status: 'pending' | 'complete' | 'failed'
@@ -13,30 +20,30 @@ export function registerKeywordRadarRun(
 ): void {
   if (!db.isTransaction) throw new Error('KEYWORD_RUN_TRANSACTION_REQUIRED')
   if (positions.length === 0) return
-  const sourcePositions = sourcePositionsSnapshotSchema.parse([...positions].sort((a, b) => a - b))
+  const sourcePositions = parseKeywordRunSourcePositions(db, batchItemId, JSON.stringify([...positions].sort((a, b) => a - b)))
   const rules = freezeKeywordRules(db)
   const rulesJson = JSON.stringify(rules), positionsJson = JSON.stringify(sourcePositions)
   // 序列化结果也验证，任何异常都由调用方的核心事务回滚。
   parseRulesSnapshot(rulesJson)
-  parseSourcePositionsSnapshot(positionsJson)
+  parseKeywordRunSourcePositions(db, batchItemId, positionsJson)
   const job = db.prepare('SELECT batch_item_id FROM import_jobs WHERE id=?').get(jobId)
   if (job?.batch_item_id !== batchItemId) throw new Error('KEYWORD_RUN_JOB_CONFLICT')
   db.prepare(`INSERT INTO keyword_radar_runs
     (batch_item_id,core_import_job_id,status,rules_snapshot_json,source_positions_snapshot_json,created_at)
     VALUES (?,?,'pending',?,?,?)`).run(batchItemId, jobId, rulesJson, positionsJson, createdAt)
 }
-function validateRun(row: unknown): KeywordRadarRun {
+function validateRun(db: DatabaseSync, row: unknown): KeywordRadarRun {
   const run = row as KeywordRadarRun
   parseRulesSnapshot(run.rules_snapshot_json)
-  parseSourcePositionsSnapshot(run.source_positions_snapshot_json)
+  parseKeywordRunSourcePositions(db, run.batch_item_id, run.source_positions_snapshot_json)
   return run
 }
 export function getKeywordRadarRun(db: DatabaseSync, batchItemId: string): KeywordRadarRun | null {
   const row = db.prepare('SELECT * FROM keyword_radar_runs WHERE batch_item_id=?').get(batchItemId)
-  return row ? validateRun(row) : null
+  return row ? validateRun(db, row) : null
 }
 function listRuns(db: DatabaseSync, status: 'pending' | 'failed'): KeywordRadarRun[] {
-  return db.prepare('SELECT * FROM keyword_radar_runs WHERE status=? ORDER BY created_at,batch_item_id').all(status).map(validateRun)
+  return db.prepare('SELECT * FROM keyword_radar_runs WHERE status=? ORDER BY created_at,batch_item_id').all(status).map(row => validateRun(db, row))
 }
 export function listPendingKeywordRadarRuns(db: DatabaseSync): KeywordRadarRun[] { return listRuns(db, 'pending') }
 export function listFailedKeywordRadarRuns(db: DatabaseSync): KeywordRadarRun[] { return listRuns(db, 'failed') }

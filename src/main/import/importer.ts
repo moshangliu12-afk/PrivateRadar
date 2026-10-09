@@ -10,11 +10,18 @@ import { bindItemMessageSource } from '../batch-import/message-sources'
 import { registerKeywordRadarRun } from '../keyword-radar/runs'
 import { registerCommitmentExtractorRun } from '../commitment/runs'
 import { COMMITMENT_RULE_VERSION } from '../commitment/matcher'
+import { getManualJsonItem, SourceContentConflictError } from './manual-json-contract'
+import { importManualJsonFile } from './manual-json'
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024
 const MAX_REPORTED_ERRORS = 20
 
-export function importChatFile(db: DatabaseSync, filePath: string): ImportResult {
+export async function importChatFile(db: DatabaseSync, filePath: string, databasePath?: string): Promise<ImportResult> {
+  if (fileTypeFromName(basename(filePath)) === 'JSON') {
+    const path = databasePath ?? db.location()
+    if (!path) throw new Error('JSON 原始证据导入需要文件数据库')
+    return importManualJsonFile(db, path, filePath)
+  }
   const info = statSync(filePath)
   if (info.size > MAX_FILE_BYTES) throw new Error('文件超过 50 MB，请拆分后再导入')
   const fileName = basename(filePath)
@@ -55,11 +62,15 @@ export function importChatContent(
   const totalStarted = performance.now()
   const jobId = randomUUID()
   const startedAt = new Date().toISOString()
+  const manualJson = getManualJsonItem(db, options.batchItemId)
+  const committed: { result: ImportResult | null } = { result: null }
   const createJobStarted = performance.now()
-  createJob(db, jobId, fileName, fileType, startedAt, options.adapter ?? 'file', options.batchItemId)
+  createJob(db, jobId, fileName, fileType, startedAt, manualJson ? 'file' : options.adapter ?? 'file', options.batchItemId)
   let importJobMs = performance.now() - createJobStarted
 
   try {
+    if (manualJson && (fileType !== 'JSON' || manualJson.status !== 'in_progress' || manualJson.effectiveJobId !== null ||
+        options.sourceBatchId !== manualJson.sourceBatchId)) throw new Error('手动 JSON 来源未取得执行权')
     const parseStarted = performance.now()
     const parsed = parseByFileType(fileType, content)
     const parseMs = performance.now() - parseStarted
@@ -70,13 +81,14 @@ export function importChatContent(
     for (const [index, row] of parsed.rows.entries()) {
       try {
         const item = normalizeMessage(row.value, fileName, {
-          allowMissingMetadata: options.allowMissingMetadata,
-          metadataDefaultSource: options.metadataDefaultSource,
-          contentDefaultSource: options.contentDefaultSource,
+          allowMissingMetadata: manualJson ? false : options.allowMissingMetadata,
+          metadataDefaultSource: manualJson ? 'source_native' : options.metadataDefaultSource,
+          contentDefaultSource: manualJson ? 'source_native' : options.contentDefaultSource,
           sourceBatchId,
           sourcePosition: index,
-          identityScopedFingerprint: options.identityScopedFingerprint,
-          messageSource: options.messageSource
+          identityScopedFingerprint: manualJson ? false : options.identityScopedFingerprint,
+          messageSource: manualJson ? 'file' : options.messageSource,
+          preserveSourceContent: manualJson !== null
         })
         normalized.push(item)
         options.onTimestampClassified?.(item.message.timestamp ? 'present' : 'missing')
@@ -88,6 +100,7 @@ export function importChatContent(
       }
     }
     const normalizeMs = performance.now() - normalizeStarted
+    if (manualJson && normalized.length === 0) throw new Error('NO_VALID_MESSAGES: 本来源未导入，没有有效消息；原始证据已保留。')
 
     let importedCount = 0
     let duplicateCount = 0
@@ -103,16 +116,21 @@ export function importChatContent(
       dedupeMs += performance.now() - cacheStarted
       for (const item of normalized) {
         const dedupeStarted = performance.now()
-        const existing = findExisting(caches, item, options.useLegacyFingerprintDedup ?? true)
+        const sameFingerprint = manualJson ? caches.fingerprints.get(item.fingerprint) : undefined
+        if (sameFingerprint && sameFingerprint.content !== item.message.content) {
+          throw new SourceContentConflictError(item.message.sourcePosition)
+        }
+        const existing = findExisting(caches, item, manualJson ? true : options.useLegacyFingerprintDedup ?? true)
         dedupeMs += performance.now() - dedupeStarted
         if (existing) {
           const updateStarted = performance.now()
           const crossItemSource = options.batchItemId && existing.source_batch_id !== item.message.sourceBatchId
           if (options.batchItemId && existing.content !== item.message.content) {
+            if (manualJson) throw new SourceContentConflictError(item.message.sourcePosition, false)
             throw new Error('SOURCE_IDENTITY_CONFLICT: 来源身份与正文不一致')
           }
           // 强身份跨附件复用只增加来源，不补全或覆盖已有 canonical 的字段。
-          if (crossItemSource) {
+          if (manualJson || crossItemSource) {
             duplicateCount += 1
           } else if (enrichExistingMessage(statements, caches, existing, item, startedAt)) updatedCount += 1
           else duplicateCount += 1
@@ -151,7 +169,9 @@ export function importChatContent(
         registerCommitmentExtractorRun(db, options.batchItemId, jobId, COMMITMENT_RULE_VERSION, newSourcePositions, startedAt)
       }
       finishJob(db, result, parsed.totalCount)
+      if (manualJson) finishManualJsonItem(db, options.batchItemId!, manualJson.batchSessionId, result)
       db.exec('COMMIT')
+      if (manualJson) committed.result = result
       importJobMs += performance.now() - finishStarted
       const verifyStarted = performance.now()
       db.prepare(`
@@ -172,11 +192,20 @@ export function importChatContent(
       })
       return result
     } catch (error) {
-      db.exec('ROLLBACK')
+      if (!committed.result) db.exec('ROLLBACK')
       throw error
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : '未知导入错误'
+    const committedResult = committed.result
+    if (committedResult) {
+      return { ...committedResult, errors: [...committedResult.errors,
+        'POST_COMMIT_DIAGNOSTIC_FAILED: 核心导入已提交，导入后诊断未完成；已提交的消息和来源保持有效。'] }
+    }
+    const message = manualJson
+      ? error instanceof SourceContentConflictError ? error.message
+        : error instanceof Error && error.message.startsWith('NO_VALID_MESSAGES:') ? error.message
+          : 'MANUAL_JSON_CORE_FAILED: 本来源未导入，核心事务未能完成；未绑定、覆盖或修改已有记录。'
+      : error instanceof Error ? error.message : '未知导入错误'
     const result: ImportResult = {
       jobId,
       fileName,
@@ -189,9 +218,29 @@ export function importChatContent(
       status: 'failed',
       errors: [message]
     }
-    finishJob(db, result, 0)
+    if (manualJson) {
+      db.exec('BEGIN IMMEDIATE')
+      try {
+        finishJob(db, result, 0)
+        finishManualJsonItem(db, options.batchItemId!, manualJson.batchSessionId, result)
+        db.exec('COMMIT')
+      } catch (failure) { db.exec('ROLLBACK'); throw failure }
+    } else finishJob(db, result, 0)
     return result
   }
+}
+
+function finishManualJsonItem(
+  db: DatabaseSync, itemId: string, sessionId: string, result: ImportResult
+): void {
+  if (!db.isTransaction) throw new Error('手动 JSON 终态必须与核心事务一起保存')
+  const now = new Date().toISOString(), status = result.status === 'partial' ? 'partial_success' : result.status
+  const changed = db.prepare(
+    'UPDATE batch_import_items SET status=?,effective_job_id=?,error_summary=?,updated_at=?,completed_at=? ' +
+    "WHERE id=? AND status='in_progress' AND effective_job_id IS NULL"
+  ).run(status, result.jobId, result.status === 'failed' ? result.errors[0] : null, now, now, itemId)
+  if (changed.changes !== 1) throw new Error('手动 JSON 来源执行权或终态冲突')
+  db.prepare('UPDATE batch_import_sessions SET status=?,updated_at=?,completed_at=? WHERE id=?').run(status, now, now, sessionId)
 }
 
 function createJob(db: DatabaseSync, jobId: string, fileName: string, fileType: FileType, startedAt: string, adapter: string, batchItemId?: string): void {

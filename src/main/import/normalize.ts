@@ -16,6 +16,7 @@ export interface NormalizeMessageOptions {
   sourcePosition?: number
   identityScopedFingerprint?: boolean
   messageSource?: string
+  preserveSourceContent?: boolean
 }
 
 export function normalizeMessage(value: unknown, sourceName: string, options: NormalizeMessageOptions = {}): NormalizedMessage {
@@ -24,7 +25,9 @@ export function normalizeMessage(value: unknown, sourceName: string, options: No
   const platform = text(value, ['platform']) || 'local-file'
   const conversationName = optionalOrRequiredText(value, ['conversationName', 'conversation_name', 'chatName', 'chat_name', 'groupName', 'group_name', 'group'], '缺少群名', options.allowMissingMetadata)
   const senderName = optionalOrRequiredText(value, ['senderName', 'sender_name', 'sender'], '缺少发送人', options.allowMissingMetadata)
-  const content = requiredText(value, ['content', 'text', 'message'], '缺少正文')
+  const content = options.preserveSourceContent
+    ? sourceContent(value)
+    : requiredText(value, ['content', 'text', 'message'], '缺少正文')
   const timestampText = optionalOrRequiredText(value, ['timestamp', 'time', 'datetime'], '缺少时间', options.allowMissingMetadata)
   const timestamp = timestampText ? normalizeTimestamp(timestampText) : ''
   const rawConversationId = text(value, ['conversationId', 'conversation_id', 'chatId', 'chat_id'])
@@ -84,6 +87,15 @@ function text(record: Record<string, unknown>, keys: string[]): string {
     if (typeof value === 'number' && Number.isFinite(value)) return String(value)
   }
   return ''
+}
+
+function sourceContent(record: Record<string, unknown>): string {
+  for (const key of ['content', 'text', 'message']) {
+    const value = record[key]
+    if (typeof value === 'string' && value.trim()) return value
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  }
+  throw new Error('缺少正文')
 }
 
 function requiredText(record: Record<string, unknown>, keys: string[], error: string): string {
