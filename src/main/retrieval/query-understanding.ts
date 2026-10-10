@@ -2,11 +2,12 @@ import type { DatabaseSync } from 'node:sqlite'
 import type { QueryDateRange, QueryUnderstanding } from '../../shared/models'
 import { DEFAULT_DAILY_CONFIG } from '../intelligence/daily/config'
 import { extractEntityKeys } from '../intelligence/daily/similarity'
+import { rankSearchTerms, type RankedSearchTerm, type SearchTermSource } from './term-ranking'
 
 interface NamedRow { id: string; name: string }
 interface SenderRow { id: string; name: string }
 
-export function understandQuery(db: DatabaseSync, question: string, anchorDate: string): QueryUnderstanding {
+export function understandQuery(db: DatabaseSync, question: string, anchorDate: string, originalQuery = question): QueryUnderstanding {
   const conversations = db.prepare('SELECT id, name FROM conversations ORDER BY length(name) DESC, name').all() as unknown as NamedRow[]
   const senders = db.prepare(`
     SELECT sender_id AS id, MAX(sender_name) AS name
@@ -27,15 +28,14 @@ export function understandQuery(db: DatabaseSync, question: string, anchorDate: 
   const hasQuestionShell = /[？?]|什么|哪些|怎么|如何|有没有|请问/.test(question)
   const isQuestion = strippedQuestion !== question || hasQuestionShell
     || timeIntent !== 'none'
-  const explicitTerms = extractSearchTerms(strippedQuestion, entityKeys, [], [])
-  // 显式实体与关键词保持原规则；仅未知自然语言内容走确定性分词。
-  const fallbackTerms = explicitTerms.length === 0 && hasQuestionShell
-    ? segmentNaturalLanguageFallback(strippedQuestion, dateRange)
-    : undefined
-  const literal = strippedQuestion.replace(/[？?!！。]+$/g, '').trim()
-  const searchTerms = fallbackTerms ?? (explicitTerms.length > 0 ? explicitTerms
-    : literal.length >= 2 && /[\p{L}\p{N}]/u.test(literal) ? [literal] : [])
-  const expansion = expandQuery(strippedQuestion, entityKeys, fallbackTerms)
+  const { primary, expansion } = generateTermSources(strippedQuestion, entityKeys, dateRange, hasQuestionShell)
+  const ranked = rankSearchTerms(originalQuery, [
+    ...primary.map((source) => ({ ...source, primary: true })),
+    ...expansion.sources
+  ])
+  const primaryTexts = new Set(primary.map((source) => source.text))
+  const expandedTexts = new Set(expansion.sources.map((source) => source.text))
+  const searchTerms = ranked.filter((term) => primaryTexts.has(term.text)).map((term) => term.text)
   return {
     intent: /怎么看|怎么样|如何评价|评价|看法|观点|反馈如何|体验如何|大家认为/.test(question) ? 'summarize' : 'find',
     sort: /最早|第一次|首次/.test(question) ? 'oldest' : 'relevance',
@@ -51,9 +51,40 @@ export function understandQuery(db: DatabaseSync, question: string, anchorDate: 
     entityKeys,
     coreTopics: expansion.coreTopics,
     eventTerms: expansion.eventTerms,
-    expandedTerms: expansion.terms,
+    expandedTerms: ranked.filter((term) => expandedTexts.has(term.text)).map((term) => term.text),
     searchTerms
   }
+}
+
+// 只复用已有纯生成阶段，不查询数据库，也不替换调用者提供的词集合。
+export function planSearchTerms(question: string, understanding: QueryUnderstanding, originalQuery = question): RankedSearchTerm[] {
+  const content = stripParsedExplicitDates(question, understanding.dateRange)
+  const stripped = stripQuestionShell(content, [...understanding.conversationNames, ...understanding.senderNames])
+  const generated = generateTermSources(stripped, understanding.entityKeys, understanding.dateRange,
+    /[？?]|什么|哪些|怎么|如何|有没有|请问/.test(question))
+  const primary = new Set(understanding.searchTerms)
+  const actual = new Set([...understanding.searchTerms, ...understanding.expandedTerms])
+  const sources = [...generated.primary, ...generated.expansion.sources]
+    .filter((source) => actual.has(source.text))
+    .map((source) => ({ ...source, primary: primary.has(source.text) }))
+  // 人工构造的历史错误规划缺少可靠生成依据，保守归为普通词。
+  for (const text of actual) sources.push({ text, kind: 'word', primary: primary.has(text) })
+  return rankSearchTerms(originalQuery, sources)
+}
+
+function generateTermSources(question: string, entityKeys: string[], dateRange: QueryDateRange, hasQuestionShell: boolean) {
+  const explicit = extractSearchTerms(question, entityKeys, [], [])
+  const fallback = explicit.length === 0 && hasQuestionShell ? segmentNaturalLanguageFallback(question, dateRange) : undefined
+  const literal = question.replace(/[？?!！。]+$/g, '').trim()
+  const primary: SearchTermSource[] = fallback ?? (explicit.length > 0 ? explicit
+    : literal.length >= 2 && /[\p{L}\p{N}]/u.test(literal) ? [{ text: literal, kind: 'complete' }] : [])
+  return { primary, expansion: expandQuery(question, entityKeys, fallback) }
+}
+
+// 只给已经存在的固定查询对象标注类型，不生成新词或推断新短语。
+const completeQueryObjects = new Set(['Claude Code', '公众号排版', '微信小程序', 'Ollama', '知识库检索'])
+function termSource(text: string, kind: SearchTermSource['kind'] = 'word'): SearchTermSource {
+  return { text, kind: completeQueryObjects.has(text) ? 'complete' : kind }
 }
 
 export function parseDateRange(question: string, anchorDate: string): QueryDateRange {
@@ -112,8 +143,8 @@ function stripParsedExplicitDates(question: string, dateRange: QueryDateRange): 
   return content
 }
 
-function extractSearchTerms(question: string, entityKeys: string[], conversationNames: string[], senderNames: string[]): string[] {
-  const terms = new Set<string>()
+function extractSearchTerms(question: string, entityKeys: string[], conversationNames: string[], senderNames: string[]): SearchTermSource[] {
+  const terms: SearchTermSource[] = []
   const names = [...conversationNames, ...senderNames].filter(isUsableName)
   const contentQuestion = names.reduce((value, name) => value.replaceAll(name, ' '), question)
   const expansions: Record<string, string[]> = {
@@ -124,12 +155,14 @@ function extractSearchTerms(question: string, entityKeys: string[], conversation
     'hybrid-search': ['知识库检索', '全文搜索', '语义检索']
   }
   for (const key of entityKeys) {
-    for (const term of expansions[key] ?? []) terms.add(term)
-    if (key.startsWith('github:')) terms.add(key.slice('github:'.length))
-    if (key.startsWith('product:')) terms.add(key.slice('product:'.length))
+    for (const term of expansions[key] ?? []) terms.push(termSource(term))
+    if (key.startsWith('github:')) terms.push(termSource(key.slice('github:'.length), 'complete'))
+    if (key.startsWith('product:')) terms.push(termSource(key.slice('product:'.length), 'complete'))
   }
   for (const match of contentQuestion.match(/[A-Za-z][A-Za-z0-9_.\/-]*(?:\s+[A-Za-z][A-Za-z0-9_.-]*)?/g) ?? []) {
-    if (!['github'].includes(match.toLowerCase()) || /github/i.test(contentQuestion)) terms.add(match.trim())
+    if (!['github'].includes(match.toLowerCase()) || /github/i.test(contentQuestion)) {
+      terms.push(termSource(match.trim(), /\s/.test(match.trim()) ? 'complete' : 'word'))
+    }
   }
   const dictionary = [
     '公众号', '排版', '美化', '微信小程序', '小程序', 'GitHub', '开源', 'Markdown',
@@ -137,10 +170,9 @@ function extractSearchTerms(question: string, entityKeys: string[], conversation
     '增量同步', '敏感资料', '本地', '重新扫描', '扫描', '文件', '编程代理', '长任务',
     '聊天索引', '数据库', '工具', '项目'
   ]
-  for (const term of dictionary) if (contentQuestion.toLowerCase().includes(term.toLowerCase())) terms.add(term)
-  for (const version of contentQuestion.match(/\bv?\d+(?:\.\d+){1,3}\b/gi) ?? []) terms.add(version)
-  for (const name of names) terms.delete(name)
-  return [...terms].filter((term) => term.length >= 2).sort((left, right) => right.length - left.length || left.localeCompare(right))
+  for (const term of dictionary) if (contentQuestion.toLowerCase().includes(term.toLowerCase())) terms.push(termSource(term))
+  for (const version of contentQuestion.match(/\bv?\d+(?:\.\d+){1,3}\b/gi) ?? []) terms.push(termSource(version))
+  return terms.filter((term) => term.text.length >= 2 && !names.includes(term.text))
 }
 
 const MAX_FALLBACK_TERMS = 8
@@ -151,7 +183,7 @@ const fallbackFunctionWords = new Set([
 ])
 const wordSegmenter = new Intl.Segmenter('zh', { granularity: 'word' })
 
-function segmentNaturalLanguageFallback(question: string, dateRange: QueryDateRange): string[] {
+function segmentNaturalLanguageFallback(question: string, dateRange: QueryDateRange): SearchTermSource[] {
   let content = question.replace(/(?:聊|说|讨论|提到)(?:了|过)?(?:什么|哪些)|怎么(?:说|看)|有没有|请问/gu, ' ')
   if (dateRange.label !== '全部时间') {
     content = content
@@ -189,9 +221,10 @@ function segmentNaturalLanguageFallback(question: string, dateRange: QueryDateRa
   }
   flush()
   // 优先保留独立内容词，并为更具体的复合词保留两个名额；不回退为整句问句。
-  return [...new Set([...words.slice(0, MAX_FALLBACK_TERMS - 2), ...compounds, ...words])]
-    .slice(0, MAX_FALLBACK_TERMS)
-    .sort((left, right) => right.length - left.length || left.localeCompare(right))
+  const selected = new Set([...new Set([...words.slice(0, MAX_FALLBACK_TERMS - 2), ...compounds, ...words])]
+    .slice(0, MAX_FALLBACK_TERMS))
+  return [...words.map((text) => termSource(text)), ...compounds.map((text) => termSource(text, 'compound'))]
+    .filter((source) => selected.has(source.text))
 }
 
 function stripQuestionShell(question: string, knownNames: string[]): string {
@@ -209,7 +242,7 @@ function stripQuestionShell(question: string, knownNames: string[]): string {
   return value || question.trim()
 }
 
-function expandQuery(question: string, entityKeys: string[], fallbackTerms?: string[]): { coreTopics: string[]; eventTerms: string[]; terms: string[] } {
+function expandQuery(question: string, entityKeys: string[], fallbackTerms?: SearchTermSource[]): { coreTopics: string[]; eventTerms: string[]; sources: SearchTermSource[] } {
   const terms = new Set<string>()
   const coreTopics = new Set<string>()
   const eventTerms = new Set<string>()
@@ -243,7 +276,7 @@ function expandQuery(question: string, entityKeys: string[], fallbackTerms?: str
     addTopic('故障', ['故障', '连不上', '异常', '不可用', '失败', '崩溃'])
   }
 
-  const literals = fallbackTerms ?? [question.replace(/[？?!！。]+$/g, '').trim()]
+  const literals = fallbackTerms?.map((source) => source.text) ?? [question.replace(/[？?!！。]+$/g, '').trim()]
   for (const literal of literals) {
     if (literal.length >= 2 && /[\p{L}\p{N}]/u.test(literal)) {
       coreTopics.add(literal)
@@ -257,7 +290,12 @@ function expandQuery(question: string, entityKeys: string[], fallbackTerms?: str
   return {
     coreTopics: [...coreTopics].sort(),
     eventTerms: [...eventTerms].sort(),
-    terms: [...terms].filter((term) => term.length >= 2).sort((left, right) => right.length - left.length || left.localeCompare(right))
+    sources: [
+      ...[...terms].filter((term) => term.length >= 2).map((term) => termSource(term)),
+      ...(fallbackTerms ?? []),
+      ...entityKeys.filter((key) => key.startsWith('product:') || key.startsWith('github:'))
+        .map((key) => termSource(key.slice(key.indexOf(':') + 1), 'complete'))
+    ]
   }
 }
 

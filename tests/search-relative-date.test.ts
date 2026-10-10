@@ -8,8 +8,8 @@ import { initializeDatabase } from '../src/main/schema'
 
 const referenceDate = '2026-10-05'
 const options = { aiProvider: null, embeddingProvider: null }
-const carTerms = ['车辆主动', '主动安全', '安吉星', '安全', '车辆', '主动']
-const routeTerms = ['拼车信息', '光山', '南京', '拼车', '信息']
+const carTerms = ['车辆主动', '主动安全', '安吉星', '车辆', '主动', '安全']
+const routeTerms = ['拼车信息', '南京', '光山', '拼车', '信息']
 let db: DatabaseSync
 
 function addMessage(id: string, content: string, date: string | null, source = 'source_native'): void {

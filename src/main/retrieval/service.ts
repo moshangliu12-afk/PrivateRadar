@@ -29,9 +29,9 @@ export async function askChat(db: DatabaseSync, question: string, options: AskCh
     const d1 = runDailyIntelligence(db, anchorDate)
     runTopicRadar(db, anchorDate, d1.candidates)
   }
-  const understanding = understandQuery(db, normalizedQuestion, anchorDate)
+  const understanding = understandQuery(db, normalizedQuestion, anchorDate, question)
   const embeddingProvider = options.embeddingProvider === undefined ? resolveEmbeddingProvider() : options.embeddingProvider
-  const retrieval = await hybridSearch(db, normalizedQuestion, understanding, embeddingProvider)
+  const retrieval = await hybridSearch(db, normalizedQuestion, understanding, embeddingProvider, question)
   const allResults = [...retrieval.results, ...retrieval.unverifiedTimeResults]
   const sourceMessageIds = allResults.map((item) => item.messageId)
   const telemetryBase = {

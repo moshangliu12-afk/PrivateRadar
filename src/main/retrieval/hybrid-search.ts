@@ -4,6 +4,8 @@ import type { ChatSearchResult, MetadataProvenance, QueryUnderstanding } from '.
 import { DEFAULT_DAILY_CONFIG } from '../intelligence/daily/config'
 import { extractEntityKeys } from '../intelligence/daily/similarity'
 import type { EmbeddingProvider } from '../embedding/provider'
+import { planSearchTerms } from './query-understanding'
+import { compareStableText } from './term-ranking'
 
 const MAX_BASE_ROWS = 2_000
 const MAX_EMBEDDING_CANDIDATES = 120
@@ -36,7 +38,8 @@ export async function hybridSearch(
   db: DatabaseSync,
   question: string,
   understanding: QueryUnderstanding,
-  embeddingProvider: EmbeddingProvider | null
+  embeddingProvider: EmbeddingProvider | null,
+  originalQuery = question
 ): Promise<HybridSearchResult> {
   const rows = loadFilteredRows(db, understanding, 'verified')
   const unverifiedRows = understanding.timeIntent === 'recent'
@@ -45,9 +48,9 @@ export async function hybridSearch(
   if (rows.length === 0 && unverifiedRows.length === 0) {
     return { results: [], unverifiedTimeResults: [], embeddingCandidateCount: 0, usedEmbedding: false }
   }
-  const ranked = await rankRows(db, question, understanding, rows, embeddingProvider)
+  const ranked = await rankRows(db, question, understanding, rows, embeddingProvider, originalQuery)
   const unverified = unverifiedRows.length > 0
-    ? await rankRows(db, question, understanding, unverifiedRows, embeddingProvider)
+    ? await rankRows(db, question, understanding, unverifiedRows, embeddingProvider, originalQuery)
     : { results: [], embeddingCandidateCount: 0, usedEmbedding: false }
   return {
     results: ranked.results,
@@ -62,11 +65,12 @@ async function rankRows(
   question: string,
   understanding: QueryUnderstanding,
   rows: MessageRow[],
-  embeddingProvider: EmbeddingProvider | null
+  embeddingProvider: EmbeddingProvider | null,
+  originalQuery: string
 ): Promise<Pick<HybridSearchResult, 'results' | 'embeddingCandidateCount' | 'usedEmbedding'>> {
   if (rows.length === 0) return { results: [], embeddingCandidateCount: 0, usedEmbedding: false }
   const allowed = new Set(rows.map((row) => row.id))
-  const searchTerms = allSearchTerms(understanding)
+  const searchTerms = allSearchTerms(question, understanding, originalQuery)
   const ftsScores = ftsSearch(db, searchTerms, allowed)
   // 主关键词分数保持原有精确检索语义；扩展词只通过 expansionScore 参与，避免宽泛同义词稀释精确匹配。
   const lexicalScores = new Map(rows.map((row) => [row.id, lexicalScore(row, understanding.searchTerms)]))
@@ -132,8 +136,8 @@ async function rankRows(
       matchReasons: matchReasons({ fts, lexical, semantic, entity, expansion, d1, topic, understanding })
     }]
   }).sort((left, right) => understanding.sort === 'oldest'
-    ? left.timestamp.localeCompare(right.timestamp) || right.relevanceScore - left.relevanceScore || left.messageId.localeCompare(right.messageId)
-    : right.relevanceScore - left.relevanceScore || right.timestamp.localeCompare(left.timestamp) || left.messageId.localeCompare(right.messageId)
+    ? compareStableText(left.timestamp, right.timestamp) || right.relevanceScore - left.relevanceScore || compareStableText(left.messageId, right.messageId)
+    : right.relevanceScore - left.relevanceScore || compareStableText(right.timestamp, left.timestamp) || compareStableText(left.messageId, right.messageId)
   )
 
   // 完成原有排序和去重后，再清除展示值；不可靠时间不作为聊天证据提交给 AI。
@@ -213,9 +217,8 @@ function loadFilteredRows(db: DatabaseSync, understanding: QueryUnderstanding, t
   `).all(...params) as unknown as MessageRow[]
 }
 
-function allSearchTerms(understanding: QueryUnderstanding): string[] {
-  return [...new Set([...understanding.searchTerms, ...understanding.expandedTerms])]
-    .filter((term) => term.length >= 2)
+function allSearchTerms(question: string, understanding: QueryUnderstanding, originalQuery: string): string[] {
+  return planSearchTerms(question, understanding, originalQuery).map((term) => term.text)
     .slice(0, 24)
 }
 
@@ -236,12 +239,13 @@ function expansionScore(row: MessageRow, understanding: QueryUnderstanding): num
 
 function ftsSearch(db: DatabaseSync, terms: string[], allowed: Set<string>): Map<string, number> {
   if (terms.length === 0) return new Map()
-  const expression = terms.slice(0, 12).map((term) => `"${term.replace(/"/g, '""')}"`).join(' OR ')
+  // 入窗资格已经确定；固定序列化顺序消除相同词集合的浮点排名差异。
+  const expression = terms.slice(0, 12).sort(compareStableText).map((term) => `"${term.replace(/"/g, '""')}"`).join(' OR ')
   try {
     const rows = db.prepare(`
       SELECT m.id, bm25(messages_fts) AS rank
       FROM messages_fts JOIN messages m ON m.rowid = messages_fts.rowid
-      WHERE messages_fts MATCH ? ORDER BY rank LIMIT 300
+      WHERE messages_fts MATCH ? ORDER BY rank, m.id COLLATE BINARY LIMIT 300
     `).all(expression) as unknown as RankedRow[]
     const filtered = rows.filter((row) => allowed.has(row.id))
     return new Map(filtered.map((row, index) => [row.id, Number((1 - index / Math.max(1, filtered.length * 1.25)).toFixed(4))]))
