@@ -4,6 +4,8 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { openDatabase, getDashboardSummary, getTopicRadarSummary, validateDashboardDateKey } from './database'
 import { importChatFile } from './import/importer'
+import { macEditMenu, manualImportDialogOptions } from './desktop-platform'
+import { configureMacEvidenceRoot } from './batch-import/mac-json-evidence'
 import { getCandidateEvidence } from './intelligence/daily/repository'
 import { getTopicEvidence } from './intelligence/topics/repository'
 import { askChat, getMessageContext } from './retrieval/service'
@@ -66,14 +68,16 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
-  if (app.isPackaged) Menu.setApplicationMenu(null)
+  if (process.platform === 'darwin') Menu.setApplicationMenu(Menu.buildFromTemplate(macEditMenu()))
+  else if (app.isPackaged) Menu.setApplicationMenu(null)
   const dataDir = runtimeDataDirectory(app.getPath('userData'))
+  if (process.platform === 'darwin') configureMacEvidenceRoot(app.getPath('userData'))
   const logDirectory = join(dataDir, 'logs')
   mkdirSync(dataDir, { recursive: true })
   mkdirSync(logDirectory, { recursive: true })
   writeOperationalLog(logDirectory, 'APP_STARTED')
   const existingConnectorPath = join(dataDir, 'workbuddy', 'privateradar-workbuddy')
-  if (app.isPackaged && existsSync(existingConnectorPath)) {
+  if (process.platform !== 'darwin' && app.isPackaged && existsSync(existingConnectorPath)) {
     try {
       const payloadRoot = join(process.resourcesPath, 'workbuddy-connector')
       const deployment = prepareWorkBuddyConnector(payloadRoot, dataDir, app.getVersion())
@@ -153,6 +157,7 @@ app.whenReady().then(() => {
     return summaryCache.refresh()
   })
   ipcMain.handle('experience:open-workbuddy-config', async () => {
+    if (process.platform === 'darwin') throw new Error('当前 macOS 内部版本尚未支持 WorkBuddy 连接')
     try {
       const payloadRoot = app.isPackaged
         ? join(process.resourcesPath, 'workbuddy-connector')
@@ -169,11 +174,7 @@ app.whenReady().then(() => {
   ipcMain.handle('settings:open-data-directory', async () => (await shell.openPath(dataDir)) || null)
   ipcMain.handle('settings:open-log-directory', async () => (await shell.openPath(logDirectory)) || null)
   ipcMain.handle('import:choose-file', async () => {
-    const selection = await dialog.showOpenDialog(mainWindow!, {
-      title: '选择聊天记录文件',
-      properties: ['openFile'],
-      filters: [{ name: '聊天记录', extensions: ['json', 'csv', 'txt'] }]
-    })
+    const selection = await dialog.showOpenDialog(mainWindow!, manualImportDialogOptions())
     if (selection.canceled || selection.filePaths.length === 0) return null
     const result = await importChatFile(db, selection.filePaths[0], databasePath)
     if (result.recognizedCount > 0 && result.status !== 'failed') markOnboardingComplete(db)

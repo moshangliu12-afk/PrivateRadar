@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite'
 import { dirname, join, resolve } from 'node:path'
 import { getKeywordHitSource, KeywordRadarDesktopError } from './desktop'
 import { verifyBatchEvidence } from '../batch-import/evidence'
+import { openMacJsonEvidence } from '../batch-import/mac-json-evidence'
 import { WindowsPathLease, withRequestScopedWindowsPathLeaseRuntime } from '../batch-import/windows-path-lease'
 
 /** 只接受 Hit 身份；从它的 Item 定位证据，绝不接受渲染层传来的文件路径。 */
@@ -18,6 +19,10 @@ export async function openBatchItemEvidence(
   db: DatabaseSync, databasePath: string, batchItemId: string, openPath: (path: string) => Promise<string>
 ): Promise<{ batchItemId: string; opened: true }> {
   try {
+    if (process.platform === 'darwin') {
+      await openMacJsonEvidence(db, databasePath, batchItemId, openPath)
+      return { batchItemId, opened: true }
+    }
     return await withRequestScopedWindowsPathLeaseRuntime(async () => {
       const verified = await verifyBatchEvidence(db, databasePath, batchItemId)
       if (verified.status !== 'available') throw new KeywordRadarDesktopError('EVIDENCE_UNAVAILABLE')

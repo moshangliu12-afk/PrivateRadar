@@ -241,6 +241,7 @@ export interface DataStatus {
 }
 
 export interface FirstUseStatus {
+  manualJsonOnly?: boolean
   firstLaunch: boolean
   demoMode: boolean
   appVersion: string

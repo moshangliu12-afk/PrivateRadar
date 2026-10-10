@@ -23,9 +23,16 @@ async function captureSource(path: string): Promise<Buffer> {
   const selected = await lstat(path)
   if (!selected.isFile() || selected.isSymbolicLink()) throw new Error('请选择普通 JSON 文件')
   if (selected.size > MANUAL_JSON_MAX_BYTES) throw new Error('文件超过 50 MB，请拆分后再导入')
-  const handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0))
+  const selectedIdentity = process.platform === 'darwin' ? await lstat(path, { bigint: true }) : null
+  const handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) |
+    (process.platform === 'darwin' ? (constants.O_NONBLOCK ?? 0) : 0))
   try {
     const before = await handle.stat()
+    const openedIdentity = selectedIdentity ? await handle.stat({ bigint: true }) : null
+    if (selectedIdentity && openedIdentity && (!selectedIdentity.isFile() || selectedIdentity.isSymbolicLink() ||
+        selectedIdentity.dev !== openedIdentity.dev || selectedIdentity.ino !== openedIdentity.ino ||
+        selectedIdentity.size !== openedIdentity.size || selectedIdentity.mtimeNs !== openedIdentity.mtimeNs ||
+        selectedIdentity.ctimeNs !== openedIdentity.ctimeNs)) throw new Error('JSON 文件在捕获前发生变化，请重新选择')
     if (!before.isFile() || before.dev !== selected.dev || before.ino !== selected.ino ||
         before.size > MANUAL_JSON_MAX_BYTES) throw new Error('JSON 文件在捕获前发生变化，请重新选择')
     const chunks: Buffer[] = []
@@ -41,6 +48,15 @@ async function captureSource(path: string): Promise<Buffer> {
     const after = await handle.stat()
     if (before.size !== size || before.size !== after.size || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs) {
       throw new Error('JSON 文件在捕获中发生变化，请重新选择')
+    }
+    if (openedIdentity) {
+      const capturedIdentity = await handle.stat({ bigint: true }), current = await lstat(path, { bigint: true })
+      if (!current.isFile() || current.isSymbolicLink() || current.dev !== capturedIdentity.dev || current.ino !== capturedIdentity.ino ||
+          current.size !== capturedIdentity.size || current.mtimeNs !== capturedIdentity.mtimeNs || current.ctimeNs !== capturedIdentity.ctimeNs ||
+          openedIdentity.size !== BigInt(size) || openedIdentity.size !== capturedIdentity.size ||
+          openedIdentity.mtimeNs !== capturedIdentity.mtimeNs || openedIdentity.ctimeNs !== capturedIdentity.ctimeNs) {
+        throw new Error('JSON 源路径在捕获中发生变化，请重新选择')
+      }
     }
     return Buffer.concat(chunks, size)
   } finally { await handle.close() }

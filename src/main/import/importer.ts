@@ -17,6 +17,9 @@ const MAX_FILE_BYTES = 50 * 1024 * 1024
 const MAX_REPORTED_ERRORS = 20
 
 export async function importChatFile(db: DatabaseSync, filePath: string, databasePath?: string): Promise<ImportResult> {
+  if (process.platform === 'darwin' && !basename(filePath).toLowerCase().endsWith('.json')) {
+    throw new Error('当前 macOS 内部版本只支持 JSON 原始证据导入')
+  }
   if (fileTypeFromName(basename(filePath)) === 'JSON') {
     const path = databasePath ?? db.location()
     if (!path) throw new Error('JSON 原始证据导入需要文件数据库')

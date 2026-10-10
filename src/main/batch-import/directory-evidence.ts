@@ -164,6 +164,7 @@ export async function saveDirectoryEvidence(
   db: DatabaseSync, databasePath: string, batchItemId: string, sourceDirectory: string,
   overrides: Partial<Limits> = {}
 ): Promise<StoredEvidenceFile> {
+  if (process.platform === 'darwin') throw new Error('当前 macOS 内部版本尚未支持目录证据')
   const item = loadItem(db, batchItemId)
   const target = paths(databasePath, batchItemId)
   const source = safeAbsolutePath(sourceDirectory)
@@ -260,6 +261,10 @@ export async function verifyDirectoryEvidence(
 }
 
 export async function inspectDirectoryEvidence(item: BatchImportItem, databasePath: string): Promise<EvidencePartResult> {
+  if (process.platform === 'darwin') {
+    return { status: 'error', relativePath: item.evidence_relative_path,
+      expectedSha256: item.attachment_identity, actualSha256: null, error: '当前 macOS 内部版本尚未支持目录证据' }
+  }
   const target = paths(databasePath, item.id)
   const result: EvidencePartResult = { status: 'pending', relativePath: item.evidence_relative_path,
     expectedSha256: item.attachment_identity, actualSha256: null }

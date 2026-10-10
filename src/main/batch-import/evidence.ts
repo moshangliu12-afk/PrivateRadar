@@ -8,6 +8,7 @@ import { workBuddyIngestSchema, type WorkBuddyIngestInput } from '../integration
 import type { BatchImportItem } from './repository'
 import { inspectDirectoryEvidence } from './directory-evidence'
 import { WindowsPathLease } from './windows-path-lease'
+import { loadMacJsonSnapshot, saveMacJsonRaw, saveMacJsonSnapshot, verifyMacJsonEvidence } from './mac-json-evidence'
 import { createManualJsonZip, getManualJsonItem, MANUAL_JSON_MAX_BYTES, validateManualJsonSnapshot,
   type ManualJsonSnapshotInput } from '../import/manual-json-contract'
 
@@ -46,6 +47,7 @@ export interface StoredEvidenceFile {
 export async function saveCapturedJsonEvidence(
   db: DatabaseSync, databasePath: string, batchItemId: string, capturedBytes: Buffer
 ): Promise<StoredEvidenceFile> {
+  if (process.platform === 'darwin') return saveMacJsonRaw(db, databasePath, batchItemId, capturedBytes)
   if (!getManualJsonItem(db, batchItemId)) throw new Error('手动 JSON 来源身份未登记')
   if (capturedBytes.length > MANUAL_JSON_MAX_BYTES) throw new Error('文件超过 50 MB，请拆分后再导入')
   const item = loadItem(db, batchItemId), paths = itemPaths(databasePath, batchItemId)
@@ -94,6 +96,7 @@ export async function saveOriginalZip(
   batchItemId: string,
   sourceZipPath: string
 ): Promise<StoredEvidenceFile> {
+  if (process.platform === 'darwin') throw new Error('此平台尚未支持外部 ZIP 证据导入')
   const item = loadItem(db, batchItemId)
   const paths = itemPaths(databasePath, batchItemId)
   let temporaryPath: string | null = null
@@ -159,6 +162,10 @@ export async function saveStructuredSnapshot(
   batchItemId: string,
   input: WorkBuddyIngestInput | ManualJsonSnapshotInput
 ): Promise<StoredEvidenceFile> {
+  if (process.platform === 'darwin') {
+    if (!getManualJsonItem(db, batchItemId)) throw new Error('此平台尚未支持该来源的证据快照')
+    return saveMacJsonSnapshot(db, databasePath, batchItemId, input as ManualJsonSnapshotInput)
+  }
   const item = loadItem(db, batchItemId)
   const paths = itemPaths(databasePath, batchItemId)
   let temporaryPath: string | null = null
@@ -248,6 +255,7 @@ export async function verifyBatchEvidence(
   databasePath: string,
   batchItemId: string
 ): Promise<EvidenceVerification> {
+  if (process.platform === 'darwin') return verifyMacJsonEvidence(db, databasePath, batchItemId)
   const item = loadItem(db, batchItemId)
   const paths = itemPaths(databasePath, batchItemId)
   const source = await inspectRecordedSource(item, paths, databasePath)
@@ -282,6 +290,7 @@ export async function verifyBatchEvidence(
 export async function loadManualJsonSnapshot(
   db: DatabaseSync, databasePath: string, batchItemId: string
 ): Promise<ManualJsonSnapshotInput> {
+  if (process.platform === 'darwin') return loadMacJsonSnapshot(db, databasePath, batchItemId)
   if (!getManualJsonItem(db, batchItemId)) throw new Error('不是手动 JSON 来源')
   if ((await verifyBatchEvidence(db, databasePath, batchItemId)).status !== 'available') throw new Error('手动 JSON 证据不可用')
   const item = loadItem(db, batchItemId), paths = itemPaths(databasePath, batchItemId)
@@ -295,6 +304,7 @@ export async function loadStructuredSnapshot(
   databasePath: string,
   batchItemId: string
 ): Promise<WorkBuddyIngestInput> {
+  if (process.platform === 'darwin') throw new Error('此平台尚未支持 WorkBuddy 证据快照')
   if (getManualJsonItem(db, batchItemId)) throw new Error('手动 JSON 来源需读取专属快照')
   const verified = await verifyBatchEvidence(db, databasePath, batchItemId)
   if (verified.status !== 'available') throw new Error(`附件证据不可用：${verified.status}`)

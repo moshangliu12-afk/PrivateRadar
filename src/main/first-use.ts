@@ -19,17 +19,21 @@ export function getFirstUseStatus(
   const onboarding = setting(db, 'onboarding_completed') === true
   const demoMode = setting(db, 'demo_mode') === true
   const dataDirectory = dirname(databasePath)
-  const inspection = inspectWorkBuddyConnection(dataDirectory)
-  const connected = inspection.connected || connectorConnected(db, now)
-  const connectorState = connectorSetupState(dataDirectory)
+  const manualJsonOnly = process.platform === 'darwin'
+  const inspection = manualJsonOnly
+    ? { connected: false, message: '当前 macOS 内部版本支持 JSON 原始证据导入；WorkBuddy 连接尚未支持。' }
+    : inspectWorkBuddyConnection(dataDirectory)
+  const connected = !manualJsonOnly && (inspection.connected || connectorConnected(db, now))
+  const connectorState = manualJsonOnly ? null : connectorSetupState(dataDirectory)
   if (connected) acknowledgeConnectorTrust(dataDirectory)
   return {
+    ...(manualJsonOnly ? { manualJsonOnly: true } : {}),
     firstLaunch: !onboarding && messageCount === 0,
     demoMode,
     appVersion,
     workBuddyConnected: connected,
     workBuddyConnectionMessage: connected ? 'WorkBuddy 已连接。' : inspection.message,
-    workBuddyInstalled: detectWorkBuddyInstalled(),
+    workBuddyInstalled: !manualJsonOnly && detectWorkBuddyInstalled(),
     connectorPrepared: connectorState !== null && isWorkBuddyConnectorRegistered(dataDirectory),
     connectorRequiresRetrust: !connected && connectorState?.trustReason === 'configuration_changed',
     databaseHealthy: databaseQuickCheck(db),

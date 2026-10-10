@@ -77,6 +77,7 @@ export function prepareWorkBuddyConnector(
   now = new Date(),
   userHome = homedir()
 ): ConnectorSetupResult {
+  if (process.platform === 'darwin') throw new Error('当前 macOS 内部版本尚未支持 WorkBuddy 连接')
   const connectorPath = join(dataDirectory, 'workbuddy', CONNECTOR_ID)
   const databasePath = join(dataDirectory, 'private-radar.db')
   const logPath = join(dataDirectory, 'logs', 'workbuddy-connector.log')

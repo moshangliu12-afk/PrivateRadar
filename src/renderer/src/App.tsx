@@ -131,6 +131,7 @@ export function App(): React.JSX.Element {
   async function beginWechatImport(): Promise<void> {
     const status = await window.privateRadar.getFirstUseStatus()
     setFirstUse(status)
+    if (status.manualJsonOnly) { setPage('settings'); return }
     setImportBaselineJobId(status.latestImport?.jobId ?? null)
     setPage('import-guide')
   }
@@ -287,7 +288,7 @@ export function App(): React.JSX.Element {
 
   if (!bootstrapped) return <div className="first-use-loading">正在准备 PrivateRadar……</div>
   if (page === 'welcome') {
-    return <WelcomePage error={error} onDemo={activateDemo} onImport={beginWechatImport} onCollect={() => setPage('collections')} />
+    return <WelcomePage error={error} manualJsonOnly={firstUse?.manualJsonOnly} onDemo={activateDemo} onImport={beginWechatImport} onCollect={() => setPage('collections')} />
   }
   if (page === 'import-guide' && firstUse) {
     return <WechatImportGuide status={firstUse} onBack={() => setPage(firstUse.firstLaunch ? 'welcome' : 'daily')} onRefresh={refreshFirstUse} />
@@ -306,6 +307,7 @@ export function App(): React.JSX.Element {
         <div className="side-label">工作空间</div>
         <nav aria-label="页面导航">
           {NAV_ITEMS.map((item, index) => (
+            firstUse?.manualJsonOnly && index === 4 ? null :
             <button
               className={(page === 'daily' && index === 0) || (page === 'radar' && index === 1) || (page === 'search' && index === 2) || (page === 'settings' && index === 3) || (page === 'collections' && index === 4) || (page === 'keywords' && index === 5) || (page === 'commitments' && index === 6) || (page === 'confirmed-commitments' && index === 7) ? 'active' : ''}
               key={item}
@@ -442,8 +444,9 @@ export function App(): React.JSX.Element {
   )
 }
 
-function WelcomePage({ error, onDemo, onImport, onCollect }: {
+export function WelcomePage({ error, manualJsonOnly, onDemo, onImport, onCollect }: {
   error: string
+  manualJsonOnly?: boolean
   onDemo: () => Promise<void>
   onImport: () => Promise<void>
   onCollect: () => void
@@ -457,9 +460,9 @@ function WelcomePage({ error, onDemo, onImport, onCollect }: {
       {error && <div className="error">{error}</div>}
       <div className="welcome-actions">
         <button type="button" className="welcome-choice primary" onClick={() => void onDemo()}><strong>体验示例聊天</strong><span>无需微信，立即体验 PrivateRadar</span></button>
-        <button type="button" className="welcome-choice" onClick={() => void onImport()}><strong>导入我的微信聊天</strong><span>开始使用自己的聊天记录</span></button>
+        <button type="button" className="welcome-choice" onClick={() => void onImport()}><strong>{manualJsonOnly ? 'JSON 原始证据导入' : '导入我的微信聊天'}</strong><span>{manualJsonOnly ? '当前 macOS 内部版本支持 JSON 文件' : '开始使用自己的聊天记录'}</span></button>
       </div>
-      <button type="button" className="regenerate-button" onClick={onCollect}>开始批量收集</button>
+      {!manualJsonOnly && <button type="button" className="regenerate-button" onClick={onCollect}>开始批量收集</button>}
       <small className="welcome-privacy">聊天原文默认保存在你的电脑上。</small>
     </main>
   )
@@ -682,11 +685,13 @@ export function SettingsPage({ status, importing, onImportFile, onConfigure, onC
     <section className="settings-section" aria-labelledby="settings-actions-title">
       <div className="settings-section-heading"><div><span className="settings-kicker">应用工具</span><h2 id="settings-actions-title">管理与诊断</h2></div><span className="settings-section-index">04</span></div>
       <div className="settings-action-grid">
+        {!status.manualJsonOnly && <>
         <button className="settings-action-card primary-action" type="button" onClick={() => void checkConnection()} disabled={checking}><span className="settings-action-icon"><UiIcon name="link" /></span><span>{checking ? '正在检查…' : '检查 WorkBuddy 连接'}</span><UiIcon name="arrow" className="settings-action-arrow" /></button>
         <button className="settings-action-card" type="button" onClick={() => void onConfigure()}><span className="settings-action-icon"><UiIcon name="settings" /></span><span>配置 WorkBuddy</span><UiIcon name="arrow" className="settings-action-arrow" /></button>
+        </>}
         <button className="settings-action-card" type="button" onClick={() => void openDirectory('data')}><span className="settings-action-icon"><UiIcon name="folder" /></span><span>打开数据目录</span><UiIcon name="arrow" className="settings-action-arrow" /></button>
         <button className="settings-action-card" type="button" onClick={() => void openDirectory('log')}><span className="settings-action-icon"><UiIcon name="inbox" /></span><span>打开日志目录</span><UiIcon name="arrow" className="settings-action-arrow" /></button>
-        <button className="settings-action-card" type="button" onClick={() => void onImportFile()} disabled={importing}><span className="settings-action-icon"><UiIcon name="inbox" /></span><span>{importing ? '正在导入…' : '从文件导入'}</span><UiIcon name="arrow" className="settings-action-arrow" /></button>
+        <button className="settings-action-card" type="button" onClick={() => void onImportFile()} disabled={importing}><span className="settings-action-icon"><UiIcon name="inbox" /></span><span>{importing ? '正在导入…' : status.manualJsonOnly ? 'JSON 原始证据导入' : '从文件导入'}</span><UiIcon name="arrow" className="settings-action-arrow" /></button>
         <button className="settings-action-card" type="button" onClick={() => void exportFeedback()}><span className="settings-action-icon"><UiIcon name="chat" /></span><span>导出测试反馈</span><UiIcon name="arrow" className="settings-action-arrow" /></button>
       </div>
       {notice && <div role="status" className={`settings-operation-notice ${status.workBuddyConnected ? 'mode-notice' : 'error'}`}>{notice}</div>}
@@ -704,7 +709,7 @@ function DataStatusCard({ status }: { status: FirstUseStatus }): React.JSX.Eleme
       <div className="data-status-facts">
         <div className="data-status-summary"><span>数据最新至</span><strong>{latestMessageDate ?? '时间未知'}</strong></div>
         <div className="data-status-summary"><span>累计</span><strong>{status.totalMessageCount.toLocaleString()} 条消息 · {status.importBatchCount.toLocaleString()} 个聊天批次</strong></div>
-        <div className="data-status-summary"><span>数据源状态</span><strong className={`settings-source-state ${status.workBuddyConnected ? 'connected' : 'disconnected'}`}><span aria-hidden="true" />WorkBuddy {status.workBuddyConnected ? '已连接' : '未连接'}</strong></div>
+        <div className="data-status-summary"><span>数据源状态</span><strong className={`settings-source-state ${status.workBuddyConnected ? 'connected' : 'disconnected'}`}><span aria-hidden="true" />{status.manualJsonOnly ? 'JSON 原始证据导入 · WorkBuddy 尚未支持' : <>WorkBuddy {status.workBuddyConnected ? '已连接' : '未连接'}</>}</strong></div>
       </div>
     </article>
   </section>
@@ -718,7 +723,7 @@ function DataStatusCard({ status }: { status: FirstUseStatus }): React.JSX.Eleme
       <div className="data-status-facts">
         <div className="data-status-summary"><span>数据最新至</span><strong>{latestMessageDate ?? '时间未知'}</strong></div>
         <div className="data-status-summary"><span>累计</span><strong>{status.totalMessageCount.toLocaleString()} 条消息 · {status.importBatchCount.toLocaleString()} 个聊天批次</strong></div>
-        <div className="data-status-summary"><span>数据源状态</span><strong className={`settings-source-state ${status.workBuddyConnected ? 'connected' : 'disconnected'}`}><span aria-hidden="true" />WorkBuddy {status.workBuddyConnected ? '已连接' : '未连接'}</strong></div>
+        <div className="data-status-summary"><span>数据源状态</span><strong className={`settings-source-state ${status.workBuddyConnected ? 'connected' : 'disconnected'}`}><span aria-hidden="true" />{status.manualJsonOnly ? 'JSON 原始证据导入 · WorkBuddy 尚未支持' : <>WorkBuddy {status.workBuddyConnected ? '已连接' : '未连接'}</>}</strong></div>
       </div>
     </article>
   </section>
