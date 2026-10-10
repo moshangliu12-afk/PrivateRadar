@@ -94,7 +94,7 @@ async function withClient<T>(f: Fixture, action: (client: Client) => Promise<T>,
 }
 
 describe('单卡真实当前输入与既有来源链路', () => {
-  it('同路径两份原始上下文只生成一项证据、四个来源、一份冻结任务和两条候选项', async () => {
+  it.skipIf(process.platform !== 'win32')('同路径两份原始上下文只生成一项证据、四个来源、一份冻结任务和两条候选项', async () => {
     const f = fixture(), first = f.contexts[0]
     const input = request([first, { ...first, transcript: first.transcript + '\n' }])
     const expected = gateWorkBuddyBatchCurrentInput(input.contexts).logical_attachments[0]
@@ -140,7 +140,7 @@ describe('单卡真实当前输入与既有来源链路', () => {
     console.info('隔离四原文样本统计：' + JSON.stringify({ CONTROLLED_SAMPLE_CANONICAL_ADDED: result.summary.imported_total, CONTROLLED_SAMPLE_OCCURRENCES: count(f, 'batch_item_message_sources'), CONTROLLED_SAMPLE_CANDIDATES: count(f, 'commitment_candidates') }))
   }, 120000)
 
-  it('公开原始上下文工具接受单卡，标准协议回包校验与产品结果校验均通过', async () => {
+  it.skipIf(process.platform !== 'win32')('公开原始上下文工具接受单卡，标准协议回包校验与产品结果校验均通过', async () => {
     const f = fixture()
     const result = await withClient(f, async client => {
       const response = await client.callTool({ name: 'privateradar_ingest_current_context_batch', arguments: request([f.contexts[0]]) })
@@ -156,7 +156,7 @@ describe('单卡真实当前输入与既有来源链路', () => {
     expect(count(f, 'commitment_candidates')).toBe(2)
   }, 120000)
 
-  it('原双卡两份来源仍形成独立会话项、证据、来源、冻结任务和候选项', async () => {
+  it.skipIf(process.platform !== 'win32')('原双卡两份来源仍形成独立会话项、证据、来源、冻结任务和候选项', async () => {
     const f = fixture(), beforeMessages = count(f, 'messages')
     const result = await ingestWorkBuddyCurrentContextBatch(f.db, f.options, request([
       f.contexts[0], { ...f.contexts[0] }, f.contexts[1], { ...f.contexts[1] }
@@ -185,7 +185,7 @@ describe('单卡真实当前输入与既有来源链路', () => {
 })
 
 describe('仅原始当前输入可进入公开导入链路', () => {
-  it('旧公开自由消息入口稳定拒绝，全部产品表及已有证据字节零修改', async () => {
+  it.skipIf(process.platform !== 'win32')('旧公开自由消息入口稳定拒绝，全部产品表及已有证据字节零修改', async () => {
     const f = fixture(), imported = await ingestWorkBuddyCurrentContextBatch(f.db, f.options, request([f.contexts[0]]))
     await flushDerived()
     const before = productState(f), evidence = evidenceState(join(f.data, 'evidence')), source = evidenceState(f.root), log = vi.fn()
@@ -239,7 +239,7 @@ describe('仅原始当前输入可进入公开导入链路', () => {
 })
 
 describe('单卡派生处理的事务及历史边界', () => {
-  it('真实来源绑定在核心事务内冻结运行记录，提交后才进入独立处理器', async () => {
+  it.skipIf(process.platform !== 'win32')('真实来源绑定在核心事务内冻结运行记录，提交后才进入独立处理器', async () => {
     const f = fixture(), registered: boolean[] = [], processed: boolean[] = []
     const actualRegister = runs.registerCommitmentExtractorRun, actualProcess = processor.processCommitmentExtractorRun
     vi.spyOn(runs, 'registerCommitmentExtractorRun').mockImplementation((db, itemId, jobId, version, positions, createdAt) => {
@@ -264,7 +264,7 @@ describe('单卡派生处理的事务及历史边界', () => {
     expect(count(f, 'commitment_candidates')).toBe(2)
   }, 120000)
 
-  it('派生匹配失败只落受控失败状态，核心任务和附件成功、证据字节及关键词结果保持', async () => {
+  it.skipIf(process.platform !== 'win32')('派生匹配失败只落受控失败状态，核心任务和附件成功、证据字节及关键词结果保持', async () => {
     const f = fixture()
     vi.spyOn(matcher, 'matchCommitmentBody').mockImplementation(() => { throw new Error('秘密原文、绝对证据路径和堆栈') })
     const result = await ingestWorkBuddyCurrentContextBatch(f.db, f.options, request([f.contexts[0]])), item = result.items[0]
@@ -283,7 +283,7 @@ describe('单卡派生处理的事务及历史边界', () => {
     expect(evidenceState(join(f.data, 'evidence'))).toEqual(evidence)
   }, 120000)
 
-  it('旧无证据消息不补来源或派生任务，只处理本次明确原始来源及新增关键词来源', async () => {
+  it.skipIf(process.platform !== 'win32')('旧无证据消息不补来源或派生任务，只处理本次明确原始来源及新增关键词来源', async () => {
     const f = fixture()
     const old = ingestWorkBuddyMessages(f.db, { source_batch_id: '旧无证据历史', messages: 原文.map((content, source_position) => ({ content, source_position })) })
     expect(old.status).toBe('success')

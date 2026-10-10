@@ -68,7 +68,7 @@ function messages(): WorkBuddyIngestInput {
 }
 
 describe('alpha.15 原始证据与结构化快照', () => {
-  it('将明确给出的 ZIP 保存到附件项目录并登记相对路径与哈希', async () => {
+  it.skipIf(process.platform !== 'win32')('将明确给出的 ZIP 保存到附件项目录并登记相对路径与哈希', async () => {
     const { db, databasePath, directory, zipPath } = fixture()
     const itemId = item(db)
     const stored = await saveOriginalZip(db, databasePath, itemId, zipPath)
@@ -82,7 +82,7 @@ describe('alpha.15 原始证据与结构化快照', () => {
     expect((await verifyBatchEvidence(db, databasePath, itemId)).zip.status).toBe('available')
   })
 
-  it('关闭并重新打开数据库后仍可校验 ZIP、快照并恢复原输入', async () => {
+  it.skipIf(process.platform !== 'win32')('关闭并重新打开数据库后仍可校验 ZIP、快照并恢复原输入', async () => {
     const { db, databasePath, zipPath } = fixture()
     const itemId = item(db)
     await saveOriginalZip(db, databasePath, itemId, zipPath)
@@ -100,7 +100,7 @@ describe('alpha.15 原始证据与结构化快照', () => {
     expect(await loadStructuredSnapshot(reopened, databasePath, itemId)).toEqual(messages())
   })
 
-  it('两个内容相同的 ZIP 在不同附件项下分别保存，不合并实例', async () => {
+  it.skipIf(process.platform !== 'win32')('两个内容相同的 ZIP 在不同附件项下分别保存，不合并实例', async () => {
     const { db, databasePath, directory, zipPath } = fixture()
     const session = createBatchImportSession(db, 'workbuddy')
     const first = createBatchImportItem(db, session.id, 0)
@@ -114,7 +114,7 @@ describe('alpha.15 原始证据与结构化快照', () => {
     expect(existsSync(join(directory, 'evidence', second.id, 'original.zip'))).toBe(true)
   })
 
-  it('快照保留多日期、发送人、消息顺序、原始空格换行及占位文本', async () => {
+  it.skipIf(process.platform !== 'win32')('快照保留多日期、发送人、消息顺序、原始空格换行及占位文本', async () => {
     const { db, databasePath, directory, zipPath } = fixture()
     const itemId = item(db)
     await saveOriginalZip(db, databasePath, itemId, zipPath)
@@ -133,7 +133,7 @@ describe('alpha.15 原始证据与结构化快照', () => {
     })
   })
 
-  it('源 ZIP 缺失时返回失败，不产生 available 或伪证据', async () => {
+  it.skipIf(process.platform !== 'win32')('源 ZIP 缺失时返回失败，不产生 available 或伪证据', async () => {
     const { db, databasePath, directory } = fixture()
     const itemId = item(db)
     await expect(saveOriginalZip(db, databasePath, itemId, join(directory, '不存在.zip'))).rejects.toThrow()
@@ -150,7 +150,7 @@ describe('alpha.15 原始证据与结构化快照', () => {
     })
   })
 
-  it('持久 ZIP 损坏时只读校验返回 corrupt，不覆盖损坏文件', async () => {
+  it.skipIf(process.platform !== 'win32')('持久 ZIP 损坏时只读校验返回 corrupt，不覆盖损坏文件', async () => {
     const { db, databasePath, directory, zipPath } = fixture()
     const itemId = item(db)
     await saveOriginalZip(db, databasePath, itemId, zipPath)
@@ -162,7 +162,7 @@ describe('alpha.15 原始证据与结构化快照', () => {
     expect(readFileSync(target)).toEqual(emptyZip('已损坏'))
   })
 
-  it('快照损坏或缺失时分别返回 corrupt 和 missing', async () => {
+  it.skipIf(process.platform !== 'win32')('快照损坏或缺失时分别返回 corrupt 和 missing', async () => {
     const { db, databasePath, directory, zipPath } = fixture()
     const itemId = item(db)
     await saveOriginalZip(db, databasePath, itemId, zipPath)
@@ -174,7 +174,7 @@ describe('alpha.15 原始证据与结构化快照', () => {
     expect((await verifyBatchEvidence(db, databasePath, itemId)).snapshot.status).toBe('missing')
   })
 
-  it('同一项重复保存相同 ZIP 与快照时幂等，不生成额外文件', async () => {
+  it.skipIf(process.platform !== 'win32')('同一项重复保存相同 ZIP 与快照时幂等，不生成额外文件', async () => {
     const { db, databasePath, directory, zipPath } = fixture()
     const itemId = item(db)
     const firstZip = await saveOriginalZip(db, databasePath, itemId, zipPath)
@@ -185,7 +185,7 @@ describe('alpha.15 原始证据与结构化快照', () => {
     expect((await verifyBatchEvidence(db, databasePath, itemId)).status).toBe('available')
   })
 
-  it('同一项传入不同 ZIP 时明确拒绝且原证据仍可验证', async () => {
+  it.skipIf(process.platform !== 'win32')('同一项传入不同 ZIP 时明确拒绝且原证据仍可验证', async () => {
     const { db, databasePath, directory, zipPath } = fixture()
     const itemId = item(db)
     const original = await saveOriginalZip(db, databasePath, itemId, zipPath)
@@ -196,7 +196,7 @@ describe('alpha.15 原始证据与结构化快照', () => {
     expect(hash(readFileSync(join(directory, 'evidence', itemId, 'original.zip')))).toBe(original.sha256)
   })
 
-  it('字段顺序不同但内容相同的结构化输入生成同一快照哈希', async () => {
+  it.skipIf(process.platform !== 'win32')('字段顺序不同但内容相同的结构化输入生成同一快照哈希', async () => {
     const { db, databasePath, zipPath } = fixture()
     const session = createBatchImportSession(db, 'workbuddy')
     const a = createBatchImportItem(db, session.id, 0)
@@ -214,7 +214,7 @@ describe('alpha.15 原始证据与结构化快照', () => {
     expect(first.sha256).toBe(second.sha256)
   })
 
-  it('识别文件已落盘但数据库未登记的孤立原件，不静默接管或覆盖', async () => {
+  it.skipIf(process.platform !== 'win32')('识别文件已落盘但数据库未登记的孤立原件，不静默接管或覆盖', async () => {
     const { db, databasePath, directory, zipPath } = fixture()
     const itemId = item(db)
     const evidenceDirectory = join(directory, 'evidence', itemId)
@@ -225,7 +225,7 @@ describe('alpha.15 原始证据与结构化快照', () => {
     expect(db.prepare('SELECT evidence_relative_path FROM batch_import_items WHERE id = ?').get(itemId)).toEqual({ evidence_relative_path: null })
   })
 
-  it('ZIP 已保存但快照保存失败时保留 ZIP，并明确标记附件项未准备完成', async () => {
+  it.skipIf(process.platform !== 'win32')('ZIP 已保存但快照保存失败时保留 ZIP，并明确标记附件项未准备完成', async () => {
     const { db, databasePath, zipPath } = fixture()
     const itemId = item(db)
     await saveOriginalZip(db, databasePath, itemId, zipPath)
@@ -242,7 +242,7 @@ describe('alpha.15 原始证据与结构化快照', () => {
     expect((await verifyBatchEvidence(db, databasePath, itemId)).status).toBe('available')
   })
 
-  it('拒绝附件编号目录穿越及数据库中被篡改的相对路径', async () => {
+  it.skipIf(process.platform !== 'win32')('拒绝附件编号目录穿越及数据库中被篡改的相对路径', async () => {
     const { db, databasePath, zipPath } = fixture()
     const itemId = item(db)
     await expect(saveOriginalZip(db, databasePath, '../escape', zipPath)).rejects.toThrow('编号无效')

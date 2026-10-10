@@ -35,7 +35,7 @@ const cases: QualityCase[] = [
     dateCheck: (response, anchor) => {
       const expected = shiftDays(anchor, -1)
       expect(response.understanding.dateRange).toEqual({ label: '昨天', start: expected, end: expected })
-      expect(response.results.every((item) => item.timestamp.startsWith(expected))).toBe(true)
+      expect(response.results.every((item) => localDate(item.timestamp) === expected)).toBe(true)
     }
   },
   {
@@ -56,7 +56,7 @@ const cases: QualityCase[] = [
     query: '今天谁提到 DataNest？', top1: /DataNest/, valid: /DataNest/,
     dateCheck: (response, anchor) => {
       expect(response.understanding.dateRange).toEqual({ label: '今天', start: anchor, end: anchor })
-      expect(response.results.every((item) => item.timestamp.startsWith(anchor))).toBe(true)
+      expect(response.results.every((item) => localDate(item.timestamp) === anchor)).toBe(true)
     }
   },
 
@@ -117,7 +117,12 @@ function shiftDays(date: string, days: number): string {
 
 function inRange(response: ChatQueryResponse, start: string, end: string): boolean {
   return response.results.every((item) => {
-    const date = item.timestamp.slice(0, 10)
+    const date = localDate(item.timestamp)
     return date >= start && date <= end
   })
+}
+
+function localDate(timestamp: string): string {
+  const date = new Date(timestamp)
+  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-')
 }

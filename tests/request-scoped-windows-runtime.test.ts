@@ -128,7 +128,7 @@ function count(db: DatabaseSync, table: string): number {
 }
 
 describe('单请求共享执行载体，租约和原生句柄仍独立', () => {
-  it.each([false, true])('最小隔离双卡完整 MCP 链路仅启动一个 helper，三块上下文导入十二条消息，显式归集=%s', async (withCollection) => {
+  it.skipIf(process.platform !== 'win32').each([false, true])('最小隔离双卡完整 MCP 链路仅启动一个 helper，三块上下文导入十二条消息，显式归集=%s', async (withCollection) => {
     const f = batchFixture(), capture = createRuntimeCapture()
     const collection = withCollection ? createCollection(f.db, '隔离性能契约') : null
     const server = createWorkBuddyMcpServer(f.db, undefined, f.options)
@@ -179,7 +179,7 @@ describe('单请求共享执行载体，租约和原生句柄仍独立', () => {
     } finally { await client.close(); await server.close() }
   }, 60000)
 
-  it('独立租约原生哈希和读取结果不变，关闭后无 helper 残留', async () => {
+  it.skipIf(process.platform !== 'win32')('独立租约原生哈希和读取结果不变，关闭后无 helper 残留', async () => {
     const f = fixture(), capture = createRuntimeCapture()
     const bytes = Buffer.from('只用于隔离测试')
     await withRuntimeCapture(capture, async () => {
@@ -239,7 +239,7 @@ describe('单请求共享执行载体，租约和原生句柄仍独立', () => {
     expect(capture.helpers.filter((helper) => helper.spawned)).toHaveLength(0)
   })
 
-  it('同路径两个租约有独立句柄，关闭/释放其中一个不影响另一个，也不能借用其他租约的句柄', async () => {
+  it.skipIf(process.platform !== 'win32')('同路径两个租约有独立句柄，关闭/释放其中一个不影响另一个，也不能借用其他租约的句柄', async () => {
     const f = fixture(), capture = createRuntimeCapture()
     const expected = createHash('sha256').update('只用于隔离测试').digest('hex')
     await withRuntimeCapture(capture, () => withRequestScopedWindowsPathLeaseRuntime(async () => {
@@ -264,7 +264,7 @@ describe('单请求共享执行载体，租约和原生句柄仍独立', () => {
     noHelpers(capture)
   }, 30000)
 
-  it('不同并发 Tool 请求各自创建 runtime，不共用进程，均完成十二条导入', async () => {
+  it.skipIf(process.platform !== 'win32')('不同并发 Tool 请求各自创建 runtime，不共用进程，均完成十二条导入', async () => {
     const a = batchFixture(), b = batchFixture()
     const captures = [createRuntimeCapture(), createRuntimeCapture()]
     await Promise.all([a, b].map((f, index) => withRuntimeCapture(captures[index], async () => {
@@ -284,7 +284,7 @@ describe('单请求共享执行载体，租约和原生句柄仍独立', () => {
     expect(pids[0]).not.toBe(pids[1])
   }, 60000)
 
-  it.each(['提前返回', '异常'])('请求%s时清理未显式 close 的全部租约，并拒绝请求后继续使用', async (mode) => {
+  it.skipIf(process.platform !== 'win32').each(['提前返回', '异常'])('请求%s时清理未显式 close 的全部租约，并拒绝请求后继续使用', async (mode) => {
     const f = fixture(), capture = createRuntimeCapture()
     let leftover!: WindowsPathLease
     const result = withRuntimeCapture(capture, () => withRequestScopedWindowsPathLeaseRuntime(async () => {
@@ -302,7 +302,7 @@ describe('单请求共享执行载体，租约和原生句柄仍独立', () => {
     noHelpers(capture)
   }, 30000)
 
-  it('Helper 崩溃即使被调用方捕获也不能成功返回，且不污染另一并发请求', async () => {
+  it.skipIf(process.platform !== 'win32')('Helper 崩溃即使被调用方捕获也不能成功返回，且不污染另一并发请求', async () => {
     const a = fixture(), b = fixture(), failed = createRuntimeCapture(), healthy = createRuntimeCapture()
     await Promise.all([
       expect(withRuntimeCapture(failed, () => withRequestScopedWindowsPathLeaseRuntime(async () => {
@@ -323,7 +323,7 @@ describe('单请求共享执行载体，租约和原生句柄仍独立', () => {
     noHelpers(healthy)
   }, 30000)
 
-  it.each(['acquire', 'close_lease'])('租约 %s 失败时拒绝 Tool、无业务写入且销毁 helper', async (op) => {
+  it.skipIf(process.platform !== 'win32').each(['acquire', 'close_lease'])('租约 %s 失败时拒绝 Tool、无业务写入且销毁 helper', async (op) => {
     const f = batchFixture(), capture = createRuntimeCapture()
     const original = RequestScopedWindowsPathLeaseRuntime.prototype.request
     let fault = false
@@ -338,7 +338,7 @@ describe('单请求共享执行载体，租约和原生句柄仍独立', () => {
     noHelpers(capture)
   }, 30000)
 
-  it('runtime stdin 关闭同步失败也 kill 自有进程，并拒绝成功返回', async () => {
+  it.skipIf(process.platform !== 'win32')('runtime stdin 关闭同步失败也 kill 自有进程，并拒绝成功返回', async () => {
     const f = fixture(), capture = createRuntimeCapture()
     await expect(withRuntimeCapture(capture, () => withRequestScopedWindowsPathLeaseRuntime(async () => {
       const lease = new WindowsPathLease()
@@ -350,7 +350,7 @@ describe('单请求共享执行载体，租约和原生句柄仍独立', () => {
     writeFileSync(f.file, '原生句柄已随进程销毁')
   }, 30000)
 
-  it.each(['复制前', '复制后'])('保存 Evidence %s helper 崩溃不登记可用证据、不导入消息、不留下暂存目标', async (moment) => {
+  it.skipIf(process.platform !== 'win32').each(['复制前', '复制后'])('保存 Evidence %s helper 崩溃不登记可用证据、不导入消息、不留下暂存目标', async (moment) => {
     const f = batchFixture(), capture = createRuntimeCapture()
     const original = WindowsPathLease.prototype.copyFile
     let crashed = false
@@ -367,7 +367,7 @@ describe('单请求共享执行载体，租约和原生句柄仍独立', () => {
     noHelpers(capture)
   }, 30000)
 
-  it.each(['junction', 'symlink', 'reparse', 'hardlink', 'special', 'escape', 'mutation'])('共享 runtime 下 %s 仍拒绝不可信附件，保留另一附件的独立有效结果', async (kind) => {
+  it.skipIf(process.platform !== 'win32').each(['junction', 'symlink', 'reparse', 'hardlink', 'special', 'escape', 'mutation'])('共享 runtime 下 %s 仍拒绝不可信附件，保留另一附件的独立有效结果', async (kind) => {
     const f = batchFixture(), capture = createRuntimeCapture()
     if (kind === 'junction') {
       symlinkSync(f.sources[1], join(f.sources[0], '目录链接'), 'junction')

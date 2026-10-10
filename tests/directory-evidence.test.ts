@@ -61,7 +61,7 @@ function notReady(f: Fixture) {
 }
 
 describe('目录证据：隔离固定磁盘上的持久快照', () => {
-  it('单文件目录先保存证据，未保存快照时不能进入导入器', async () => {
+  it.skipIf(process.platform !== 'win32')('单文件目录先保存证据，未保存快照时不能进入导入器', async () => {
     const f = fixture()
     const result = await save(f)
     expect(result.relativePath).toBe(`evidence/${f.id}/manifest.json`)
@@ -74,7 +74,7 @@ describe('目录证据：隔离固定磁盘上的持久快照', () => {
     expect(f.db.prepare('SELECT COUNT(*) AS count FROM import_jobs').get()).toEqual({ count: 0 })
   }, 30000)
 
-  it('保留多层目录、Unicode 名称、大小写、空文件和空目录，附件只复制字节', async () => {
+  it.skipIf(process.platform !== 'win32')('保留多层目录、Unicode 名称、大小写、空文件和空目录，附件只复制字节', async () => {
     const f = fixture({ '图片/中文 😀.bin': Buffer.from([0, 255, 4]), '文件/Paper.PDF': '%PDF-不可解析', '空文件': '' })
     mkdirSync(join(f.source, '空目录', '二层'), { recursive: true })
     await save(f)
@@ -84,7 +84,7 @@ describe('目录证据：隔离固定磁盘上的持久快照', () => {
     expect(existsSync(join(f.target, 'original.zip'))).toBe(false)
   }, 30000)
 
-  it('相同内容不同绝对路径和创建顺序产生相同清单，两个实例独立保存', async () => {
+  it.skipIf(process.platform !== 'win32')('相同内容不同绝对路径和创建顺序产生相同清单，两个实例独立保存', async () => {
     const f = fixture({ '乙.txt': '乙', '甲.txt': '甲' })
     const other = join(f.directory, '第二个明确目录')
     mkdirSync(other)
@@ -108,7 +108,7 @@ describe('目录证据：隔离固定磁盘上的持久快照', () => {
     expect(text).not.toContain('mtime')
   }, 30000)
 
-  it.each(['内容', '重命名', '空目录'])('改变%s改变内容身份', async (change) => {
+  it.skipIf(process.platform !== 'win32').each(['内容', '重命名', '空目录'])('改变%s改变内容身份', async (change) => {
     const f = fixture()
     const a = await save(f)
     if (change === '内容') writeFileSync(join(f.source, '聊天记录.txt'), '新正文')
@@ -119,7 +119,7 @@ describe('目录证据：隔离固定磁盘上的持久快照', () => {
     expect(a.sha256).not.toBe(b.sha256)
   }, 30000)
 
-  it('只修改 mtime 不改变身份，重复保存不改写已发布目录', async () => {
+  it.skipIf(process.platform !== 'win32')('只修改 mtime 不改变身份，重复保存不改写已发布目录', async () => {
     const f = fixture()
     const a = await save(f)
     const before = readFileSync(join(f.target, 'manifest.json'))
@@ -128,7 +128,7 @@ describe('目录证据：隔离固定磁盘上的持久快照', () => {
     expect(readFileSync(join(f.target, 'manifest.json'))).toEqual(before)
   }, 30000)
 
-  it('同一项不同内容冲突，保留旧证据及数据库身份', async () => {
+  it.skipIf(process.platform !== 'win32')('同一项不同内容冲突，保留旧证据及数据库身份', async () => {
     const f = fixture()
     const first = await save(f)
     writeFileSync(join(f.source, '聊天记录.txt'), '不同内容')
@@ -137,7 +137,7 @@ describe('目录证据：隔离固定磁盘上的持久快照', () => {
     expect((await verifyDirectoryEvidence(f.db, f.databasePath, f.id)).status).toBe('available')
   }, 30000)
 
-  it('原临时目录删除并重开数据库后，只用持久副本仍可验证', async () => {
+  it.skipIf(process.platform !== 'win32')('原临时目录删除并重开数据库后，只用持久副本仍可验证', async () => {
     const f = fixture()
     await save(f)
     rmSync(f.source, { recursive: true })
@@ -149,7 +149,7 @@ describe('目录证据：隔离固定磁盘上的持久快照', () => {
     expect((await verifyDirectoryEvidence(reopened, f.databasePath, f.id)).status).toBe('available')
   }, 30000)
 
-  it.each(['正文', '删除', '新增', '重命名', '空目录新增', '空目录删除'])('检测持久 source 篡改：%s', async (change) => {
+  it.skipIf(process.platform !== 'win32').each(['正文', '删除', '新增', '重命名', '空目录新增', '空目录删除'])('检测持久 source 篡改：%s', async (change) => {
     const f = fixture()
     mkdirSync(join(f.source, '空目录'))
     await save(f)
@@ -164,7 +164,7 @@ describe('目录证据：隔离固定磁盘上的持久快照', () => {
     expect((await verifyDirectoryEvidence(f.db, f.databasePath, f.id)).status).toBe('corrupt')
   }, 30000)
 
-  it.each(['hash', '路径', '身份', '版本', '计数'])('检测 manifest 篡改：%s', async (change) => {
+  it.skipIf(process.platform !== 'win32').each(['hash', '路径', '身份', '版本', '计数'])('检测 manifest 篡改：%s', async (change) => {
     const f = fixture()
     await save(f)
     const record = manifest(f)
@@ -177,7 +177,7 @@ describe('目录证据：隔离固定磁盘上的持久快照', () => {
     expect((await verifyDirectoryEvidence(f.db, f.databasePath, f.id)).status).toBe('corrupt')
   }, 30000)
 
-  it.each(['source', 'manifest.json'])('缺少持久 %s 判为缺失', async (part) => {
+  it.skipIf(process.platform !== 'win32').each(['source', 'manifest.json'])('缺少持久 %s 判为缺失', async (part) => {
     const f = fixture()
     await save(f)
     rmSync(join(f.target, part), { recursive: true })
@@ -202,7 +202,7 @@ describe('目录证据：隔离固定磁盘上的持久快照', () => {
     notReady(f)
   }, 30000)
 
-  it('拒绝文件符号链接；无创建权限时验证 lstat 拒绝分支', async () => {
+  it.skipIf(process.platform !== 'win32')('拒绝文件符号链接；无创建权限时验证 lstat 拒绝分支', async () => {
     const f = fixture()
     const link = join(f.source, '文件链接')
     try { symlinkSync(join(f.source, '聊天记录.txt'), link, 'file') }
@@ -223,7 +223,7 @@ describe('目录证据：隔离固定磁盘上的持久快照', () => {
     notReady(f)
   }, 30000)
 
-  it('拒绝特殊文件系统项，不能静默跳过', async () => {
+  it.skipIf(process.platform !== 'win32')('拒绝特殊文件系统项，不能静默跳过', async () => {
     const f = fixture()
     const original = fs.lstat
     vi.spyOn(fs, 'lstat').mockImplementation((async (...args: Parameters<typeof fs.lstat>) => {
@@ -239,19 +239,19 @@ describe('目录证据：隔离固定磁盘上的持久快照', () => {
     notReady(f)
   }, 30000)
 
-  it.each(['../猜目录', 'C:\\目录\\..\\逃逸', '\\\\server\\share', '\\\\?\\C:\\设备', 'C:\\目录:流'])('拒绝不安全源路径 %s', async (path) => {
+  it.skipIf(process.platform !== 'win32').each(['../猜目录', 'C:\\目录\\..\\逃逸', '\\\\server\\share', '\\\\?\\C:\\设备', 'C:\\目录:流'])('拒绝不安全源路径 %s', async (path) => {
     const f = fixture()
     await expect(saveDirectoryEvidence(f.db, f.databasePath, f.id, path)).rejects.toThrow('路径')
     notReady(f)
   })
 
-  it('拒绝源目录包含证据目录，避免递归复制自身', async () => {
+  it.skipIf(process.platform !== 'win32')('拒绝源目录包含证据目录，避免递归复制自身', async () => {
     const f = fixture()
     await expect(saveDirectoryEvidence(f.db, f.databasePath, f.id, f.directory)).rejects.toThrow('相互包含')
     notReady(f)
   })
 
-  it.each([
+  it.skipIf(process.platform !== 'win32').each([
     ['深度', { maxDepth: 0 }], ['数量', { maxFileCount: 0 }],
     ['单文件', { maxFileBytes: 1 }], ['总字节', { maxTotalBytes: 1 }],
     ['目录项', { maxEntries: 0 }], ['清单', { maxManifestBytes: 1 }]
@@ -261,7 +261,7 @@ describe('目录证据：隔离固定磁盘上的持久快照', () => {
     notReady(f)
   }, 30000)
 
-  it('不能通过参数提高集中资源上限', async () => {
+  it.skipIf(process.platform !== 'win32')('不能通过参数提高集中资源上限', async () => {
     const f = fixture()
     await expect(save(f, { maxFileCount: DIRECTORY_EVIDENCE_LIMITS.maxFileCount + 1 })).rejects.toThrow('限制参数')
     notReady(f)
@@ -283,7 +283,7 @@ describe('目录证据：隔离固定磁盘上的持久快照', () => {
     notReady(f)
   }, 30000)
 
-  it('部分复制失败清理 staging，重试可恢复', async () => {
+  it.skipIf(process.platform !== 'win32')('部分复制失败清理 staging，重试可恢复', async () => {
     const f = fixture({ 'A': '甲', 'B': '乙' })
     const original = WindowsPathLease.prototype.copyFile
     let calls = 0
@@ -298,7 +298,7 @@ describe('目录证据：隔离固定磁盘上的持久快照', () => {
     expect(f.db.prepare('SELECT status, evidence_status FROM batch_import_items WHERE id = ?').get(f.id)).toEqual({ status: 'pending', evidence_status: 'available' })
   }, 30000)
 
-  it('staging 内容不匹配时不发布', async () => {
+  it.skipIf(process.platform !== 'win32')('staging 内容不匹配时不发布', async () => {
     const f = fixture()
     const original = WindowsPathLease.prototype.copyFile
     vi.spyOn(WindowsPathLease.prototype, 'copyFile').mockImplementation(async function (this: WindowsPathLease, ...args) {
@@ -309,14 +309,14 @@ describe('目录证据：隔离固定磁盘上的持久快照', () => {
     notReady(f)
   }, 30000)
 
-  it('原子发布失败清理暂存，不登记 ready', async () => {
+  it.skipIf(process.platform !== 'win32')('原子发布失败清理暂存，不登记 ready', async () => {
     const f = fixture()
     vi.spyOn(fs, 'rename').mockRejectedValue(new Error('模拟发布失败'))
     await expect(save(f)).rejects.toThrow('模拟发布失败')
     notReady(f)
   }, 30000)
 
-  it('不覆盖或接管已有孤立目录', async () => {
+  it.skipIf(process.platform !== 'win32')('不覆盖或接管已有孤立目录', async () => {
     const f = fixture()
     mkdirSync(f.target, { recursive: true })
     writeFileSync(join(f.target, '旧文件'), '不可覆盖')
@@ -324,14 +324,14 @@ describe('目录证据：隔离固定磁盘上的持久快照', () => {
     expect(readFileSync(join(f.target, '旧文件'), 'utf8')).toBe('不可覆盖')
   }, 30000)
 
-  it('安全句柄能力不可用时拒绝，不降级复制', async () => {
+  it.skipIf(process.platform !== 'win32')('安全句柄能力不可用时拒绝，不降级复制', async () => {
     const f = fixture()
     vi.spyOn(WindowsPathLease.prototype, 'lock').mockRejectedValue(new Error('模拟原生能力不可用'))
     await expect(save(f)).rejects.toThrow('原生能力不可用')
     notReady(f)
   }, 30000)
 
-  it('原生桥接进程退出后拒绝复制，清理暂存而不降级', async () => {
+  it.skipIf(process.platform !== 'win32')('原生桥接进程退出后拒绝复制，清理暂存而不降级', async () => {
     const f = fixture()
     const original = WindowsPathLease.prototype.copyFile
     vi.spyOn(WindowsPathLease.prototype, 'copyFile').mockImplementation(async function (this: WindowsPathLease, ...args) {
@@ -346,14 +346,14 @@ describe('目录证据：隔离固定磁盘上的持久快照', () => {
     notReady(f)
   }, 30000)
 
-  it('真实多重硬链接被原生句柄拒绝，不复制外部共享内容', async () => {
+  it.skipIf(process.platform !== 'win32')('真实多重硬链接被原生句柄拒绝，不复制外部共享内容', async () => {
     const f = fixture()
     linkSync(join(f.source, '聊天记录.txt'), join(f.directory, '外部硬链接.txt'))
     await expect(save(f)).rejects.toThrow('硬链接')
     notReady(f)
   }, 30000)
 
-  it('实际名称不同的大小写路径别名拒绝，不按模糊名称接受句柄', async () => {
+  it.skipIf(process.platform !== 'win32')('实际名称不同的大小写路径别名拒绝，不按模糊名称接受句柄', async () => {
     const f = fixture()
     const actual = join(f.directory, 'SourceFolder')
     renameSync(f.source, actual)
@@ -361,7 +361,7 @@ describe('目录证据：隔离固定磁盘上的持久快照', () => {
     notReady(f)
   }, 30000)
 
-  it('持久 source 被换成 junction 后校验失败', async () => {
+  it.skipIf(process.platform !== 'win32')('持久 source 被换成 junction 后校验失败', async () => {
     const f = fixture()
     await save(f)
     rmSync(join(f.target, 'source'), { recursive: true })
@@ -369,7 +369,7 @@ describe('目录证据：隔离固定磁盘上的持久快照', () => {
     expect((await verifyDirectoryEvidence(f.db, f.databasePath, f.id)).status).toBe('corrupt')
   }, 30000)
 
-  it('ZIP 与目录之间禁止替换，原 ZIP 哈希和路径不变', async () => {
+  it.skipIf(process.platform !== 'win32')('ZIP 与目录之间禁止替换，原 ZIP 哈希和路径不变', async () => {
     const f = fixture()
     const zip = join(f.directory, 'original-input.zip')
     writeFileSync(zip, '旧 ZIP 字节')
@@ -381,7 +381,7 @@ describe('目录证据：隔离固定磁盘上的持久快照', () => {
     await expect(saveOriginalZip(f.db, f.databasePath, id, zip)).rejects.toThrow('不能被 ZIP')
   }, 30000)
 
-  it('messages.json 来自 inline Parser，不重解析证据 TXT；源清理后导入与重放稳定', async () => {
+  it.skipIf(process.platform !== 'win32')('messages.json 来自 inline Parser，不重解析证据 TXT；源清理后导入与重放稳定', async () => {
     const f = fixture({ '聊天记录.txt': '此 TXT 故意不等于 inline，且没有日期' })
     await expect(saveStructuredSnapshot(f.db, f.databasePath, f.id, input())).rejects.toThrow()
     await save(f)
@@ -400,7 +400,7 @@ describe('目录证据：隔离固定磁盘上的持久快照', () => {
     expect(f.db.prepare('SELECT COUNT(*) AS count FROM messages_fts').get()).toEqual({ count: 1 })
   }, 90000)
 
-  it('两个目录项仍由既有会话执行，不合并相同内容实例', async () => {
+  it.skipIf(process.platform !== 'win32')('两个目录项仍由既有会话执行，不合并相同内容实例', async () => {
     const f = fixture()
     const id = createBatchImportItem(f.db, f.session.id, 1).id
     for (const itemId of [f.id, id]) {
@@ -413,7 +413,7 @@ describe('目录证据：隔离固定磁盘上的持久快照', () => {
     expect(f.db.prepare('SELECT COUNT(*) AS count FROM import_jobs').get()).toEqual({ count: 2 })
   }, 120000)
 
-  it('中断会话仅恢复尚未开始的目录项，不重跑已成功项', async () => {
+  it.skipIf(process.platform !== 'win32')('中断会话仅恢复尚未开始的目录项，不重跑已成功项', async () => {
     const f = fixture()
     const id = createBatchImportItem(f.db, f.session.id, 1).id
     for (const itemId of [f.id, id]) {
@@ -427,7 +427,7 @@ describe('目录证据：隔离固定磁盘上的持久快照', () => {
     expect(f.db.prepare('SELECT COUNT(*) AS count FROM import_jobs').get()).toEqual({ count: 2 })
   }, 120000)
 
-  it('目录证据被篡改后禁止快照保存及 importer，消息和任务均不写入', async () => {
+  it.skipIf(process.platform !== 'win32')('目录证据被篡改后禁止快照保存及 importer，消息和任务均不写入', async () => {
     const f = fixture()
     await save(f)
     writeFileSync(join(f.target, 'source', '聊天记录.txt'), '篡改')
@@ -438,7 +438,7 @@ describe('目录证据：隔离固定磁盘上的持久快照', () => {
     expect(f.db.prepare('SELECT COUNT(*) AS count FROM import_jobs').get()).toEqual({ count: 0 })
   }, 30000)
 
-  it('注册数据库失败时撤销本次发布，既无暂存也无 ready 记录', async () => {
+  it.skipIf(process.platform !== 'win32')('注册数据库失败时撤销本次发布，既无暂存也无 ready 记录', async () => {
     const f = fixture()
     const original = f.db.prepare.bind(f.db)
     vi.spyOn(f.db, 'prepare').mockImplementation((sql: string) => {

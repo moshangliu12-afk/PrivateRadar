@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
-import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import * as fs from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
@@ -158,13 +158,19 @@ describe('Mac 受控 ZIP 证据验证与来源导航', () => {
     platform('darwin'); const f = fixture(), result = await imported(f)
     const actualParent = join(f.directory, '实际父目录'), alias = join(f.directory, '别名父目录')
     mkdirSync(join(actualParent, '应用'), { recursive: true }); symlinkSync(actualParent, alias, 'junction')
+    const outside = join(actualParent, '外部材料'), protectedBytes = Buffer.from('外部材料必须保留')
+    writeFileSync(outside, protectedBytes)
     const path = join(alias, '应用', 'private-radar.db'), db = new DatabaseSync(path)
     try {
       initializeDatabase(db); configureMacEvidenceRoot(join(alias, '应用'))
       const id = manualItem({ ...f, db, path }), open = vi.fn(async () => '')
-      await expect(saveCapturedJsonEvidence(db, path, id, bytes())).rejects.toThrow('父目录')
+      const before = db.prepare('SELECT * FROM batch_import_items WHERE id=?').get(id)
+      await expect(saveCapturedJsonEvidence(db, path, id, bytes())).rejects.toThrow()
       await expect(openBatchItemEvidence(db, path, id, open)).rejects.toThrow()
       expect(open).not.toHaveBeenCalled()
+      expect(db.prepare('SELECT * FROM batch_import_items WHERE id=?').get(id)).toEqual(before)
+      expect(existsSync(join(actualParent, '应用', 'evidence'))).toBe(false)
+      expect(readFileSync(outside)).toEqual(protectedBytes)
     } finally { db.close(); unlinkSync(alias) }
   })
   it('拒绝 Item 目录符号链接和任意登记路径', async () => {
@@ -197,7 +203,7 @@ describe('Mac 受控 ZIP 证据验证与来源导航', () => {
     expect(stored(f, id)).toEqual(before); expect(lock).not.toHaveBeenCalled(); expect(runtime).not.toHaveBeenCalled()
     expect(constructor).not.toHaveBeenCalled()
   })
-  it('Windows 导航仍持有原 WindowsPathLease 打开目录', async () => {
+  it.skipIf(process.platform !== 'win32')('Windows 导航仍持有原 WindowsPathLease 打开目录', async () => {
     platform('win32'); const f = fixture(), result = await imported(f), lock = vi.spyOn(lease.WindowsPathLease.prototype, 'lock')
     await openBatchItemEvidence(f.db, f.path, result.batchItemId, async () => '')
     expect(lock).toHaveBeenCalledWith(filePaths(f, result.batchItemId).directory, true)

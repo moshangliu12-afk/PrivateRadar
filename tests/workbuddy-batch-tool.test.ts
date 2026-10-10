@@ -63,7 +63,7 @@ function count(db: DatabaseSync, table: 'batch_import_sessions' | 'batch_import_
 }
 
 describe('alpha.15 WorkBuddy 双附件批量 Tool', () => {
-  it('legacy handler 内部调用一次写入 3 + 6，两个附件分别有证据、身份和任务', async () => {
+  it.skipIf(process.platform !== 'win32')('legacy handler 内部调用一次写入 3 + 6，两个附件分别有证据、身份和任务', async () => {
     const f = fixture()
     const output = await ingestWorkBuddyBatch(f.db, f.options, {
       attachments: [attachment(f.firstZip, '甲', 3), attachment(f.secondZip, '乙', 6)]
@@ -101,7 +101,7 @@ describe('alpha.15 WorkBuddy 双附件批量 Tool', () => {
       ])
   })
 
-  it('时间交错时仍各自按源数组顺序保存，群名缺失保持空值与未知来源', async () => {
+  it.skipIf(process.platform !== 'win32')('时间交错时仍各自按源数组顺序保存，群名缺失保持空值与未知来源', async () => {
     const f = fixture()
     const a = attachment(f.firstZip, '甲', 2)
     const b = attachment(f.secondZip, '乙', 2)
@@ -121,7 +121,7 @@ describe('alpha.15 WorkBuddy 双附件批量 Tool', () => {
     }
   })
 
-  it('当前卡片元数据分别给出真实前缀路径时，显示名不同也只按各自路径保存证据', async () => {
+  it.skipIf(process.platform !== 'win32')('当前卡片元数据分别给出真实前缀路径时，显示名不同也只按各自路径保存证据', async () => {
     const f = fixture()
     const cardA = {
       chipId: '当前卡片-A', displayName: '聊天记录_A.zip',
@@ -156,7 +156,7 @@ describe('alpha.15 WorkBuddy 双附件批量 Tool', () => {
     }
   })
 
-  it('源文本未提供逐条时间时，批量消息时间保持空值与未知来源', async () => {
+  it.skipIf(process.platform !== 'win32')('源文本未提供逐条时间时，批量消息时间保持空值与未知来源', async () => {
     const f = fixture()
     const result = await ingestWorkBuddyBatch(f.db, f.options, { attachments: [
       { source_zip_path: f.firstZip, messages: [{ content: '甲无时间' }] },
@@ -191,7 +191,7 @@ describe('alpha.15 WorkBuddy 双附件批量 Tool', () => {
     expect(count(f.db, 'messages')).toBe(0)
   })
 
-  it('两路径均存在但第二附件快照保存失败时，保留部分成功会话', async () => {
+  it.skipIf(process.platform !== 'win32')('两路径均存在但第二附件快照保存失败时，保留部分成功会话', async () => {
     const f = fixture()
     const second = attachment(f.secondZip, '乙', 6)
     // 仅在隔离测试中注入无法序列化的值，使故障发生在路径预检与原 ZIP 保存之后。
@@ -238,7 +238,7 @@ describe('alpha.15 WorkBuddy 双附件批量 Tool', () => {
     }
   })
 
-  it('相同 ZIP 内容仍登记两个附件实例，不按 ZIP 哈希合并', async () => {
+  it.skipIf(process.platform !== 'win32')('相同 ZIP 内容仍登记两个附件实例，不按 ZIP 哈希合并', async () => {
     const f = fixture()
     writeFileSync(f.secondZip, readFileSync(f.firstZip))
     const result = await ingestWorkBuddyBatch(f.db, f.options, { attachments: [

@@ -45,14 +45,14 @@ function fixture(): { root: string; payload: string; data: string } {
 }
 
 describe('Windows 安装与 WorkBuddy 连接组件', () => {
-  it('正式运行使用 Electron userData，只有测试显式传入时才隔离', () => {
+  it.skipIf(process.platform !== 'win32')('正式运行使用 Electron userData，只有测试显式传入时才隔离', () => {
     const electronUserData = 'C:\\Users\\tester\\AppData\\Roaming\\PrivateRadar'
     const isolated = 'C:\\qa\\private-radar'
     expect(runtimeDataDirectory(electronUserData, '')).toBe(electronUserData)
     expect(runtimeDataDirectory(electronUserData, isolated)).toBe(isolated)
   })
 
-  it('在固定用户数据目录生成自包含连接组件', () => {
+  it.skipIf(process.platform !== 'win32')('在固定用户数据目录生成自包含连接组件', () => {
     const { root, payload, data } = fixture()
     const userHome = join(root, 'user')
     const result = prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.1', new Date(), userHome)
@@ -72,7 +72,7 @@ describe('Windows 安装与 WorkBuddy 连接组件', () => {
     expect(readFileSync(result.skillDeployment.targetPath, 'utf8')).toBe(canonicalSkill)
   })
 
-  it('官方旧 Skill 安全升级到 alpha.18-skill.1', () => {
+  it.skipIf(process.platform !== 'win32')('官方旧 Skill 安全升级到 alpha.18-skill.1', () => {
     const { root, payload, data } = fixture()
     const userHome = join(root, 'user')
     const target = join(userHome, '.workbuddy', 'skills', 'privateradar-ingest-chat', 'SKILL.md')
@@ -88,7 +88,7 @@ describe('Windows 安装与 WorkBuddy 连接组件', () => {
     expect(readFileSync(target, 'utf8')).toContain(`version: ${WORKBUDDY_SKILL_VERSION}`)
   })
 
-  it('正式 alpha.16-skill.1 原字节升级到新单卡来源契约，不按版本号猜测官方身份', () => {
+  it.skipIf(process.platform !== 'win32')('正式 alpha.16-skill.1 原字节升级到新单卡来源契约，不按版本号猜测官方身份', () => {
     const { root, payload, data } = fixture()
     const userHome = join(root, 'user')
     const target = join(userHome, '.workbuddy', 'skills', 'privateradar-ingest-chat', 'SKILL.md')
@@ -106,7 +106,7 @@ describe('Windows 安装与 WorkBuddy 连接组件', () => {
     expect(readFileSync(target, 'utf8')).toContain('version: 0.2.0-alpha.18-skill.1')
   })
 
-  it('已安装正确 alpha.18-skill.1 时保持不变', () => {
+  it.skipIf(process.platform !== 'win32')('已安装正确 alpha.18-skill.1 时保持不变', () => {
     const { root, payload, data } = fixture()
     const userHome = join(root, 'user')
     prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.18', new Date(), userHome)
@@ -115,7 +115,7 @@ describe('Windows 安装与 WorkBuddy 连接组件', () => {
     expect(readFileSync(repeated.skillDeployment.targetPath, 'utf8')).toBe(canonicalSkill)
   })
 
-  it('正式 alpha.15-skill.3 原字节可安全升级到 alpha.18-skill.1，当前源哈希受固定契约保护', () => {
+  it.skipIf(process.platform !== 'win32')('正式 alpha.15-skill.3 原字节可安全升级到 alpha.18-skill.1，当前源哈希受固定契约保护', () => {
     const { root, payload, data } = fixture()
     const userHome = join(root, 'user')
     const target = join(userHome, '.workbuddy', 'skills', 'privateradar-ingest-chat', 'SKILL.md')
@@ -133,7 +133,7 @@ describe('Windows 安装与 WorkBuddy 连接组件', () => {
     expect(readFileSync(target, 'utf8')).toContain('Collection ID 只显式转交')
   })
 
-  it('开发态官方归集 Skill 仅按既定精确哈希安全升级到候选版本', () => {
+  it.skipIf(process.platform !== 'win32')('开发态官方归集 Skill 仅按既定精确哈希安全升级到候选版本', () => {
     const { root, payload, data } = fixture()
     const userHome = join(root, 'user')
     const target = join(userHome, '.workbuddy', 'skills', 'privateradar-ingest-chat', 'SKILL.md')
@@ -175,7 +175,7 @@ describe('Windows 安装与 WorkBuddy 连接组件', () => {
     expect(readFileSync(target, 'utf8')).toBe(officialAlpha15Skill)
   })
 
-  it('未知哈希或用户自定义 Skill 保留原文件并返回明确状态', () => {
+  it.skipIf(process.platform !== 'win32')('未知哈希或用户自定义 Skill 保留原文件并返回明确状态', () => {
     const { root, payload, data } = fixture()
     const userHome = join(root, 'user')
     const target = join(userHome, '.workbuddy', 'skills', 'privateradar-ingest-chat', 'SKILL.md')
@@ -201,7 +201,7 @@ describe('Windows 安装与 WorkBuddy 连接组件', () => {
     expect(readFileSync(target, 'utf8')).toBe(officialOldSkill)
   })
 
-  it('会话投影移除 cwd 后仍使用绝对 MCP 服务入口', () => {
+  it.skipIf(process.platform !== 'win32')('会话投影移除 cwd 后仍使用绝对 MCP 服务入口', () => {
     const { root, payload, data } = fixture()
     const result = prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.3', new Date(), join(root, 'user'))
     const config = JSON.parse(readFileSync(result.registrationPath, 'utf8'))
@@ -214,7 +214,7 @@ describe('Windows 安装与 WorkBuddy 连接组件', () => {
     expect(projected.args[0]).not.toBe('dist/server.mjs')
   })
 
-  it('普通应用升级不改变连接配置也不重新要求信任', () => {
+  it.skipIf(process.platform !== 'win32')('普通应用升级不改变连接配置也不重新要求信任', () => {
     const { root, payload, data } = fixture()
     const userHome = join(root, 'user')
     const first = prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.1', new Date(), userHome)
@@ -226,7 +226,7 @@ describe('Windows 安装与 WorkBuddy 连接组件', () => {
     expect(upgraded.registrationChanged).toBe(false)
   })
 
-  it('连接配置哈希真正变化时要求重新信任', () => {
+  it.skipIf(process.platform !== 'win32')('连接配置哈希真正变化时要求重新信任', () => {
     const { root, payload, data } = fixture()
     const userHome = join(root, 'user')
     prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.1', new Date(), userHome)
@@ -256,27 +256,27 @@ describe('Windows 安装与 WorkBuddy 连接组件', () => {
     expect(content).toContain('REDACTED')
   })
 
-  it('安装状态不会记录聊天正文', () => {
+  it.skipIf(process.platform !== 'win32')('安装状态不会记录聊天正文', () => {
     const { root, payload, data } = fixture()
     prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.1', new Date(), join(root, 'user'))
     const state = connectorSetupState(data)
     expect(Object.keys(state ?? {}).sort()).toEqual(['appVersion', 'configHash', 'connectorId', 'preparedAt', 'trustReason'].sort())
   })
 
-  it('源文件缺失时不会误报准备成功', () => {
+  it.skipIf(process.platform !== 'win32')('源文件缺失时不会误报准备成功', () => {
     const { root, payload, data } = fixture()
     rmSync(join(payload, 'dist', 'server.mjs'))
     expect(() => prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.1', new Date(), join(root, 'user'))).toThrow('连接组件文件不完整')
   })
 
-  it('目标文件损坏时最终完整性校验失败', () => {
+  it.skipIf(process.platform !== 'win32')('目标文件损坏时最终完整性校验失败', () => {
     const { root, payload, data } = fixture()
     const result = prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.1', new Date(), join(root, 'user'))
     writeFileSync(join(result.connectorPath, 'mcp.json'), '')
     expect(() => validateConnectorInstallation(result.connectorPath)).toThrow('连接组件文件不完整：mcp.json')
   })
 
-  it('按官方用户级配置注册正式服务且保留其他服务', () => {
+  it.skipIf(process.platform !== 'win32')('按官方用户级配置注册正式服务且保留其他服务', () => {
     const { root, payload, data } = fixture()
     const userHome = join(root, 'user')
     const configPath = join(userHome, '.workbuddy', 'mcp.json')
@@ -293,7 +293,7 @@ describe('Windows 安装与 WorkBuddy 连接组件', () => {
     expect(readFileSync(`${configPath}.privateradar-backup`, 'utf8')).toContain('privateradar-local-spike')
   })
 
-  it('重复配置不重写正式注册且不依赖旧 Spike', () => {
+  it.skipIf(process.platform !== 'win32')('重复配置不重写正式注册且不依赖旧 Spike', () => {
     const { root, payload, data } = fixture()
     const userHome = join(root, 'user')
     const first = prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.1', new Date(), userHome)
@@ -304,7 +304,7 @@ describe('Windows 安装与 WorkBuddy 连接组件', () => {
     expect(Object.keys(config.mcpServers)).toEqual(['privateradar-workbuddy'])
   })
 
-  it('接受 WorkBuddy 信任后补充的 disabled false 且不反复改写', () => {
+  it.skipIf(process.platform !== 'win32')('接受 WorkBuddy 信任后补充的 disabled false 且不反复改写', () => {
     const { root, payload, data } = fixture()
     const userHome = join(root, 'user')
     const first = prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.1', new Date(), userHome)
@@ -318,7 +318,7 @@ describe('Windows 安装与 WorkBuddy 连接组件', () => {
     expect(JSON.parse(readFileSync(first.registrationPath, 'utf8')).mcpServers['privateradar-workbuddy'].disabled).toBe(false)
   })
 
-  it('WorkBuddy 用户配置损坏时拒绝覆盖且不报告注册成功', () => {
+  it.skipIf(process.platform !== 'win32')('WorkBuddy 用户配置损坏时拒绝覆盖且不报告注册成功', () => {
     const { root, payload, data } = fixture()
     const userHome = join(root, 'user')
     const configPath = join(userHome, '.workbuddy', 'mcp.json')
@@ -328,7 +328,7 @@ describe('Windows 安装与 WorkBuddy 连接组件', () => {
     expect(readFileSync(configPath, 'utf8')).toBe('{broken')
   })
 
-  it('正式配置已启用且存在信任记录时判定已连接', () => {
+  it.skipIf(process.platform !== 'win32')('正式配置已启用且存在信任记录时判定已连接', () => {
     const { root, payload, data } = fixture()
     const userHome = join(root, 'user')
     prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.1', new Date(), userHome)
@@ -338,7 +338,7 @@ describe('Windows 安装与 WorkBuddy 连接组件', () => {
     expect(inspectWorkBuddyConnection(data, userHome)).toEqual({ connected: true, message: 'WorkBuddy 已连接。' })
   })
 
-  it('正式配置关闭或未信任时返回明确原因', () => {
+  it.skipIf(process.platform !== 'win32')('正式配置关闭或未信任时返回明确原因', () => {
     const { root, payload, data } = fixture()
     const userHome = join(root, 'user')
     const result = prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.1', new Date(), userHome)
@@ -349,7 +349,7 @@ describe('Windows 安装与 WorkBuddy 连接组件', () => {
     expect(inspectWorkBuddyConnection(data, userHome)).toEqual({ connected: false, message: 'PrivateRadar 在 WorkBuddy 中已关闭，请先启用。' })
   })
 
-  it('路径错误或只有旧 Spike 不会误报正式连接', () => {
+  it.skipIf(process.platform !== 'win32')('路径错误或只有旧 Spike 不会误报正式连接', () => {
     const { root, payload, data } = fixture()
     const userHome = join(root, 'user')
     const result = prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.1', new Date(), userHome)

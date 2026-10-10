@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, truncateSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, truncateSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { crc32 } from 'node:zlib'
@@ -9,6 +9,7 @@ import { initializeDatabase } from '../src/main/schema'
 import { importChatContent, importChatFile } from '../src/main/import/importer'
 import type { ImportResult } from '../src/shared/models'
 import * as evidence from '../src/main/batch-import/evidence'
+import { configureMacEvidenceRoot } from '../src/main/batch-import/mac-json-evidence'
 import { createBatchImportItem, createBatchImportSession } from '../src/main/batch-import/repository'
 import { listItemMessageSources } from '../src/main/batch-import/message-sources'
 import { claimBatchItemForFirstImport } from '../src/main/batch-import/import-item'
@@ -36,13 +37,14 @@ afterEach(async () => {
   vi.restoreAllMocks()
   for (const f of fixtures.splice(0)) {
     if (f.db.isOpen) f.db.close()
-    expect(dirname(resolve(f.directory))).toBe(resolve(tmpdir()))
+    expect(dirname(resolve(f.directory))).toBe(realpathSync(tmpdir()))
     expect(basename(f.directory).startsWith('privateradar-manual-json-')).toBe(true)
     rmSync(f.directory, { recursive: true, force: true })
   }
 })
 function fixture() {
-  const directory = mkdtempSync(join(tmpdir(), 'privateradar-manual-json-'))
+  const directory = mkdtempSync(join(realpathSync(tmpdir()), 'privateradar-manual-json-'))
+  if (process.platform === 'darwin') configureMacEvidenceRoot(directory)
   const path = join(directory, 'private-radar.db'), db = new DatabaseSync(path)
   initializeDatabase(db)
   addKeywordTerm(db, createKeywordGroup(db, '文件').id, '文件')
@@ -403,7 +405,8 @@ describe('共享手动 JSON 原始证据来源链', () => {
     expect(count(f.db, 'batch_import_sessions')).toBe(0)
     expect(count(f.db, 'import_jobs')).toBe(0)
   })
-  it.each(['csv', 'txt'])('文件入口保留 %s 的 legacy 路径', async type => {
+  // CSV/TXT 文件入口属于已锁定的 Windows 历史导入契约。
+  it.skipIf(process.platform !== 'win32').each(['csv', 'txt'])('文件入口保留 %s 的 legacy 路径', async type => {
     const f = fixture(), body = type === 'csv'
       ? 'timestamp,conversation_name,sender_name,content\n2026-10-01 09:00:00,隔离聊天,甲,我会把文件发给你'
       : '2026-10-01 09:00:00\t隔离聊天\t甲\t我会把文件发给你'

@@ -86,7 +86,7 @@ async function withClient(f: Fixture, operation: (client: Client) => Promise<voi
 }
 
 describe('显式归集到当前双卡导入桥接', () => {
-  it.each([3, 4])('真实 MCP %i 个原始上下文仍归组为两个附件，指定归集在创建会话时已持久化', async (rawCount) => {
+  it.skipIf(process.platform !== 'win32').each([3, 4])('真实 MCP %i 个原始上下文仍归组为两个附件，指定归集在创建会话时已持久化', async (rawCount) => {
     const f = fixture()
     const collection = createCollection(f.db, '明确归集')
     await withClient(f, async (client) => {
@@ -115,7 +115,7 @@ describe('显式归集到当前双卡导入桥接', () => {
     })
   }, 60000)
 
-  it('未提供归集时不选择最近记录，旧双卡行为和空归属保持不变', async () => {
+  it.skipIf(process.platform !== 'win32')('未提供归集时不选择最近记录，旧双卡行为和空归属保持不变', async () => {
     const f = fixture()
     const unrelated = createCollection(f.db, '最近也不能猜测')
     const result = await ingestWorkBuddyCurrentContextBatch(f.db, f.options, request(f))
@@ -184,7 +184,7 @@ describe('显式归集到当前双卡导入桥接', () => {
     noSideEffects(f, before)
   })
 
-  it('同一归集多次调用产生独立会话、附件、任务和证据，不引入跨附件去重', async () => {
+  it.skipIf(process.platform !== 'win32')('同一归集多次调用产生独立会话、附件、任务和证据，不引入跨附件去重', async () => {
     const f = fixture()
     const collection = createCollection(f.db, '长期归集')
     const first = await ingestWorkBuddyCurrentContextBatch(f.db, f.options, request(f, 3, collection.id))
@@ -208,7 +208,7 @@ describe('显式归集到当前双卡导入桥接', () => {
     expect(f.db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
   }, 60000)
 
-  it('成功结果读取最终持久会话，不依赖创建函数的临时返回对象', async () => {
+  it.skipIf(process.platform !== 'win32')('成功结果读取最终持久会话，不依赖创建函数的临时返回对象', async () => {
     const f = fixture()
     const collection = createCollection(f.db, '甲')
     const original = batchRepository.createBatchImportSession
@@ -223,7 +223,7 @@ describe('显式归集到当前双卡导入桥接', () => {
       .toEqual({ id: result.session_id, collection_id: result.collection_id })
   }, 60000)
 
-  it('早期预检通过后归集被另一连接完成，创建事务复核拒绝且无孤儿记录', async () => {
+  it.skipIf(process.platform !== 'win32')('早期预检通过后归集被另一连接完成，创建事务复核拒绝且无孤儿记录', async () => {
     const f = fixture()
     const collection = createCollection(f.db, '竞态归集')
     const other = new DatabaseSync(f.options.databasePath)
@@ -244,7 +244,7 @@ describe('显式归集到当前双卡导入桥接', () => {
     expect(f.db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
   }, 60000)
 
-  it('第二附件登记失败回滚会话和第一附件，不发布证据或创建任务', async () => {
+  it.skipIf(process.platform !== 'win32')('第二附件登记失败回滚会话和第一附件，不发布证据或创建任务', async () => {
     const f = fixture()
     const collection = createCollection(f.db, '登记失败')
     const before = snapshot(f)

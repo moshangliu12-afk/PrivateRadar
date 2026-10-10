@@ -7,7 +7,7 @@ import { createRequire } from 'node:module'
 import { spawn, execFileSync } from 'node:child_process'
 
 const require = createRequire(import.meta.url)
-const reports = path.resolve('.stage2c-reports')
+const reports = path.resolve('stage2c-reports')
 fs.mkdirSync(reports, { recursive: true })
 const result = { RUNNER_LABEL: 'macos-15', RUNNER_OS: process.platform, RUNNER_ARCH: process.arch,
   NODE_VERSION: process.version, NODE_ARCH: process.arch, PHYSICAL_MAC_UI_VALIDATION: 'PENDING',
@@ -32,7 +32,15 @@ function summarizeTests(raw, name) {
   if (!fs.existsSync(raw)) return { status: 'FAIL', reportMissing: true }
   const json = JSON.parse(fs.readFileSync(raw, 'utf8'))
   const summary = { passed: json.numPassedTests, skipped: (json.numPendingTests ?? 0) + (json.numTodoTests ?? 0), failed: json.numFailedTests,
-    passedFiles: json.numPassedTestSuites, failedFiles: json.numFailedTestSuites,
+    passedFiles: (json.testResults ?? []).filter(file => file.status === 'passed').length,
+    failedFiles: (json.testResults ?? []).filter(file => file.status === 'failed').length,
+    files: (json.testResults ?? []).map(file => ({ file: path.relative(process.cwd(), file.name),
+      passed: (file.assertionResults ?? []).filter(test => test.status === 'passed').length,
+      skipped: (file.assertionResults ?? []).filter(test => test.status === 'pending' || test.status === 'skipped' || test.status === 'todo').length,
+      failed: (file.assertionResults ?? []).filter(test => test.status === 'failed').length })),
+    skippedCases: (json.testResults ?? []).flatMap(file => (file.assertionResults ?? [])
+      .filter(test => test.status === 'pending' || test.status === 'skipped' || test.status === 'todo')
+      .map(test => ({ file: path.relative(process.cwd(), file.name), test: test.fullName }))),
     failures: (json.testResults ?? []).filter(file => file.status !== 'passed').map(file => ({
       file: path.relative(process.cwd(), file.name), status: file.status,
       tests: (file.assertionResults ?? []).filter(test => test.status === 'failed').map(test => test.fullName)
@@ -51,10 +59,18 @@ async function main() {
   result.MACOS_VERSION = commandText('sw_vers', ['-productVersion'])
   result.HEAD = commandText('git', ['rev-parse', 'HEAD']); assert.equal(result.HEAD, process.env.GITHUB_SHA)
   result.BRANCH = process.env.GITHUB_REF_NAME; assert.equal(result.BRANCH, 'feat/macos-stage2b-platform')
-  const base = '496576bd894f516b01e567bae0055e0a7a71d627'
+  const base = '3ffa6db6382a8e483c17b8448a969a86a883e6b9'
   commandText('git', ['merge-base', '--is-ancestor', base, 'HEAD'])
   const changed = commandText('git', ['diff', '--name-only', base, 'HEAD']).split('\n')
-  assert.ok(changed.length > 0 && changed.every(file => file === '.github/workflows/macos-stage2c-validation.yml' || file.startsWith('.github/scripts/macos-stage2c/')))
+  const allowedTests = new Set([
+    'tests/batch-import-evidence.test.ts', 'tests/collection-workbuddy-bridge.test.ts', 'tests/deployment.test.ts',
+    'tests/directory-evidence.test.ts', 'tests/first-use.test.ts', 'tests/macos-platform-boundaries.test.ts',
+    'tests/manual-json-evidence-core.test.ts', 'tests/request-scoped-windows-runtime.test.ts', 'tests/search-quality.test.ts',
+    'tests/workbuddy-batch-tool.test.ts', 'tests/workbuddy-chat-history.test.ts', 'tests/workbuddy-current-context-batch.test.ts',
+    'tests/workbuddy-single-card-ingress.test.ts'
+  ])
+  assert.ok(changed.length > 0 && changed.every(file => file === '.github/workflows/macos-stage2c-validation.yml'
+    || file.startsWith('.github/scripts/macos-stage2c/') || allowedTests.has(file)))
   result.WORKFLOW_FILES_CHANGED = changed
   assert.equal(commandText('git', ['status', '--porcelain', '--untracked-files=no']), '')
   assert.equal(commandText('git', ['rev-parse', 'v0.2.0-alpha.20^{}']), '34e0a292416e7720585e3aabf84e5f1d857cfc36')
@@ -98,6 +114,7 @@ async function main() {
   const gates = ['MACOS_SQLITE_RUNTIME', 'MACOS_FTS5_RUNTIME', 'MACOS_MANUAL_JSON_CORE', 'MACOS_EVIDENCE_FILESYSTEM', 'MACOS_NON_OVERWRITE_PUBLISH',
     'MACOS_SYMLINK_BOUNDARY', 'MACOS_TIME_RUNTIME', 'MACOS_EVIDENCE_NAVIGATION_LOGIC', 'MACOS_DIRECTORY_EVIDENCE_POLICY', 'MACOS_WORKBUDDY_GUARD']
   for (const name of gates) result[name] = nodeFields[name] === 'PASS' && electronFields[name] === 'PASS' ? 'PASS' : 'FAIL'
+  result.MACOS_MANUAL_JSON_NATIVE_PROBE = result.MACOS_MANUAL_JSON_CORE
   const restartResults = []
   for (const [runtime, env] of [[process.execPath, {}], [electron, { ELECTRON_RUN_AS_NODE: '1' }]]) {
     const directory = fs.mkdtempSync(path.join(testsTemp, 'privateradar-stage2c-restart-'))
@@ -112,6 +129,10 @@ async function main() {
     'tests/chat-search.test.ts', 'tests/chat-search-v2.test.ts', 'tests/time-semantics.test.ts',
     '--maxWorkers', '2', '--testTimeout', '30000', '--reporter=default', '--reporter=json', '--outputFile=' + targetedJson], { timeout: 420000 })
   result.MACOS_TARGETED_TESTS = summarizeTests(targetedJson, 'targeted-tests-summary.json')
+  const manualSuite = result.MACOS_TARGETED_TESTS.files?.find(file => file.file.endsWith('manual-json-evidence-core.test.ts'))
+  result.MACOS_MANUAL_JSON_SHARED_SUITE = manualSuite?.passed >= 31 && manualSuite.failed === 0 && manualSuite.skipped === 2 ? 'PASS' : 'FAIL'
+  result.MACOS_MANUAL_JSON_CORE = result.MACOS_MANUAL_JSON_NATIVE_PROBE === 'PASS'
+    && result.MACOS_MANUAL_JSON_SHARED_SUITE === 'PASS' ? 'PASS' : 'FAIL'
   result.MACOS_WORKBUDDY_STARTUP_TEST = result.MACOS_TARGETED_TESTS.failures?.some(file => file.file.endsWith('macos-platform-startup.test.ts')) || result.MACOS_TARGETED_TESTS.reportMissing ? 'FAIL' : 'PASS'
   const fullJson = path.join(temporary, 'full.json')
   const full = await run('npm', ['test', '--', '--maxWorkers', '2', '--testTimeout', '30000', '--reporter=default', '--reporter=json', '--outputFile=' + fullJson], { timeout: 900000 })

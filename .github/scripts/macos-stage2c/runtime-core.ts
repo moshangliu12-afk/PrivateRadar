@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, readdirSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, readdirSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { initializeDatabase } from '../../../src/main/schema'
@@ -180,7 +180,15 @@ async function validate() {
     await refused(f, result.batchItemId); unlinkSync(p.directory); renameSync(backup, p.directory)
     const parent = join(f.directory, '父目录'), parentAlias = join(f.directory, '父链接'); mkdirSync(parent); symlinkSync(parent, parentAlias, 'dir')
     const dbDirectory = join(parentAlias, '应用'); mkdirSync(dbDirectory); const other = openWorkspace(dbDirectory)
-    try { await assert.rejects(saveCapturedJsonEvidence(other.db, other.path, newItem(other), bytes()), /父目录/) }
+    const outside = join(parent, '外部材料'), protectedBytes = Buffer.from('外部材料必须保留'); writeFileSync(outside, protectedBytes)
+    try {
+      const id = newItem(other), before = stored(other, id)
+      await assert.rejects(saveCapturedJsonEvidence(other.db, other.path, id, bytes()))
+      await refused(other, id)
+      assert.deepEqual(stored(other, id), before)
+      assert.equal(existsSync(join(parent, '应用', 'evidence')), false)
+      assert.deepEqual(readFileSync(outside), protectedBytes)
+    }
     finally { other.db.close(); configureMacEvidenceRoot(f.directory) }
   }))
   await gate('MACOS_TIME_RUNTIME', () => fixture(async f => {

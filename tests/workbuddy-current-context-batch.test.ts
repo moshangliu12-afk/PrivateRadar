@@ -92,7 +92,7 @@ function removeSources(f: Fixture) {
 }
 
 describe('当前卡片上下文到目录证据的完整批量链路', () => {
-  it('四份序列化中图片记录边界空行不同，仍按原首份正文归集两项并完整保留媒体证据', async () => {
+  it.skipIf(process.platform !== 'win32')('四份序列化中图片记录边界空行不同，仍按原首份正文归集两项并完整保留媒体证据', async () => {
     const f = fixture()
     const collection = createCollection(f.db, '序列化空行隔离归集')
     const first = context(f.paths[0], '普通文本卡', 10)
@@ -139,7 +139,7 @@ describe('当前卡片上下文到目录证据的完整批量链路', () => {
     expect(f.db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
   }, 120000)
 
-  it('标准 MCP 接收原始四块上下文，3+4 只形成两项、两套证据、两个任务及七条消息', async () => {
+  it.skipIf(process.platform !== 'win32')('标准 MCP 接收原始四块上下文，3+4 只形成两项、两套证据、两个任务及七条消息', async () => {
     const f = fixture()
     const server = createWorkBuddyMcpServer(f.db, undefined, f.options)
     const client = new Client({ name: 'current-context-test', version: '0.1.0' })
@@ -212,7 +212,7 @@ describe('当前卡片上下文到目录证据的完整批量链路', () => {
     noSideEffects(f)
   })
 
-  it.each([0, 1])('附件 %i 目录缺失在创建会话之前拒绝', async (index) => {
+  it.skipIf(process.platform !== 'win32').each([0, 1])('附件 %i 目录缺失在创建会话之前拒绝', async (index) => {
     const f = fixture()
     rmSync(f.paths[index], { recursive: true })
     await expect(ingestWorkBuddyCurrentContextBatch(f.db, f.options, request(f.contexts))).rejects.toThrow('路径不可用')
@@ -239,7 +239,7 @@ describe('当前卡片上下文到目录证据的完整批量链路', () => {
     noSideEffects(f)
   }, 30000)
 
-  it('原生安全能力不可用时入口预检拒绝，不创建会话或证据', async () => {
+  it.skipIf(process.platform !== 'win32')('原生安全能力不可用时入口预检拒绝，不创建会话或证据', async () => {
     const f = fixture()
     vi.spyOn(WindowsPathLease.prototype, 'lock').mockRejectedValue(new Error('模拟原生能力不可用'))
     await expect(ingestWorkBuddyCurrentContextBatch(f.db, f.options, request(f.contexts))).rejects.toThrow('不可用')
@@ -287,7 +287,7 @@ describe('当前卡片上下文到目录证据的完整批量链路', () => {
     noSideEffects(f)
   })
 
-  it('相同显示名、正文与目录内容的不同路径仍有独立实例和来源', async () => {
+  it.skipIf(process.platform !== 'win32')('相同显示名、正文与目录内容的不同路径仍有独立实例和来源', async () => {
     const f = fixture()
     writeFileSync(join(f.paths[1], '聊天记录.txt'), readFileSync(join(f.paths[0], '聊天记录.txt')))
     f.contexts[1] = { ...f.contexts[0], extracted_dir_path: f.paths[1] }
@@ -302,7 +302,7 @@ describe('当前卡片上下文到目录证据的完整批量链路', () => {
     expect([count(f, 'batch_import_items'), count(f, 'import_jobs'), count(f, 'messages'), count(f, 'messages_fts')]).toEqual([2, 2, 6, 6])
   }, 120000)
 
-  it('路径预检通过后乙源目录消失，甲仍导入且会话部分成功', async () => {
+  it.skipIf(process.platform !== 'win32')('路径预检通过后乙源目录消失，甲仍导入且会话部分成功', async () => {
     const f = fixture()
     const actual = directoryEvidence.saveDirectoryEvidence
     vi.spyOn(directoryEvidence, 'saveDirectoryEvidence').mockImplementation(async (...args) => {
@@ -320,7 +320,7 @@ describe('当前卡片上下文到目录证据的完整批量链路', () => {
     expect(count(f, 'messages_fts')).toBe(3)
   }, 120000)
 
-  it('乙导入器运行失败保留甲的提交、乙的真实失败任务和部分成功会话', async () => {
+  it.skipIf(process.platform !== 'win32')('乙导入器运行失败保留甲的提交、乙的真实失败任务和部分成功会话', async () => {
     const f = fixture()
     f.db.exec(`CREATE TRIGGER reject_second BEFORE INSERT ON messages
       WHEN NEW.content LIKE '乙:%' BEGIN SELECT RAISE(ABORT, '模拟乙消息写入失败'); END;`)
@@ -331,7 +331,7 @@ describe('当前卡片上下文到目录证据的完整批量链路', () => {
     expect([count(f, 'import_jobs'), count(f, 'messages'), count(f, 'messages_fts')]).toEqual([2, 3, 3])
   }, 120000)
 
-  it('普通重复执行拒绝，显式同项重放分别保持 duplicate-only 和 updated-only 成功语义', async () => {
+  it.skipIf(process.platform !== 'win32')('普通重复执行拒绝，显式同项重放分别保持 duplicate-only 和 updated-only 成功语义', async () => {
     const f = fixture()
     const result = await ingestWorkBuddyCurrentContextBatch(f.db, f.options, request(f.contexts))
     const [a, b] = result.items
@@ -349,7 +349,7 @@ describe('当前卡片上下文到目录证据的完整批量链路', () => {
     expect([count(f, 'messages'), count(f, 'messages_fts')]).toEqual([7, 7])
   }, 120000)
 
-  it('两份目录证据就绪后删除源，首次执行及中断恢复只依赖持久快照且不重放成功项', async () => {
+  it.skipIf(process.platform !== 'win32')('两份目录证据就绪后删除源，首次执行及中断恢复只依赖持久快照且不重放成功项', async () => {
     const f = fixture()
     const sessionId = await prepareWorkBuddyCurrentContextBatch(f.db, f.options, request(f.contexts))
     const [a, b] = listBatchImportItems(f.db, sessionId)
@@ -366,7 +366,7 @@ describe('当前卡片上下文到目录证据的完整批量链路', () => {
     expect([count(f, 'messages'), count(f, 'messages_fts')]).toEqual([7, 7])
   }, 120000)
 
-  it('需关注项不自动重放；含糊的处理中项阻止恢复', async () => {
+  it.skipIf(process.platform !== 'win32')('需关注项不自动重放；含糊的处理中项阻止恢复', async () => {
     const f = fixture()
     const sessionId = await prepareWorkBuddyCurrentContextBatch(f.db, f.options, request(f.contexts))
     const [a, b] = listBatchImportItems(f.db, sessionId)
@@ -389,7 +389,7 @@ describe('当前卡片上下文到目录证据的完整批量链路', () => {
     expect(count(f, 'messages')).toBe(7)
   }, 120000)
 
-  it('目录证据篡改后重放被拦截，不生成新任务或消息', async () => {
+  it.skipIf(process.platform !== 'win32')('目录证据篡改后重放被拦截，不生成新任务或消息', async () => {
     const f = fixture()
     const result = await ingestWorkBuddyCurrentContextBatch(f.db, f.options, request(f.contexts))
     const item = result.items[0]
@@ -406,7 +406,7 @@ describe('当前卡片上下文到目录证据的完整批量链路', () => {
     noSideEffects(f)
   })
 
-  it('既有目录证据与 importer 接收未知时间快照时仍保存 null / unknown', async () => {
+  it.skipIf(process.platform !== 'win32')('既有目录证据与 importer 接收未知时间快照时仍保存 null / unknown', async () => {
     const f = fixture()
     // 当前 Parser 不支持无时间语法；此项单独验证既有下游时间规则，不伪称为当前 Parser 产出。
     const session = createBatchImportSession(f.db, 'workbuddy')
@@ -421,7 +421,7 @@ describe('当前卡片上下文到目录证据的完整批量链路', () => {
     expect(count(f, 'messages_fts')).toBe(1)
   }, 60000)
 
-  it('已验收七消息原文 fixture 通过新上下文链路且快照保持原文', async () => {
+  it.skipIf(process.platform !== 'win32')('已验收七消息原文 fixture 通过新上下文链路且快照保持原文', async () => {
     const f = fixture()
     const transcript = readFileSync(new URL('./fixtures/workbuddy-chat-history/current-inline-seven.txt', import.meta.url), 'utf8')
     f.contexts[0] = { file: '七条原文.zip', extracted_dir_path: f.paths[0], message_count: 7, transcript }

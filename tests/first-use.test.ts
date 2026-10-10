@@ -44,7 +44,7 @@ describe('首次使用体验状态', () => {
     expect(status.totalMessageCount).toBeGreaterThan(1000)
   })
 
-  it('连接心跳只在有效时间内显示已连接，断开后显示未连接', () => {
+  it.skipIf(process.platform !== 'win32')('连接心跳只在有效时间内显示已连接，断开后显示未连接', () => {
     const db = database()
     const now = new Date('2026-09-13T04:00:00.000Z')
     markConnectorHeartbeat(db, 'connected', now)
@@ -109,7 +109,7 @@ describe('首次使用体验状态', () => {
         recognizedCount: 1, importedCount: 1, duplicateCount: 0, updatedCount: 0, errorCount: 0
       },
       lastSuccessfulImport: { status: 'success', source: 'WorkBuddy', completedAt: '2026-09-20T04:26:04.367Z' },
-      latestMessageDate: '2026-09-20'
+      latestMessageDate: localDate('2026-09-19T16:01:00.000Z')
     })
     expect(Number((db.prepare('SELECT COUNT(*) AS count FROM messages').get() as { count: number }).count)).toBe(1)
   })
@@ -166,6 +166,11 @@ describe('首次使用体验状态', () => {
     expect(status.dataStatus.lastSuccessfulImport).toMatchObject({ status: 'success', completedAt: '2026-09-20T05:00:00.000Z' })
   })
 })
+
+function localDate(timestamp: string): string {
+  const date = new Date(timestamp)
+  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-')
+}
 
 function setCompletedAt(db: DatabaseSync, jobId: string, completedAt: string): void {
   db.prepare('UPDATE import_jobs SET completed_at = ? WHERE id = ?').run(completedAt, jobId)

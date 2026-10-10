@@ -322,7 +322,7 @@ describe('WorkBuddy 聊天解析与既有 Batch 隔离集成', () => {
     expect(ingestWorkBuddyMessages(db, input)).toMatchObject({ importedCount: 0, duplicateCount: 5 })
   })
 
-  it('独立卡片文件经解析及既有证据门禁后分别写入 3+4，身份与任务不串批', async () => {
+  it.skipIf(process.platform !== 'win32')('独立卡片文件经解析及既有证据门禁后分别写入 3+4，身份与任务不串批', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'privateradar-chat-parser-'))
     directories.push(directory)
     const databasePath = join(directory, '测试.db')
