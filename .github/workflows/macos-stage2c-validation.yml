@@ -1,0 +1,36 @@
+name: macOS Stage 2C 内部运行验收
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/macos-stage2b-platform]
+    paths:
+      - .github/workflows/macos-stage2c-validation.yml
+      - .github/scripts/macos-stage2c/**
+permissions:
+  contents: read
+jobs:
+  runtime:
+    if: github.ref == 'refs/heads/feat/macos-stage2b-platform'
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - name: 检出本次提交
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: 使用已验证的 Node 版本
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.14.0'
+      - name: 验证真实架构、干净安装和运行边界
+        run: node .github/scripts/macos-stage2c/runner.mjs
+      - name: 上传有限诊断报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-stage2c-diagnostics-${{ github.run_id }}
+          path: .stage2c-reports/
+          if-no-files-found: warn
+          retention-days: 7
