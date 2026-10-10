@@ -27,6 +27,7 @@ import { prepareWorkBuddyConnector } from '../../../src/main/deployment'
 import { askChat } from '../../../src/main/retrieval/service'
 import { loadMessagesForDate } from '../../../src/main/intelligence/daily/repository'
 import { getTodayKeywordInterest } from '../../../src/main/intelligence/daily/keyword-interest'
+import { captureSearchRuntime } from './search-runtime'
 
 const hash = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex')
 const fields: Record<string, string> = {}
@@ -89,6 +90,11 @@ async function verifyRestart(f: Workspace) {
   assert.equal(stored(f, id).evidence_status, 'available'); assert.equal((await verifyBatchEvidence(f.db, f.path, id)).status, 'available')
   const hit = listRecentKeywordHits(f.db)[0]; assert.ok(hit)
   assert.ok(getKeywordHitContext(f.db, hit.id).entries.some(entry => entry.isCurrent && entry.batchItemId === id))
+  const candidate = listCommitmentCandidates(f.db)[0]; assert.ok(candidate)
+  assert.ok(getCommitmentCandidateContext(f.db, candidate.id).entries.some(entry => entry.isCurrent && entry.batchItemId === id))
+  const search = await askChat(f.db, '文件', { aiProvider: null, embeddingProvider: null, anchorDate: '2026-09-30' })
+  assert.equal(search.results.length, 1)
+  assert.equal(search.results[0].messageId, String(f.db.prepare('SELECT id FROM messages').get()!.id))
   assert.equal(f.db.prepare('PRAGMA quick_check').get()!.quick_check, 'ok')
 }
 async function validate() {
@@ -228,6 +234,11 @@ async function main() {
   assert.equal(process.platform, 'darwin'); assert.equal(process.arch, 'arm64')
   console.log(JSON.stringify({ 平台: process.platform, 架构: process.arch, Node版本: process.version, Electron版本: process.versions.electron ?? null }))
   const mode = process.argv[2], directory = process.argv[3]
+  if (mode === 'search') {
+    const report = await captureSearchRuntime()
+    writeFileSync(directory, JSON.stringify(report, (_key, value) => value === Infinity ? 'Infinity' : value, 2) + '\n')
+    console.log(JSON.stringify(report.runtime)); return
+  }
   if (mode === 'restart-a' || mode === 'restart-b') {
     assert.ok(directory); assert.equal(dirname(resolve(directory)), realpathSync(tmpdir())); assert.ok(basename(directory).startsWith('privateradar-stage2c-restart-'))
     const f = openWorkspace(directory)

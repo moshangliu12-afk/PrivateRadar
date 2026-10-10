@@ -1,7 +1,6 @@
 // 内部验收编排；只上传摘要和非敏感架构诊断，临时数据库与证据不进入报告目录。
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 import { createRequire } from 'node:module'
 import { spawn, execFileSync } from 'node:child_process'
@@ -10,7 +9,8 @@ const require = createRequire(import.meta.url)
 const reports = path.resolve('stage2c-reports')
 fs.mkdirSync(reports, { recursive: true })
 const result = { RUNNER_LABEL: 'macos-15', RUNNER_OS: process.platform, RUNNER_ARCH: process.arch,
-  NODE_VERSION: process.version, NODE_ARCH: process.arch, PHYSICAL_MAC_UI_VALIDATION: 'PENDING',
+  NODE_VERSION: process.version, NODE_ICU_VERSION: process.versions.icu, NODE_ARCH: process.arch, MAC_TEST_TIMEOUT_SETTING: 15000,
+  FIRST_RUN_ID: 38035043884, SECOND_RUN_ID: process.env.GITHUB_RUN_ID, PHYSICAL_MAC_UI_VALIDATION: 'PENDING',
   FINDER_MANUAL_OPEN_VALIDATED: 'NO', PRODUCT_CODE_FIX_APPLIED: 'NO', WINDOWS_PRODUCT_SOURCE_CHANGED: 'NO',
   DMG_BUILT: 'NO', SIGNING_ATTEMPTED: 'NO', NOTARIZATION_ATTEMPTED: 'NO', GITHUB_RELEASE_CREATED: 'NO' }
 const save = (name, value) => fs.writeFileSync(path.join(reports, name), JSON.stringify(value, null, 2) + '\n')
@@ -43,9 +43,24 @@ function summarizeTests(raw, name) {
       .map(test => ({ file: path.relative(process.cwd(), file.name), test: test.fullName }))),
     failures: (json.testResults ?? []).filter(file => file.status !== 'passed').map(file => ({
       file: path.relative(process.cwd(), file.name), status: file.status,
-      tests: (file.assertionResults ?? []).filter(test => test.status === 'failed').map(test => test.fullName)
+      tests: (file.assertionResults ?? []).filter(test => test.status === 'failed').map(test => ({ test: test.fullName,
+        timeout: /timed out|timeout/i.test((test.failureMessages ?? []).join('\n')) }))
     })) }
   save(name, summary); return summary
+}
+const windowsCases = JSON.parse(fs.readFileSync('.github/scripts/macos-stage2c/windows-only-cases.json', 'utf8'))
+function classifySkipped(summary) {
+  return (summary.skippedCases ?? []).map(test => {
+    const known = windowsCases.find(row => row.file === test.file && row.test === test.test)
+    return { ...test, category: known ? 'WINDOWS_ONLY_CONTRACT' : 'OTHER', reason: known?.reason ?? '未审核的跳过项' }
+  })
+}
+function suitePassed(summary, names) {
+  return !summary.reportMissing && names.every(name => {
+    const file = summary.files?.find(row => row.file === 'tests/' + name)
+    return file?.passed > 0 && file.failed === 0
+      && classifySkipped(summary).filter(row => row.file === file.file).every(row => row.category === 'WINDOWS_ONLY_CONTRACT')
+  })
 }
 async function main() {
   // 环境不符时，不安装依赖或继续测试。
@@ -59,18 +74,15 @@ async function main() {
   result.MACOS_VERSION = commandText('sw_vers', ['-productVersion'])
   result.HEAD = commandText('git', ['rev-parse', 'HEAD']); assert.equal(result.HEAD, process.env.GITHUB_SHA)
   result.BRANCH = process.env.GITHUB_REF_NAME; assert.equal(result.BRANCH, 'feat/macos-stage2b-platform')
-  const base = '3ffa6db6382a8e483c17b8448a969a86a883e6b9'
+  const base = '4a7823fad1820b5c71a8584dab213cc46ff11477'
+  result.SEARCH_COMMIT = base
+  result.STABILIZATION_COMMIT = '0ef3a79ba5c00d9e60aa56945a5f266bcf07a70b'
+  assert.equal(commandText('git', ['rev-parse', base + '^']), result.STABILIZATION_COMMIT)
   commandText('git', ['merge-base', '--is-ancestor', base, 'HEAD'])
   const changed = commandText('git', ['diff', '--name-only', base, 'HEAD']).split('\n')
-  const allowedTests = new Set([
-    'tests/batch-import-evidence.test.ts', 'tests/collection-workbuddy-bridge.test.ts', 'tests/deployment.test.ts',
-    'tests/directory-evidence.test.ts', 'tests/first-use.test.ts', 'tests/macos-platform-boundaries.test.ts',
-    'tests/manual-json-evidence-core.test.ts', 'tests/request-scoped-windows-runtime.test.ts', 'tests/search-quality.test.ts',
-    'tests/workbuddy-batch-tool.test.ts', 'tests/workbuddy-chat-history.test.ts', 'tests/workbuddy-current-context-batch.test.ts',
-    'tests/workbuddy-single-card-ingress.test.ts'
-  ])
   assert.ok(changed.length > 0 && changed.every(file => file === '.github/workflows/macos-stage2c-validation.yml'
-    || file.startsWith('.github/scripts/macos-stage2c/') || allowedTests.has(file)))
+    || file.startsWith('.github/scripts/macos-stage2c/')))
+  result.PRODUCT_CODE_CHANGED_AFTER_SEARCH_COMMIT = 'NO'
   result.WORKFLOW_FILES_CHANGED = changed
   assert.equal(commandText('git', ['status', '--porcelain', '--untracked-files=no']), '')
   assert.equal(commandText('git', ['rev-parse', 'v0.2.0-alpha.20^{}']), '34e0a292416e7720585e3aabf84e5f1d857cfc36')
@@ -104,6 +116,34 @@ async function main() {
   const { build } = await import('esbuild')
   const core = path.join(temporary, 'runtime-core.cjs')
   await build({ entryPoints: ['./.github/scripts/macos-stage2c/runtime-core.ts'], outfile: core, platform: 'node', format: 'cjs', bundle: true, target: 'node24' })
+  const searchReports = []
+  for (const [label, runtime, env] of [['node', process.execPath, {}], ['electron', electron, { ELECTRON_RUN_AS_NODE: '1' }]]) {
+    const destination = path.join(reports, label + '-search-runtime.json')
+    const execution = await run(runtime, [core, 'search', destination], { env, timeout: 120000 })
+    assert.equal(execution.code, 0, label + ' 候选采集失败')
+    const report = JSON.parse(fs.readFileSync(destination, 'utf8'))
+    assert.equal(report.runtime.platform, 'darwin'); assert.equal(report.runtime.arch, 'arm64')
+    searchReports.push(report)
+  }
+  result.ELECTRON_NODE_VERSION = searchReports[1].runtime.node
+  result.ELECTRON_NODE_ICU_VERSION = searchReports[1].runtime.icu
+  result.SQLITE_VERSION = searchReports.map(report => ({ runtime: report.runtime.electron ? 'electron' : 'node', version: report.runtime.sqlite }))
+  const candidateView = scenarios => scenarios.map(({ name, query, generatedCandidates, allCandidates, top24, top12 }) =>
+    ({ name, query, generatedCandidates, allCandidates, top24, top12 }))
+  result.ICU_CANDIDATE_GENERATION = JSON.stringify(candidateView(searchReports[0].scenarios)) === JSON.stringify(candidateView(searchReports[1].scenarios)) ? 'PASS' : 'FAIL'
+  assert.equal(result.ICU_CANDIDATE_GENERATION, 'PASS', '两个真实运行时生成的候选或元数据不同；禁止产品放行')
+  const windowsBaseline = JSON.parse(fs.readFileSync('.github/scripts/macos-stage2c/windows-search-baseline.json', 'utf8'))
+  assert.equal(windowsBaseline.sourceCommit, base)
+  const comparable = row => ({ allCandidates: row.allCandidates, top24: row.top24, top12: row.top12,
+    ftsExpression: row.ftsExpression, results: row.results, dateRange: row.dateRange })
+  for (const [name, field] of [['十四词', 'MACOS_LONG_QUERY_14_MATCHES_WINDOWS'], ['二十六词', 'MACOS_LONG_QUERY_26_MATCHES_WINDOWS'],
+    ['车辆短查询', 'VEHICLE_SHORT_QUERY'], ['拼车短查询', 'CARPOOL_SHORT_QUERY']]) {
+    const expected = windowsBaseline.scenarios.find(row => row.name === name)
+    result[field] = expected && searchReports.every(report => JSON.stringify(comparable(report.scenarios.find(row => row.name === name))) === JSON.stringify(comparable(expected))) ? 'PASS' : 'FAIL'
+    assert.equal(result[field], 'PASS', name + ' 与已验收 Windows 结果不一致')
+  }
+  result.MACOS_SEARCH_SHORT_QUERY_REGRESSION = 'PASS'
+  result.NATIVE_SEARCH_SQL = searchReports.every(report => report.scenarios.every(row => row.stableFtsSql)) ? 'PASS' : 'FAIL'
   const nodeReport = path.join(reports, 'node-runtime.json'), electronReport = path.join(reports, 'electron-node-runtime.json')
   const nodeRun = await run(process.execPath, [core, 'validate', nodeReport], { timeout: 180000 })
   const electronRun = await run(electron, [core, 'validate', electronReport], { env: { ELECTRON_RUN_AS_NODE: '1' }, timeout: 180000 })
@@ -114,6 +154,7 @@ async function main() {
   const gates = ['MACOS_SQLITE_RUNTIME', 'MACOS_FTS5_RUNTIME', 'MACOS_MANUAL_JSON_CORE', 'MACOS_EVIDENCE_FILESYSTEM', 'MACOS_NON_OVERWRITE_PUBLISH',
     'MACOS_SYMLINK_BOUNDARY', 'MACOS_TIME_RUNTIME', 'MACOS_EVIDENCE_NAVIGATION_LOGIC', 'MACOS_DIRECTORY_EVIDENCE_POLICY', 'MACOS_WORKBUDDY_GUARD']
   for (const name of gates) result[name] = nodeFields[name] === 'PASS' && electronFields[name] === 'PASS' ? 'PASS' : 'FAIL'
+  assert.ok(nodeRun.code === 0 && electronRun.code === 0 && gates.every(name => result[name] === 'PASS'), '真实原生共享语义失败；停止产品放行')
   result.MACOS_MANUAL_JSON_NATIVE_PROBE = result.MACOS_MANUAL_JSON_CORE
   const restartResults = []
   for (const [runtime, env] of [[process.execPath, {}], [electron, { ELECTRON_RUN_AS_NODE: '1' }]]) {
@@ -123,21 +164,58 @@ async function main() {
     restartResults.push(a.code === 0 && b.code === 0)
   }
   result.MACOS_RESTART_PERSISTENCE = restartResults.every(Boolean) ? 'PASS' : 'FAIL'
+  const searchSuite = ['search-quality.test.ts', 'search-relative-date.test.ts', 'chat-search.test.ts', 'chat-search-v2.test.ts',
+    'query-understanding-natural-language.test.ts', 'query-understanding-empty-names.test.ts', 'time-semantics.test.ts',
+    'message-provenance.test.ts', 'alpha3-correctness.test.ts', 'feedback.test.ts', 'workbuddy-adapter.test.ts', 'workbuddy-mcp.test.ts']
+  const targetedFiles = [...searchSuite, 'search-term-determinism.test.ts', 'search-term-order-neutrality.test.ts',
+    'manual-json-evidence-core.test.ts', 'manual-json-import-report.test.tsx', 'macos-platform-boundaries.test.ts',
+    'macos-platform-startup.test.ts', 'macos-platform-ui.test.tsx', 'request-scoped-windows-runtime.test.ts']
   const targetedJson = path.join(temporary, 'targeted.json')
-  const targeted = await run('npm', ['test', '--', 'tests/manual-json-evidence-core.test.ts', 'tests/manual-json-import-report.test.tsx',
-    'tests/macos-platform-boundaries.test.ts', 'tests/macos-platform-startup.test.ts', 'tests/macos-platform-ui.test.tsx',
-    'tests/chat-search.test.ts', 'tests/chat-search-v2.test.ts', 'tests/time-semantics.test.ts',
-    '--maxWorkers', '2', '--testTimeout', '30000', '--reporter=default', '--reporter=json', '--outputFile=' + targetedJson], { timeout: 420000 })
+  const targeted = await run('npm', ['test', '--', ...targetedFiles.map(name => 'tests/' + name),
+    '--maxWorkers', '2', '--testTimeout', '15000', '--reporter=default', '--reporter=json', '--outputFile=' + targetedJson], { timeout: 420000 })
   result.MACOS_TARGETED_TESTS = summarizeTests(targetedJson, 'targeted-tests-summary.json')
   const manualSuite = result.MACOS_TARGETED_TESTS.files?.find(file => file.file.endsWith('manual-json-evidence-core.test.ts'))
-  result.MACOS_MANUAL_JSON_SHARED_SUITE = manualSuite?.passed >= 31 && manualSuite.failed === 0 && manualSuite.skipped === 2 ? 'PASS' : 'FAIL'
+  const manualSkipped = classifySkipped(result.MACOS_TARGETED_TESTS).filter(row => row.file.endsWith('manual-json-evidence-core.test.ts'))
+  result.MACOS_MANUAL_JSON_SHARED_TESTS = { passed: manualSuite?.passed, skipped: manualSkipped.filter(row => row.category === 'OTHER').length,
+    failed: manualSuite?.failed, windowsOnlySkipped: manualSkipped.filter(row => row.category === 'WINDOWS_ONLY_CONTRACT').length }
+  result.MACOS_MANUAL_JSON_SHARED_SUITE = manualSuite?.passed === 31 && manualSuite.failed === 0 && manualSkipped.length === 2
+    && manualSkipped.every(row => row.category === 'WINDOWS_ONLY_CONTRACT') ? 'PASS' : 'FAIL'
   result.MACOS_MANUAL_JSON_CORE = result.MACOS_MANUAL_JSON_NATIVE_PROBE === 'PASS'
     && result.MACOS_MANUAL_JSON_SHARED_SUITE === 'PASS' ? 'PASS' : 'FAIL'
   result.MACOS_WORKBUDDY_STARTUP_TEST = result.MACOS_TARGETED_TESTS.failures?.some(file => file.file.endsWith('macos-platform-startup.test.ts')) || result.MACOS_TARGETED_TESTS.reportMissing ? 'FAIL' : 'PASS'
+  for (const [field, names] of [
+    ['DETERMINISTIC_COMPARATOR', ['search-term-determinism.test.ts']],
+    ['MACOS_SEARCH_LOCALE_INDEPENDENCE', ['search-term-order-neutrality.test.ts']],
+    ['MACOS_SEARCH_TERM_ORDER_NEUTRALITY', ['search-term-order-neutrality.test.ts']],
+    ['MACOS_SEARCH_QUALITY_ACCEPTANCE', ['search-quality.test.ts']],
+    ['MACOS_SEARCH_REACCEPTANCE', searchSuite], ['MACOS_SEARCH_DATE_SEMANTICS', ['search-relative-date.test.ts', 'time-semantics.test.ts']],
+    ['MACOS_MESSAGE_PROVENANCE', ['message-provenance.test.ts']]
+  ]) result[field] = suitePassed(result.MACOS_TARGETED_TESTS, names) ? 'PASS' : 'FAIL'
+  result.MACOS_FTS_STABLE_ORDER = result.NATIVE_SEARCH_SQL === 'PASS' && result.MACOS_SEARCH_TERM_ORDER_NEUTRALITY === 'PASS' ? 'PASS' : 'FAIL'
   const fullJson = path.join(temporary, 'full.json')
-  const full = await run('npm', ['test', '--', '--maxWorkers', '2', '--testTimeout', '30000', '--reporter=default', '--reporter=json', '--outputFile=' + fullJson], { timeout: 900000 })
+  const full = await run('npm', ['test', '--', '--maxWorkers', '2', '--testTimeout', '15000', '--reporter=default', '--reporter=json', '--outputFile=' + fullJson], { timeout: 900000 })
   result.MACOS_FULL_TESTS = summarizeTests(fullJson, 'full-tests-summary.json')
+  result.MAC_WINDOWS_ONLY_SKIPPED_TESTS = classifySkipped(result.MACOS_FULL_TESTS)
+  result.SKIPPED_TESTS_BY_REASON = { WINDOWS_ONLY_CONTRACT: result.MAC_WINDOWS_ONLY_SKIPPED_TESTS.filter(row => row.category === 'WINDOWS_ONLY_CONTRACT').length,
+    OTHER: result.MAC_WINDOWS_ONLY_SKIPPED_TESTS.filter(row => row.category === 'OTHER').length }
+  result.MAC_WINDOWS_ONLY_SKIPPED_COUNT = result.SKIPPED_TESTS_BY_REASON.WINDOWS_ONLY_CONTRACT
+  result.SHARED_TESTS_SKIPPED_FOR_MAC = result.SKIPPED_TESTS_BY_REASON.OTHER
+  result.MAC_TEST_TIMEOUT_FAILURES = [result.MACOS_TARGETED_TESTS, result.MACOS_FULL_TESTS].flatMap(summary =>
+    (summary.failures ?? []).flatMap(file => file.tests.filter(test => test.timeout).map(test => ({ file: file.file, test: test.test }))))
+  if (targeted.timedOut || full.timedOut) result.MAC_TEST_TIMEOUT_FAILURES.push({ file: '验收编排', test: '测试进程超出 CI 步骤执行时限' })
+  for (const [field, names] of [['MACOS_CONTEXT_SHARED', ['message-provenance.test.ts', 'keyword-radar-desktop.test.ts', 'commitment-review-desktop.test.ts']],
+    ['MACOS_KEYWORD_SHARED', ['keyword-radar-matcher.test.ts', 'keyword-radar-processor.test.ts', 'keyword-radar-post-import.test.ts']],
+    ['MACOS_COMMITMENT_SHARED', ['commitment-matcher.test.ts', 'commitment-processor.test.ts', 'commitment-review-desktop.test.ts']]
+  ]) result[field] = suitePassed(result.MACOS_FULL_TESTS, names) ? 'PASS' : 'FAIL'
+  save('skipped-tests-by-reason.json', { counts: result.SKIPPED_TESTS_BY_REASON, tests: result.MAC_WINDOWS_ONLY_SKIPPED_TESTS })
+  assert.equal(result.SHARED_TESTS_SKIPPED_FOR_MAC, 0, '共享或未审核测试被跳过')
+  assert.equal(result.MAC_WINDOWS_ONLY_SKIPPED_COUNT, windowsCases.length, '平台专属跳过名单与运行结果不一致')
+  assert.ok(targeted.code === 0 && full.code === 0, '共享回归失败；保留报告并停止，不提高时限或修改产品')
   result.SHARED_TESTS = full.code === 0 ? 'PASS' : 'FAIL'
+  for (const field of ['SOURCE_PRIORITY', 'PHRASE_PRIORITY', 'CONDITIONAL_LENGTH', 'QUERY_POSITION', 'LEXICAL_TIEBREAK', 'TOP24', 'TOP12']) {
+    result[field] = result.DETERMINISTIC_COMPARATOR
+  }
+  result.MACOS_SYMLINK_PRODUCT_BEHAVIOR = result.MACOS_SYMLINK_BOUNDARY
   result.MACOS_TYPECHECK = (await run('npm', ['run', 'typecheck'], { timeout: 120000 })).code === 0 ? 'PASS' : 'FAIL'
   const sourceBuild = await run('npm', ['run', 'build'], { timeout: 180000 })
   result.MACOS_SOURCE_BUILD = sourceBuild.code === 0 ? 'PASS' : 'FAIL'
@@ -149,8 +227,12 @@ async function main() {
     result.ELECTRON_RUNTIME_SMOKE = smoke.code === 0 ? 'PASS' : /WindowServer|cannot connect to window server|failed to connect to.*display|等待图形会话超时/i.test(smoke.output) ? 'LIMITED_BY_CI' : 'FAIL'
   } else result.ELECTRON_RUNTIME_SMOKE = 'FAIL'
   assert.equal(commandText('git', ['diff', '--name-only']), '')
-  const failed = gates.some(name => result[name] !== 'PASS') || result.MACOS_RESTART_PERSISTENCE !== 'PASS' || targeted.code !== 0 || full.code !== 0 ||
-    result.MACOS_TYPECHECK !== 'PASS' || result.MACOS_SOURCE_BUILD !== 'PASS' || result.ELECTRON_RUNTIME_SMOKE === 'FAIL'
+  const required = [...gates, 'ICU_CANDIDATE_GENERATION', 'MACOS_MANUAL_JSON_SHARED_SUITE', 'DETERMINISTIC_COMPARATOR',
+    'MACOS_SEARCH_LOCALE_INDEPENDENCE', 'MACOS_SEARCH_TERM_ORDER_NEUTRALITY', 'MACOS_FTS_STABLE_ORDER',
+    'MACOS_SEARCH_SHORT_QUERY_REGRESSION', 'MACOS_LONG_QUERY_14_MATCHES_WINDOWS', 'MACOS_LONG_QUERY_26_MATCHES_WINDOWS',
+    'MACOS_SEARCH_QUALITY_ACCEPTANCE', 'MACOS_SEARCH_REACCEPTANCE', 'MACOS_SEARCH_DATE_SEMANTICS', 'MACOS_MESSAGE_PROVENANCE',
+    'MACOS_CONTEXT_SHARED', 'MACOS_KEYWORD_SHARED', 'MACOS_COMMITMENT_SHARED', 'MACOS_RESTART_PERSISTENCE', 'MACOS_TYPECHECK', 'MACOS_SOURCE_BUILD']
+  const failed = required.some(name => result[name] !== 'PASS') || result.ELECTRON_RUNTIME_SMOKE === 'FAIL'
   result.MACOS_STAGE2C_A_CI_RUNTIME = failed ? 'FAIL' : result.ELECTRON_RUNTIME_SMOKE === 'LIMITED_BY_CI' ? 'PASS_WITH_LIMITATION' : 'PASS'
   result.REAL_MACOS_ARM64_RUNTIME_VALIDATED = failed ? 'NO' : 'YES'
   process.exitCode = failed ? 1 : 0
