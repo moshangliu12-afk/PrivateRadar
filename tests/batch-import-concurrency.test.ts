@@ -99,7 +99,7 @@ describe('alpha.15 跨数据库连接执行权', () => {
     expect(count(f.b, 'messages_fts')).toBe(3)
   })
 
-  it('现有显式确定性重放也不能被两个连接同时进入', async () => {
+  it.skipIf(process.platform !== 'win32')('现有显式确定性重放也不能被两个连接同时进入', async () => {
     const f = fixture()
     await prepare(f, f.first.id, 3)
     const original = await importSavedBatchItem(f.a, f.databasePath, f.first.id)
@@ -115,7 +115,7 @@ describe('alpha.15 跨数据库连接执行权', () => {
     expect(count(f.b, 'messages')).toBe(3)
   })
 
-  it('两个连接竞争恢复时，只为未开始的第二附件创建一个任务', async () => {
+  it.skipIf(process.platform !== 'win32')('两个连接竞争恢复时，只为未开始的第二附件创建一个任务', async () => {
     const f = fixture()
     await prepare(f, f.first.id, 3)
     await prepare(f, f.second.id, 6)

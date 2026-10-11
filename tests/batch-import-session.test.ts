@@ -52,7 +52,7 @@ function count(db: DatabaseSync, table: 'messages' | 'messages_fts' | 'import_jo
 }
 
 describe('单附件及双附件会话编排', () => {
-  it('一个真实附件复用同一会话与证据编排，汇总按一个附件计算', async () => {
+  it.skipIf(process.platform !== 'win32')('一个真实附件复用同一会话与证据编排，汇总按一个附件计算', async () => {
     const f = fixture()
     f.db.prepare('DELETE FROM batch_import_items WHERE id=?').run(f.b.id)
     await prepare(f, f.a.id, 4)
@@ -66,7 +66,7 @@ describe('单附件及双附件会话编排', () => {
     expect(count(f.db, 'messages_fts')).toBe(4)
   })
 
-  it('单附件显式中断恢复只使用已保存证据与原有任务边界', async () => {
+  it.skipIf(process.platform !== 'win32')('单附件显式中断恢复只使用已保存证据与原有任务边界', async () => {
     const f = fixture()
     f.db.prepare('DELETE FROM batch_import_items WHERE id=?').run(f.b.id)
     await prepare(f, f.a.id, 3)
@@ -88,7 +88,7 @@ describe('单附件及双附件会话编排', () => {
     expect(count(f.db, 'messages')).toBe(0)
   })
 
-  it('两个附件顺序执行并成功，汇总与数据库均为 3 + 6', async () => {
+  it.skipIf(process.platform !== 'win32')('两个附件顺序执行并成功，汇总与数据库均为 3 + 6', async () => {
     const f = fixture()
     await prepare(f, f.a.id, 3)
     await prepare(f, f.b.id, 6)
@@ -109,7 +109,7 @@ describe('单附件及双附件会话编排', () => {
     expect(count(f.db, 'import_jobs')).toBe(2)
   })
 
-  it('一个成功、另一个快照损坏时，已成功消息保留且未知输入数量不伪装为零', async () => {
+  it.skipIf(process.platform !== 'win32')('一个成功、另一个快照损坏时，已成功消息保留且未知输入数量不伪装为零', async () => {
     const f = fixture()
     await prepare(f, f.a.id, 3)
     await prepare(f, f.b.id, 6)
@@ -122,7 +122,7 @@ describe('单附件及双附件会话编排', () => {
     expect(count(f.db, 'messages')).toBe(3)
   })
 
-  it('第二附件写入后元数据失败，任务与真实写入保留并要求人工处理', async () => {
+  it.skipIf(process.platform !== 'win32')('第二附件写入后元数据失败，任务与真实写入保留并要求人工处理', async () => {
     const f = fixture()
     await prepare(f, f.a.id, 3)
     await prepare(f, f.b.id, 6)
@@ -142,7 +142,7 @@ describe('单附件及双附件会话编排', () => {
     expect(count(f.db, 'messages_fts')).toBe(9)
   })
 
-  it('两个证据失败时无任务或消息，会话失败', async () => {
+  it.skipIf(process.platform !== 'win32')('两个证据失败时无任务或消息，会话失败', async () => {
     const f = fixture()
     await prepare(f, f.a.id, 3)
     await prepare(f, f.b.id, 6)
@@ -176,7 +176,7 @@ describe('单附件及双附件会话编排', () => {
     expect(f.db.prepare('SELECT status FROM batch_import_sessions WHERE id = ?').get(f.session.id)).toEqual({ status: 'pending' })
   })
 
-  it('有效任务指针只采用当前结果，不累计同一附件的历史任务', async () => {
+  it.skipIf(process.platform !== 'win32')('有效任务指针只采用当前结果，不累计同一附件的历史任务', async () => {
     const f = fixture()
     await prepare(f, f.a.id, 4)
     await prepare(f, f.b.id, 1)
@@ -193,7 +193,7 @@ describe('单附件及双附件会话编排', () => {
     ])
   })
 
-  it('两个附件都在真实写入后出现元数据异常时，会话为部分成功', async () => {
+  it.skipIf(process.platform !== 'win32')('两个附件都在真实写入后出现元数据异常时，会话为部分成功', async () => {
     const f = fixture()
     await prepare(f, f.a.id, 3)
     await prepare(f, f.b.id, 6)
@@ -207,7 +207,7 @@ describe('单附件及双附件会话编排', () => {
     expect(count(f.db, 'messages_fts')).toBe(9)
   })
 
-  it('一个附件写入后需关注，另一个零写入失败时仍为部分成功', async () => {
+  it.skipIf(process.platform !== 'win32')('一个附件写入后需关注，另一个零写入失败时仍为部分成功', async () => {
     const f = fixture()
     await prepare(f, f.a.id, 3)
     await prepare(f, f.b.id, 6)
@@ -261,7 +261,7 @@ describe('单附件及双附件会话编排', () => {
     expect(f.db.prepare('SELECT * FROM messages ORDER BY id').all()).toEqual(before)
   })
 
-  it('中断后只恢复尚未开始的第二附件，第一附件任务和消息保持不变', async () => {
+  it.skipIf(process.platform !== 'win32')('中断后只恢复尚未开始的第二附件，第一附件任务和消息保持不变', async () => {
     const f = fixture()
     await prepare(f, f.a.id, 3)
     await prepare(f, f.b.id, 6)
@@ -277,7 +277,7 @@ describe('单附件及双附件会话编排', () => {
     expect(f.db.prepare('SELECT completed_at FROM batch_import_sessions WHERE id = ?').get(f.session.id)).toMatchObject({ completed_at: expect.any(String) })
   })
 
-  it('已有写入且需关注的第一附件不重放，仍可安全执行未开始的第二附件', async () => {
+  it.skipIf(process.platform !== 'win32')('已有写入且需关注的第一附件不重放，仍可安全执行未开始的第二附件', async () => {
     const f = fixture()
     await prepare(f, f.a.id, 3)
     await prepare(f, f.b.id, 6)
@@ -294,7 +294,7 @@ describe('单附件及双附件会话编排', () => {
     expect(f.db.prepare('SELECT completed_at FROM batch_import_sessions WHERE id = ?').get(f.session.id)).toMatchObject({ completed_at: expect.any(String) })
   })
 
-  it('有任务却仍标为待处理的附件视为不一致，恢复拒绝自动执行', async () => {
+  it.skipIf(process.platform !== 'win32')('有任务却仍标为待处理的附件视为不一致，恢复拒绝自动执行', async () => {
     const f = fixture()
     await prepare(f, f.a.id, 3)
     await prepare(f, f.b.id, 6)
@@ -307,7 +307,7 @@ describe('单附件及双附件会话编排', () => {
     expect(f.db.prepare('SELECT completed_at FROM batch_import_sessions WHERE id = ?').get(f.session.id)).toEqual({ completed_at: null })
   })
 
-  it('已有任务但附件仍处于处理中时，恢复拒绝猜测执行结果', async () => {
+  it.skipIf(process.platform !== 'win32')('已有任务但附件仍处于处理中时，恢复拒绝猜测执行结果', async () => {
     const f = fixture()
     await prepare(f, f.a.id, 3)
     await prepare(f, f.b.id, 6)

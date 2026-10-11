@@ -71,7 +71,11 @@ describe('关键词配置桌面动作与输入边界', () => {
     expect(c.value).toEqual({ id: a.value.id, outcome: 'reenabled' })
     await api.call('term-enabled', chinese.value.id, false); await api.call('term-enabled', chinese.value.id, true)
     expect(radarCount(f.db, 'keyword_terms')).toBe(2)
-    expect(listDesktopKeywordGroups(f.db)[0]).toMatchObject({ name: '拼车', terms: [{ term: '南京', enabled: true }, { term: 'Codex', enabled: true }] })
+    const finalGroup = listDesktopKeywordGroups(f.db)[0]
+    expect(finalGroup.name).toBe('拼车')
+    expect(finalGroup.terms).toHaveLength(2)
+    expect(finalGroup.terms.find(term => term.term === '南京')).toMatchObject({ id: chinese.value.id, enabled: true })
+    expect(finalGroup.terms.find(term => term.term === 'Codex')).toMatchObject({ id: a.value.id, enabled: true })
   })
   it('组启停、改名、归档只改变配置，归档组保留并拒绝后续编辑', async () => {
     const f = prepared(), api = ipc(f), before = listRecentKeywordHits(f.db)

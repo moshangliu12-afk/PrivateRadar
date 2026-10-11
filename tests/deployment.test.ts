@@ -2,7 +2,7 @@ import { sharedCoreFixture } from './shared-core-fixture'
 import { createHash } from 'node:crypto'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   acknowledgeConnectorTrust,
@@ -46,11 +46,11 @@ function fixture(): { root: string; payload: string; data: string } {
 }
 
 describe('Windows 安装与 WorkBuddy 连接组件', () => {
-  it.skipIf(process.platform !== 'win32')('正式运行使用 Electron userData，只有测试显式传入时才隔离', () => {
+  it('正式运行使用 Electron userData，只有测试显式传入时才隔离', () => {
     const electronUserData = 'C:\\Users\\tester\\AppData\\Roaming\\PrivateRadar'
     const isolated = 'C:\\qa\\private-radar'
-    expect(runtimeDataDirectory(electronUserData, '')).toBe(electronUserData)
-    expect(runtimeDataDirectory(electronUserData, isolated)).toBe(isolated)
+    expect(runtimeDataDirectory(electronUserData, '')).toBe(resolve(electronUserData))
+    expect(runtimeDataDirectory(electronUserData, isolated)).toBe(resolve(isolated))
   })
 
   it.skipIf(process.platform !== 'win32')('在固定用户数据目录生成自包含连接组件', () => {

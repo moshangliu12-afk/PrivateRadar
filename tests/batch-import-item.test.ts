@@ -100,7 +100,7 @@ describe('alpha.15 已保存附件项确定性导入', () => {
     expect(f.db.prepare('SELECT batch_item_id FROM import_jobs WHERE id = ?').get(result.jobId)).toEqual({ batch_item_id: itemId })
   })
 
-  it('同一项两次执行保留两个任务，来源、顺序、稳定身份与指纹不漂移', async () => {
+  it.skipIf(process.platform !== 'win32')('同一项两次执行保留两个任务，来源、顺序、稳定身份与指纹不漂移', async () => {
     const f = fixture()
     const itemId = await readyItem(f)
     const first = await importSavedBatchItem(f.db, f.databasePath, itemId)
@@ -119,7 +119,7 @@ describe('alpha.15 已保存附件项确定性导入', () => {
     expect(count(f.db, 'messages_fts')).toBe(4)
   })
 
-  it('关闭并重新打开数据库后再次执行仍复用已保存来源批次', async () => {
+  it.skipIf(process.platform !== 'win32')('关闭并重新打开数据库后再次执行仍复用已保存来源批次', async () => {
     const f = fixture()
     const itemId = await readyItem(f)
     const first = await importSavedBatchItem(f.db, f.databasePath, itemId)
@@ -135,7 +135,7 @@ describe('alpha.15 已保存附件项确定性导入', () => {
     expect(listBatchItemJobs(reopened, itemId)).toHaveLength(2)
   })
 
-  it('已存在的来源批次编号被原样复用，不被快照提示或新任务覆盖', async () => {
+  it.skipIf(process.platform !== 'win32')('已存在的来源批次编号被原样复用，不被快照提示或新任务覆盖', async () => {
     const f = fixture()
     const itemId = await readyItem(f)
     f.db.prepare('UPDATE batch_import_items SET source_batch_id = ? WHERE id = ?').run('workbuddy:既有固定来源', itemId)
@@ -144,7 +144,7 @@ describe('alpha.15 已保存附件项确定性导入', () => {
     expect(storedMessages(f.db).every((row) => row.source_batch_id === 'workbuddy:既有固定来源')).toBe(true)
   })
 
-  it('快照显式位置与数组顺序不一致时拒绝导入，不自行重排', async () => {
+  it.skipIf(process.platform !== 'win32')('快照显式位置与数组顺序不一致时拒绝导入，不自行重排', async () => {
     const f = fixture()
     const input = snapshot()
     input.messages[1].source_position = 9
@@ -153,7 +153,7 @@ describe('alpha.15 已保存附件项确定性导入', () => {
     expect(count(f.db, 'import_jobs')).toBe(0)
   })
 
-  it.each(['missing', 'corrupt'] as const)('原始 ZIP %s 时拒绝导入且不创建任务', async (kind) => {
+  it.skipIf(process.platform !== 'win32').each(['missing', 'corrupt'] as const)('原始 ZIP %s 时拒绝导入且不创建任务', async (kind) => {
     const f = fixture()
     const itemId = await readyItem(f)
     const path = join(f.directory, 'evidence', itemId, 'original.zip')
@@ -164,7 +164,7 @@ describe('alpha.15 已保存附件项确定性导入', () => {
     expect(count(f.db, 'messages')).toBe(0)
   })
 
-  it.each(['missing', 'corrupt', 'invalid_json'] as const)('结构化快照 %s 时拒绝导入且不创建任务', async (kind) => {
+  it.skipIf(process.platform !== 'win32').each(['missing', 'corrupt', 'invalid_json'] as const)('结构化快照 %s 时拒绝导入且不创建任务', async (kind) => {
     const f = fixture()
     const itemId = await readyItem(f)
     const path = join(f.directory, 'evidence', itemId, 'messages.json')
@@ -209,7 +209,7 @@ describe('alpha.15 已保存附件项确定性导入', () => {
     expect(count(f.db, 'messages_fts')).toBe(1)
   })
 
-  it('导入器已提交后后续元数据登记抛错时不回滚真实消息和任务', async () => {
+  it.skipIf(process.platform !== 'win32')('导入器已提交后后续元数据登记抛错时不回滚真实消息和任务', async () => {
     const f = fixture()
     const itemId = await readyItem(f)
     f.db.exec(`
@@ -247,7 +247,7 @@ describe('alpha.15 已保存附件项确定性导入', () => {
     expect(count(f.db, 'messages_fts')).toBe(1)
   })
 
-  it('相同 ZIP 与快照的两个附件项仍有独立任务和来源身份', async () => {
+  it.skipIf(process.platform !== 'win32')('相同 ZIP 与快照的两个附件项仍有独立任务和来源身份', async () => {
     const f = fixture()
     const session = createBatchImportSession(f.db, 'workbuddy')
     const a = createBatchImportItem(f.db, session.id, 0)

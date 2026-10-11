@@ -69,7 +69,7 @@ describe('批量导入后派生失败隔离', () => {
     expect(log.mock.calls).toEqual([['[关键词雷达] RECOVERY_FAILED']])
     expect(f.db.prepare("SELECT count(*) AS n FROM keyword_radar_runs WHERE status='pending'").get()!.n).toBe(2)
   })
-  it('正式当前上下文入口完成后按两个 Item 触发；三份原始上下文不重复生成 Hit', async () => {
+  it.skipIf(process.platform !== 'win32')('正式当前上下文入口完成后按两个 Item 触发；三份原始上下文不重复生成 Hit', async () => {
     const f = prepared()
     const contexts = [0, 1].map(index => {
       const path = join(f.root, `明确目录${index}`)

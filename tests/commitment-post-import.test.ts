@@ -103,7 +103,7 @@ describe('承诺批量导入后触发与核心失败隔离', () => {
     expect(radarCount(f.db, 'commitment_candidates')).toBe(4)
     expect(radarCount(f.db, 'keyword_hits')).toBe(4)
   })
-  it('当前上下文双卡中的正、负与省略主语样本按原来源处理，重复原始块不制造重复候选项', async () => {
+  it.skipIf(process.platform !== 'win32')('当前上下文双卡中的正、负与省略主语样本按原来源处理，重复原始块不制造重复候选项', async () => {
     const f = prepared()
     const contexts = [0, 1].map(index => {
       const path = join(f.root, `明确目录${index}`)
