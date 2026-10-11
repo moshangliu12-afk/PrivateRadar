@@ -1,3 +1,5 @@
+import { sharedCoreFixture, sharedCoreItems, ingestSharedCore, sharedRows, sharedCount } from './shared-core-fixture'
+import { gateWorkBuddyBatchCurrentInput } from '../src/main/import/workbuddy-current-input'
 import { randomUUID } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
@@ -255,4 +257,64 @@ describe('显式归集到当前双卡导入桥接', () => {
       .rejects.toThrow('隔离第二附件登记失败')
     noSideEffects(f, before)
   }, 60000)
+})
+
+describe('共享归集关联与登记事务',()=>{
+  // 漏跳：14、15、18、99 的持久归属；Windows 三/四原始块的 MCP 投影保持原样。
+  it('显式关联以持久 Session 为准，临时返回对象与最近归集不能替代事实',()=>{
+    const f=sharedCoreFixture(),a=createCollection(f.db,'明确归集'),b=createCollection(f.db,'最近归集')
+    const returned=batchRepository.createBatchImportSession(f.db,'workbuddy',a.id)
+    returned.collection_id=b.id
+    expect(listCollectionSessions(f.db,a.id).map(s=>s.id)).toEqual([returned.id])
+    expect(listCollectionSessions(f.db,a.id)[0].collection_id).toBe(a.id)
+    expect(listCollectionSessions(f.db,b.id)).toEqual([])
+  })
+  // 漏跳：16、98 的空归属。
+  it('已有归集时省略参数仍为 NULL，不选择最近记录',()=>{
+    const f=sharedCoreFixture();createCollection(f.db,'甲归集');createCollection(f.db,'乙归集')
+    const session=batchRepository.createBatchImportSession(f.db,'workbuddy')
+    expect(session.collection_id).toBeNull()
+    expect(f.db.prepare('SELECT collection_id FROM batch_import_sessions WHERE id=?').get(session.id)).toEqual({collection_id:null})
+  })
+  // 漏跳：17；原弱身份缺群名输入，两次创建的四 Item 各有真实 Job/来源。
+  it('同 Collection 的两次核心来源不跨 Item 去重，Session/Item/Job 各自关联',()=>{
+    const f=sharedCoreFixture(),collection=createCollection(f.db,'明确归集')
+    const input=['甲','乙'].map(label=>gateWorkBuddyBatchCurrentInput([{file:'隔离'+label+'.zip',extracted_dir_path:join(f.directory,label),message_count:6,
+      transcript:Array.from({length:6},(_,i)=>'·隔离发送者'+label+'\n2026年10月5日 20:0'+i+'\n合成归集消息'+label+i).join('\n\n')+'\n'}]).logical_attachments[0].messages)
+    const sessions=[sharedCoreItems(f,2,collection.id),sharedCoreItems(f,2,collection.id)]
+    const jobs=sessions.flatMap(g=>g.items.map((item,i)=>ingestSharedCore(g,i,input[i]).jobId))
+    expect(new Set(jobs).size).toBe(4)
+    expect(listCollectionSessions(f.db,collection.id).map(s=>s.id).sort()).toEqual(sessions.map(g=>g.session.id).sort())
+    for(const g of sessions) for(const item of g.items) {
+      expect(f.db.prepare('SELECT batch_item_id FROM import_jobs WHERE id=?').get(jobs[sessions.indexOf(g)*2+item.ordinal])).toEqual({batch_item_id:item.id})
+      expect(f.db.prepare('SELECT source_position FROM batch_item_message_sources WHERE batch_item_id=? ORDER BY source_position').all(item.id)).toEqual([0,1,2,3,4,5].map(source_position=>({source_position})))
+    }
+    for(const table of ['messages','messages_fts','batch_item_message_sources']) expect(sharedCount(f.db,table)).toBe(24)
+    expect(new Set(sharedRows(f.db,'messages').map(m=>m.stable_identity)).size).toBe(24)
+    expect(f.db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+  })
+  // 漏跳：19；Collection 在真实第二连接完成后，创建事务再次检查。
+  it('早期 collecting 读取不能绕过第二连接 completed 的事务复核',()=>{
+    const f=sharedCoreFixture(),collection=createCollection(f.db,'并发归集'),other=new DatabaseSync(f.path)
+    initializeDatabase(other)
+    try {
+      expect(f.db.prepare('SELECT status FROM collections WHERE id=?').get(collection.id)!.status).toBe('collecting')
+      completeCollection(other,collection.id)
+      expect(()=>batchRepository.createBatchImportSession(f.db,'workbuddy',collection.id)).toThrow('COLLECTION_COMPLETED')
+      for(const table of ['batch_import_sessions','batch_import_items','import_jobs','batch_item_message_sources']) expect(sharedCount(f.db,table)).toBe(0)
+    } finally { other.close() }
+  })
+  // 漏跳：20；真实短事务与第二 Item INSERT 故障。
+  it('第二 Item 登记故障整体回滚 Session 和第一 Item，零 Job/来源',()=>{
+    const f=sharedCoreFixture(),collection=createCollection(f.db,'登记事务')
+    f.db.exec("CREATE TRIGGER reject_shared_second BEFORE INSERT ON batch_import_items WHEN new.ordinal=1 BEGIN SELECT RAISE(ABORT,'第二项登记失败'); END")
+    f.db.exec('BEGIN IMMEDIATE')
+    try {
+      const s=batchRepository.createBatchImportSession(f.db,'workbuddy',collection.id)
+      batchRepository.createBatchImportItem(f.db,s.id,0)
+      expect(()=>batchRepository.createBatchImportItem(f.db,s.id,1)).toThrow('第二项登记失败')
+    } finally { f.db.exec('ROLLBACK') }
+    for(const table of ['batch_import_sessions','batch_import_items','import_jobs','batch_item_message_sources']) expect(sharedCount(f.db,table)).toBe(0)
+    expect(f.db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+  })
 })

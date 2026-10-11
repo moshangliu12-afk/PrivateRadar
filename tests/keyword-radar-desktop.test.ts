@@ -1,3 +1,5 @@
+import { sharedCoreItems, ingestSharedCore, sharedRows, drainSharedDerived } from './shared-core-fixture'
+import { sharedJsonFixture, importSharedJson, sharedEvidenceBytes } from './shared-json-evidence-fixture'
 import { createHash } from 'node:crypto'
 import { writeFileSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -25,7 +27,7 @@ function ipc(f: Fixture) {
   registerKeywordRadarIpc({ handle: (name, callback) => { handlers.set(name, (...args) => callback(null, ...args) as Promise<any>) } }, f.db, open)
   return { call: (name: string, ...args: unknown[]) => handlers.get('keyword-radar:' + name)!(...args), handlers, open }
 }
-function fingerprint(f: Fixture) {
+function fingerprint(f: Pick<Fixture, 'db'>) {
   return createHash('sha256').update(JSON.stringify(f.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'keyword_%' ORDER BY name").all().map(row => {
     const name = String(row.name); return [name, f.db.prepare(`SELECT * FROM "${name.replaceAll('"', '""')}"`).all().map(value => JSON.stringify(value)).sort()]
   }))).digest('hex')
@@ -239,7 +241,7 @@ describe('证据导航只针对命中所属 Item', () => {
     await saveOriginalZip(f.db, f.path, f.items[index].id, source)
     await saveStructuredSnapshot(f.db, f.path, f.items[index].id, { messages: radarMessages([1]) })
   }
-  it('A/B 同正文打开 B 固定目录，不改登记或证据；不执行 ZIP', async () => {
+  it.skipIf(process.platform !== 'win32')('A/B 同正文打开 B 固定目录，不改登记或证据；不执行 ZIP', async () => {
     const f = prepared(); ingestRadarItem(f, 1, radarMessages([1])); processKeywordRadarRun(f.db, f.items[1].id)
     await evidence(f, 0); await evidence(f, 1)
     const hit = listRecentKeywordHits(f.db).find(hit => hit.batchItemId === f.items[1].id)!, before = fingerprint(f)
@@ -248,7 +250,7 @@ describe('证据导航只针对命中所属 Item', () => {
     expect(open).toHaveBeenCalledExactlyOnceWith(join(f.directory, 'evidence', f.items[1].id))
     expect(fingerprint(f)).toBe(before)
   }, 15000)
-  it('未登记、缺失、被改写或路径逃逸时 fail closed，不开其他来源', async () => {
+  it.skipIf(process.platform !== 'win32')('未登记、缺失、被改写或路径逃逸时 fail closed，不开其他来源', async () => {
     const f = prepared(), hit = listRecentKeywordHits(f.db)[0], open = vi.fn(async () => '')
     expect(await safeKeywordRadarAction(() => openKeywordHitEvidence(f.db, f.path, hit.id, open))).toMatchObject({ ok: false, error: { code: 'EVIDENCE_UNAVAILABLE' } })
     await evidence(f, 0)
@@ -258,9 +260,54 @@ describe('证据导航只针对命中所属 Item', () => {
     expect(await safeKeywordRadarAction(() => openKeywordHitEvidence(f.db, f.path, hit.id, open))).toMatchObject({ ok: false })
     expect(open).not.toHaveBeenCalled()
   }, 15000)
-  it('系统导航错误使用固定安全结果，不回传系统路径', async () => {
+  it.skipIf(process.platform !== 'win32')('系统导航错误使用固定安全结果，不回传系统路径', async () => {
     const f = prepared(); await evidence(f, 0)
     const result = await safeKeywordRadarAction(() => openKeywordHitEvidence(f.db, f.path, listRecentKeywordHits(f.db)[0].id, async () => 'C:\\私有路径 错误'))
     expect(result).toEqual({ ok: false, error: { code: 'EVIDENCE_UNAVAILABLE', message: '该附件的证据暂不可用，未打开其他来源。' } })
   }, 15000)
+})
+
+describe('共享关键词 occurrence 与真实 JSON 回源',()=>{
+  async function pair() {
+    const f=sharedJsonFixture();addKeywordTerm(f.db,createKeywordGroup(f.db,'共享关键词').id,'Codex')
+    const a=await importSharedJson(f,radarMessages([1]),'甲.json')
+    const b=await importSharedJson(f,radarMessages([1]).map(m=>({...m,sender_name:'来源乙',conversation_name:'乙群',timestamp:'2026-10-06T02:20:00.000Z'})),'乙.json')
+    await drainSharedDerived()
+    const hit=listRecentKeywordHits(f.db).find(h=>h.batchItemId===b.item.id)!
+    return {f,a,b,hit}
+  }
+  // 复锁：51。
+  it('B Hit 与 Context 使用 B source facts，导航只打开 B 受控目录',async()=>{
+    const {f,a,b,hit}=await pair(),before=fingerprint(f),open=vi.fn(async()=>''),raw=[sharedEvidenceBytes(f,a.item.id),sharedEvidenceBytes(f,b.item.id)]
+    expect(hit).toMatchObject({senderName:'来源乙',conversationName:'乙群',chatTimestamp:'2026-10-06T02:20:00.000Z'})
+    expect(getKeywordHitContext(f.db,hit.id).entries[0]).toMatchObject({batchItemId:b.item.id,senderName:'来源乙',isCurrent:true})
+    expect(await openKeywordHitEvidence(f.db,f.path,hit.id,open)).toEqual({batchItemId:b.item.id,opened:true})
+    expect(open).toHaveBeenCalledExactlyOnceWith(join(f.directory,'evidence',b.item.id))
+    expect(fingerprint(f)).toBe(before);expect([sharedEvidenceBytes(f,a.item.id),sharedEvidenceBytes(f,b.item.id)]).toEqual(raw)
+  })
+  // 复锁：52 的未登记状态由真实核心创建。
+  it('未登记 B 的 Hit 保留，不借用 A 的合法 Evidence',async()=>{
+    const f=sharedJsonFixture();addKeywordTerm(f.db,createKeywordGroup(f.db,'共享词').id,'Codex')
+    await importSharedJson(f,radarMessages([1]));await drainSharedDerived()
+    const core=sharedCoreItems(f,1);ingestSharedCore(core,0,radarMessages([1]));processKeywordRadarRun(f.db,core.items[0].id)
+    const hit=listRecentKeywordHits(f.db).find(h=>h.batchItemId===core.items[0].id)!,before=fingerprint(f),open=vi.fn(async()=>'')
+    expect(await safeKeywordRadarAction(()=>openKeywordHitEvidence(f.db,f.path,hit.id,open))).toMatchObject({ok:false,error:{code:'EVIDENCE_UNAVAILABLE'}})
+    expect(open).not.toHaveBeenCalled();expect(listRecentKeywordHits(f.db).find(h=>h.id===hit.id)).toEqual(hit);expect(fingerprint(f)).toBe(before)
+  })
+  // 复锁：52 的缺失、篡改、路径逃逸各分支。
+  it.each(['缺失','改写','逃逸'])('B Raw %s 不改 Hit 或 DB，不回退 A',async kind=>{
+    const {f,b,hit}=await pair()
+    if(kind==='缺失') {const {unlinkSync}=await import('node:fs');unlinkSync(join(f.directory,b.item.evidence_relative_path!))}
+    else if(kind==='改写') writeFileSync(join(f.directory,b.item.evidence_relative_path!),'被改写')
+    else f.db.prepare("UPDATE batch_import_items SET evidence_relative_path='../其他来源.zip' WHERE id=?").run(b.item.id)
+    const before=fingerprint(f),open=vi.fn(async()=>'')
+    expect(await safeKeywordRadarAction(()=>openKeywordHitEvidence(f.db,f.path,hit.id,open))).toMatchObject({ok:false,error:{code:'EVIDENCE_UNAVAILABLE'}})
+    expect(open).not.toHaveBeenCalled();expect(listRecentKeywordHits(f.db).find(h=>h.id===hit.id)).toEqual(hit);expect(fingerprint(f)).toBe(before)
+  })
+  // 复锁：53。
+  it('导航回调错误使用固定安全说明，不泄露系统路径',async()=>{
+    const {f,b,hit}=await pair(),before=fingerprint(f),raw=sharedEvidenceBytes(f,b.item.id)
+    expect(await safeKeywordRadarAction(()=>openKeywordHitEvidence(f.db,f.path,hit.id,async()=>'秘密路径'))).toEqual({ok:false,error:{code:'EVIDENCE_UNAVAILABLE',message:'该附件的证据暂不可用，未打开其他来源。'}})
+    expect(fingerprint(f)).toBe(before);expect(sharedEvidenceBytes(f,b.item.id)).toEqual(raw)
+  })
 })

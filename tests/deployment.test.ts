@@ -1,3 +1,4 @@
+import { sharedCoreFixture } from './shared-core-fixture'
 import { createHash } from 'node:crypto'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -363,5 +364,14 @@ describe('Windows 安装与 WorkBuddy 连接组件', () => {
     writeFileSync(result.registrationPath, JSON.stringify({ mcpServers: { 'privateradar-local-spike': { disabled: false } } }))
     writeFileSync(approvalPath, JSON.stringify({ 'old-hash::privateradar-local-spike': Date.now() }))
     expect(inspectWorkBuddyConnection(data, userHome)).toEqual({ connected: false, message: 'WorkBuddy 中尚未注册 PrivateRadar。' })
+  })
+})
+
+// 漏跳：21；Windows literal path 检查继续原样保留。
+describe('共享运行数据目录选择',()=>{
+  it('平台临时绝对路径保留 Electron userData 与显式 override 选择',()=>{
+    const f=sharedCoreFixture(),electronUserData=join(f.directory,'Electron','用户数据'),isolated=join(f.directory,'隔离覆盖')
+    expect(runtimeDataDirectory(electronUserData,'')).toBe(electronUserData)
+    expect(runtimeDataDirectory(electronUserData,isolated)).toBe(isolated)
   })
 })

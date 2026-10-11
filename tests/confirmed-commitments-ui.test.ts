@@ -1,3 +1,5 @@
+import { sharedCoreItems, ingestSharedCore, sharedRows, drainSharedDerived } from './shared-core-fixture'
+import { sharedJsonFixture, importSharedJson, sharedEvidenceBytes } from './shared-json-evidence-fixture'
 import { createElement, isValidElement } from 'react'
 import type { ReactElement, ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -253,7 +255,7 @@ describe('审核分区与真实导航', () => {
 })
 
 describe('隔离数据库与当前附件只读回源', () => {
-  it('真实列表、刷新、上下文和证据在只读数据库下工作，不执行待运行记录，不改变任何业务行或证据字节', async () => {
+  it.skipIf(process.platform !== 'win32')('真实列表、刷新、上下文和证据在只读数据库下工作，不执行待运行记录，不改变任何业务行或证据字节', async () => {
     const f = reviewFixture(), stored = listCommitmentCandidates(f.db)
     confirmCommitmentCandidate(f.db, stored[0].id); ignoreCommitmentCandidate(f.db, stored[1].id)
     expect(ingestRadarItem(f, 1, commitmentMessages(['我会处理历史问题']).map(message => ({ ...message, source_message_id: '隔离只读待处理身份' }))).status).toBe('success')
@@ -287,6 +289,51 @@ describe('隔离数据库与当前附件只读回源', () => {
     }, { timeout: 20000 })
     expect(matched).not.toHaveBeenCalled(); expect(processed).not.toHaveBeenCalled()
     expect(f.db.prepare('SELECT status,attempt_count FROM commitment_extractor_runs WHERE batch_item_id=?').get(f.items[1].id)).toEqual({ status: 'pending', attempt_count: 0 })
+    expect(reviewDatabaseFingerprint(f)).toBe(before)
+    expect(evidencePaths.map(path => readFileSync(path))).toEqual(evidenceBytes)
+    expect([...handlers.keys()]).toHaveLength(5)
+  }, 30000)
+})
+
+// 复锁：50；保留全部 UI/只读断言，以真实 JSON Evidence 替换外部 ZIP 准备。
+describe('共享真实 JSON 与只读 DB 的承诺 UI', () => {
+  it('真实列表、刷新、上下文和证据在只读数据库下工作，不执行待运行记录，不改变任何业务行或证据字节', async () => {
+    const f = sharedJsonFixture(), entry = await importSharedJson(f, commitmentMessages(['我会处理这个问题','我来处理这个接口','我稍后回复你']))
+    await drainSharedDerived()
+    const stored = listCommitmentCandidates(f.db)
+    confirmCommitmentCandidate(f.db, stored[0].id); ignoreCommitmentCandidate(f.db, stored[1].id)
+    const pending = sharedCoreItems(f, 1)
+    expect(ingestSharedCore(pending, 0, commitmentMessages(['我会处理历史问题']).map(message => ({ ...message, source_message_id: '隔离只读待处理身份' }))).status).toBe('success')
+    const directory = join(f.directory,'evidence',entry.item.id)
+    const current = listCommitmentCandidates(f.db).find(row => row.status === 'confirmed')!
+    const evidencePaths = [join(directory, 'original.zip'), join(directory, 'messages.json')]
+    const evidenceBytes = evidencePaths.map(path => readFileSync(path)), before = reviewDatabaseFingerprint(f)
+    const matched = vi.spyOn(matcher, 'matchCommitmentBody'), processed = vi.spyOn(processor, 'processCommitmentExtractorRun')
+    const opened = vi.fn(async () => '')
+    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
+    registerCommitmentCandidateIpc({ handle: (name, listener) => handlers.set(name, listener) }, f.db,
+      id => openCommitmentCandidateEvidence(f.db, f.path, id, opened))
+    const invoke = async <T>(name: string, ...args: unknown[]) => await handlers.get('commitment-candidates:' + name)!(null, ...args) as CommitmentResult<T>
+    const api = {
+      listCommitmentCandidates: () => invoke<CommitmentCandidateView[]>('list'),
+      getCommitmentCandidateContext: (id: string) => invoke<CommitmentCandidateContext>('context', id),
+      openCommitmentCandidateEvidence: (id: string) => invoke<{ batchItemId: string; opened: true }>('open-evidence', id)
+    }
+    f.db.exec('PRAGMA query_only=ON')
+    const page = host(), render = () => page.render(ConfirmedCommitmentsPage, { api })
+    render(); page.frame.effects[0](); await settle(); expect(html(render())).toContain(current.body)
+    button(render(), '刷新').onClick(); await settle(); expect(html(render())).toContain(current.body)
+    const card = host(), renderCard = () => card.render(ConfirmedCommitmentCard, { candidate: current, api })
+    button(renderCard(), '查看上下文').onClick(); await settle()
+    expect(html(renderCard())).toContain('当前候选原话')
+    button(renderCard(), '查看证据').onClick()
+    // 等待既有原生证据验证完成，而不是替换它的来源决策。
+    await vi.waitFor(() => {
+      expect(opened).toHaveBeenCalledExactlyOnceWith(directory)
+      expect(html(renderCard())).toContain('已打开该附件的证据目录。')
+    }, { timeout: 20000 })
+    expect(matched).not.toHaveBeenCalled(); expect(processed).not.toHaveBeenCalled()
+    expect(f.db.prepare('SELECT status,attempt_count FROM commitment_extractor_runs WHERE batch_item_id=?').get(pending.items[0].id)).toEqual({ status: 'pending', attempt_count: 0 })
     expect(reviewDatabaseFingerprint(f)).toBe(before)
     expect(evidencePaths.map(path => readFileSync(path))).toEqual(evidenceBytes)
     expect([...handlers.keys()]).toHaveLength(5)

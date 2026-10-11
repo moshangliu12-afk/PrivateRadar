@@ -1,3 +1,5 @@
+import { sharedCoreFixture, sharedCoreItems, ingestSharedCore, sharedRows, sharedCount } from './shared-core-fixture'
+import { getBatchImportSessionSummary } from '../src/main/batch-import/session'
 import { createHash } from 'node:crypto'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
@@ -445,4 +447,24 @@ describe('单请求共享执行载体，租约和原生句柄仍独立', () => {
     expect(f.db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
     noHelpers(capture)
   }, 60000)
+})
+
+// 漏跳：111、112、113、114、115、117、122、131；合并准备失败读模型，原生六种拒绝仍各自保留。
+describe('共享准备失败与健康 Item 的摘要',()=>{
+  it('failed/无 Job 项零写入，另一真实成功 Item 不回滚，partial 前提可读且 FK 完整',async()=>{
+    const f=sharedCoreItems(sharedCoreFixture()),result=ingestSharedCore(f,0,[{content:'健康原文一'},{content:'健康原文二'},{content:'健康原文三'}])
+    // 明确构造准备失败后的合法读模型前提，不声称执行了原生 junction 或旧批量编排。
+    f.db.prepare("UPDATE batch_import_items SET status='failed',evidence_status='error',error_summary='快照保存失败：隔离准备失败' WHERE id=?").run(f.items[1].id)
+    f.db.prepare("UPDATE batch_import_sessions SET status='partial_success' WHERE id=?").run(f.session.id)
+    const before=sharedRows(f.db,'messages'),changes=f.db.prepare('SELECT total_changes() AS n').get()!.n
+    const summary=await getBatchImportSessionSummary(f.db,f.path,f.session.id)
+    expect(summary).toMatchObject({status:'partial_success',imported_total:3,failed_attachments:1,input_messages_total:null})
+    expect(summary.items[0]).toMatchObject({outcome:'success',effective_job_id:result.jobId,written_messages:3,indexed_messages:3})
+    expect(summary.items[1]).toMatchObject({outcome:'failed_zero_write',effective_job_id:null,written_messages:0,indexed_messages:0})
+    expect(sharedRows(f.db,'messages')).toEqual(before);expect(sharedCount(f.db,'import_jobs')).toBe(1)
+    expect(f.db.prepare('SELECT count(*) AS n FROM import_jobs WHERE batch_item_id=?').get(f.items[1].id)!.n).toBe(0)
+    expect(f.db.prepare('SELECT count(*) AS n FROM batch_item_message_sources WHERE batch_item_id=?').get(f.items[1].id)!.n).toBe(0)
+    expect(f.db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+    expect(f.db.prepare('SELECT total_changes() AS n').get()!.n).toBe(changes)
+  })
 })

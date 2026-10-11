@@ -1,3 +1,6 @@
+import { sharedCoreFixture, sharedCoreItems, ingestSharedCore, sharedRows, sharedCount, sharedCoreState, drainSharedDerived } from './shared-core-fixture'
+import { claimBatchItemForFirstImport } from '../src/main/batch-import/import-item'
+import { getBatchImportSessionSummary } from '../src/main/batch-import/session'
 import { DatabaseSync } from 'node:sqlite'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import * as fs from 'node:fs/promises'
@@ -435,4 +438,100 @@ describe('当前卡片上下文到目录证据的完整批量链路', () => {
     expect(f.db.prepare('SELECT COUNT(*) AS count FROM messages WHERE source_batch_id = ?').get(`workbuddy:item:${first.id}`)).toEqual({ count: 7 })
     expect(count(f, 'messages_fts')).toBe(8)
   }, 120000)
+})
+
+describe('共享当前原文到核心来源的分层单位',()=>{
+  // 漏跳：125、126。只用原 Parser 输出，不补 sender/群名/时间。
+  it('原上下文、媒体占位与内部空行逐字段进入 canonical/occurrence',()=>{
+    const f=sharedCoreItems(sharedCoreFixture()),bodies=['第一条正文','第二条\n正文内部换行','第三条\n\n正文内部段落','[图片] 隔离图片一.png','图片后文本','[图片] 隔离图片二.png','最后一条正文']
+    const first=context(f.directory,'普通文本卡',10),records=bodies.map((body,index)=>'·隔离发送人\n2026年10月6日 08:0'+index+'\n'+body)
+    const second:WorkBuddyCurrentContextBlock={extracted_dir_path:join(f.directory,'乙'),file:'隔离图片卡.zip',message_count:7,first_sender:'·隔离发送人',first_message_at:'2026年10月6日 08:00',transcript:records.join('\n\n')}
+    const gate=gateWorkBuddyBatchCurrentInput([first,second,{...first},{...second,transcript:records.join('\n\n\n')}])
+    expect(gate.logical_attachments.map(a=>a.context_indexes)).toEqual([[0,2],[1,3]])
+    for(const [i,attachment] of gate.logical_attachments.entries()) {
+      const result=ingestSharedCore(f,i,attachment.messages)
+      expect(result).toMatchObject({status:'success',importedCount:attachment.messages.length})
+      const rows=f.db.prepare('SELECT m.content,s.source_position,s.source_sender_name,s.source_timestamp,s.source_timestamp_source,s.source_conversation_name,s.source_conversation_name_source FROM batch_item_message_sources s JOIN messages m ON m.id=s.message_id WHERE s.batch_item_id=? ORDER BY s.source_position').all(f.items[i].id)
+      expect(rows).toEqual(attachment.messages.map(m=>({content:m.content,source_position:m.source_position,source_sender_name:m.sender_name,source_timestamp:new Date(m.timestamp!).toISOString(),source_timestamp_source:'source_native',source_conversation_name:null,source_conversation_name_source:'unknown'})))
+    }
+    expect(f.db.prepare('SELECT content FROM messages WHERE source_batch_id=? ORDER BY source_position').all(f.items[1].source_batch_id).map(m=>m.content)).toEqual(bodies)
+    for(const table of ['messages','messages_fts','batch_item_message_sources']) expect(sharedCount(f.db,table)).toBe(17)
+  })
+  // 漏跳：126、130。原 3+4 元数据单独保全，相同原弱身份输入跨两 Item 仍为六 canonical。
+  it('原 3+4 source facts 保全，原无群名三条输入的跨 Item 弱身份不自动合并',()=>{
+    const f=sharedCoreItems(sharedCoreFixture()),inputs=gateWorkBuddyBatchCurrentInput([context(f.directory,'甲',3),context(join(f.directory,'乙'),'乙',4)]).logical_attachments
+    for(const [i,a] of inputs.entries()) {
+      const result=ingestSharedCore(f,i,a.messages)
+      expect(result).toMatchObject({status:'success',importedCount:a.messages.length})
+      expect(f.db.prepare('SELECT source_position,source_sender_name,source_timestamp,source_timestamp_source,source_conversation_name,source_conversation_name_source FROM batch_item_message_sources WHERE batch_item_id=? ORDER BY source_position').all(f.items[i].id))
+        .toEqual(a.messages.map(m=>({source_position:m.source_position,source_sender_name:m.sender_name,source_timestamp:new Date(m.timestamp!).toISOString(),source_timestamp_source:'source_native',source_conversation_name:null,source_conversation_name_source:'unknown'})))
+    }
+    const other=sharedCoreItems(f),before=sharedCount(f.db,'messages'),values=inputs[0].messages
+    expect(values.every(m=>m.source_message_id===undefined&&m.conversation_name===undefined)).toBe(true)
+    for(const item of other.items) expect(ingestSharedCore(other,item.ordinal,values)).toMatchObject({status:'success',importedCount:3,duplicateCount:0})
+    expect(sharedCount(f.db,'messages')-before).toBe(6)
+    for(const item of other.items) expect(f.db.prepare('SELECT source_position FROM batch_item_message_sources WHERE batch_item_id=? ORDER BY source_position').all(item.id))
+      .toEqual([0,1,2].map(source_position=>({source_position})))
+    expect(sharedCount(f.db,'messages_fts')).toBe(13)
+  })
+  // 漏跳：132；原缺群名输入，真正 B 核心事务失败，A 的消息/FTS/来源均保全。
+  it('B 来源 INSERT 故障保留 A 与真实 failed Job，双 Item 摘要仍反映失败',async()=>{
+    const f=sharedCoreItems(sharedCoreFixture()),inputs=gateWorkBuddyBatchCurrentInput([context(f.directory,'甲',3),context(join(f.directory,'乙'),'乙',4)]).logical_attachments
+    const a=ingestSharedCore(f,0,inputs[0].messages),before=sharedRows(f.db,'messages'),fts=sharedRows(f.db,'messages_fts_data'),sources=sharedRows(f.db,'batch_item_message_sources')
+    f.db.exec("CREATE TRIGGER reject_shared_current_source BEFORE INSERT ON batch_item_message_sources WHEN new.batch_item_id='"+f.items[1].id+"' AND new.source_position=1 BEGIN SELECT RAISE(ABORT,'核心来源失败'); END")
+    const b=ingestSharedCore(f,1,inputs[1].messages)
+    expect(b).toMatchObject({status:'failed',importedCount:0,duplicateCount:0})
+    expect(sharedRows(f.db,'messages')).toEqual(before);expect(sharedRows(f.db,'messages_fts_data')).toEqual(fts);expect(sharedRows(f.db,'batch_item_message_sources')).toEqual(sources)
+    expect(f.db.prepare('SELECT status,batch_item_id FROM import_jobs WHERE id=?').get(b.jobId)).toEqual({status:'failed',batch_item_id:f.items[1].id})
+    const summary=await getBatchImportSessionSummary(f.db,f.path,f.session.id)
+    expect(summary.items[0]).toMatchObject({outcome:'success',effective_job_id:a.jobId,imported:3})
+    expect(summary.items[1]).toMatchObject({outcome:'failed_zero_write',effective_job_id:b.jobId,imported:0})
+    expect(summary.failed_attachments).toBe(1);expect(f.db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+    expect(claimBatchItemForFirstImport(f.db,f.items[1].id)).toBe('terminal')
+  })
+  // 漏跳：133；区别于跨 Item 强身份不覆盖时间，保留本 Item 的原有补充政策。
+  it('同 Item 重放 duplicate-only/updated-only 不改 identity、位置、来源或 FTS 数量',()=>{
+    const f=sharedCoreItems(sharedCoreFixture()),inputs=gateWorkBuddyBatchCurrentInput([context(f.directory,'甲',3),context(join(f.directory,'乙'),'乙',4)]).logical_attachments
+    inputs.forEach((a,i)=>ingestSharedCore(f,i,a.messages))
+    const identities=f.db.prepare('SELECT id,source_batch_id,source_position,stable_identity,fingerprint FROM messages ORDER BY rowid').all(),sources=sharedRows(f.db,'batch_item_message_sources')
+    expect(claimBatchItemForFirstImport(f.db,f.items[0].id)).toBe('terminal')
+    expect(ingestSharedCore(f,0,inputs[0].messages)).toMatchObject({status:'success',importedCount:0,duplicateCount:3,updatedCount:0})
+    f.db.prepare("UPDATE messages SET timestamp=NULL,timestamp_source='unknown' WHERE source_batch_id=?").run(f.items[1].source_batch_id)
+    expect(ingestSharedCore(f,1,inputs[1].messages)).toMatchObject({status:'success',importedCount:0,duplicateCount:0,updatedCount:4})
+    expect(f.db.prepare('SELECT id,source_batch_id,source_position,stable_identity,fingerprint FROM messages ORDER BY rowid').all()).toEqual(identities)
+    expect(sharedRows(f.db,'batch_item_message_sources')).toEqual(sources)
+    expect(f.db.prepare('SELECT timestamp,timestamp_source FROM messages WHERE source_batch_id=? ORDER BY source_position').all(f.items[1].source_batch_id))
+      .toEqual(inputs[1].messages.map(m=>({timestamp:new Date(m.timestamp!).toISOString(),timestamp_source:'source_native'})))
+    expect(sharedCount(f.db,'messages')).toBe(7);expect(sharedCount(f.db,'messages_fts')).toBe(7)
+  })
+  // 漏跳：91、134；成功项不可首次 claim，未开始项仍可 claim。旧 resume 来源机制留 Windows。
+  it('成功 A 重启后不再认领，只有未开始 B 获得首次执行权',()=>{
+    const f=sharedCoreItems(sharedCoreFixture()),a=ingestSharedCore(f,0,[{content:'成功 A'}])
+    f.db.close();const db=new DatabaseSync(f.path);initializeDatabase(db)
+    try {
+      expect(claimBatchItemForFirstImport(db,f.items[0].id)).toBe('terminal')
+      expect(claimBatchItemForFirstImport(db,f.items[1].id)).toBe('claimed')
+      const b=ingestSharedCore({...f,db},1,[{content:'首次 B'}])
+      expect(b.status).toBe('success');expect(sharedCount(db,'import_jobs')).toBe(2)
+      expect(db.prepare('SELECT id FROM import_jobs WHERE batch_item_id=?').all(f.items[0].id)).toEqual([{id:a.jobId}])
+    } finally {db.close()}
+  })
+  // 漏跳：135 的 failed/partial 均不自动认领；in_progress 持久性复用 concurrency 单位。
+  it.each([false,true])('真实失败/部分成功终态不能首次再 claim：partial=%s',partial=>{
+    const f=sharedCoreItems(sharedCoreFixture(),1),result=ingestSharedCore(f,0,partial?[{content:'有效原文'},{sender_name:'无正文'}]:[{sender_name:'无正文'}])
+    expect(result.status).toBe(partial?'partial':'failed')
+    expect(claimBatchItemForFirstImport(f.db,f.items[0].id)).toBe('terminal')
+    expect(sharedCount(f.db,'import_jobs')).toBe(1)
+  })
+  // 漏跳：138；读取同一七消息原文，不能为 strict JSON 补群名。
+  it('七条固定原文的 Parser 输出、正文、来源位置和 FTS 全部保留',()=>{
+    const f=sharedCoreItems(sharedCoreFixture(),1),transcript=readFileSync(new URL('./fixtures/workbuddy-chat-history/current-inline-seven.txt',import.meta.url),'utf8')
+    const values=gateWorkBuddyBatchCurrentInput([{file:'七条原文.zip',extracted_dir_path:f.directory,message_count:7,transcript}]).logical_attachments[0].messages
+    expect(ingestSharedCore(f,0,values)).toMatchObject({status:'success',importedCount:7})
+    expect(f.db.prepare('SELECT content,source_position FROM messages ORDER BY source_position').all()).toEqual(values.map(m=>({content:m.content,source_position:m.source_position})))
+    expect(sharedCount(f.db,'messages_fts')).toBe(7)
+    expect(f.db.prepare('SELECT source_sender_name,source_timestamp,source_timestamp_source,source_position FROM batch_item_message_sources ORDER BY source_position').all())
+      .toEqual(values.map(m=>({source_sender_name:m.sender_name,source_timestamp:new Date(m.timestamp!).toISOString(),source_timestamp_source:m.timestamp_source,source_position:m.source_position})))
+    expect(f.db.prepare('SELECT conversation_name,conversation_name_source FROM messages').all().every(m=>m.conversation_name===null&&m.conversation_name_source==='unknown')).toBe(true)
+  })
 })

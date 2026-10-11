@@ -1,3 +1,5 @@
+import { sharedCoreFixture, sharedCoreItems, ingestSharedCore, sharedRows, sharedCount, sharedCoreState, drainSharedDerived } from './shared-core-fixture'
+import { sharedJsonFixture, importSharedJson, sharedEvidenceBytes } from './shared-json-evidence-fixture'
 import { DatabaseSync } from 'node:sqlite'
 import { join } from 'node:path'
 import { writeFileSync } from 'node:fs'
@@ -174,7 +176,7 @@ describe('上下文、证据、只读通信', () => {
     expect(radarCount(f.db, 'keyword_radar_runs')).toBe(2)
     expect(radarCount(f.db, 'keyword_hits')).toBe(1)
   })
-  it('共享 canonical 的 B occurrence 打开 B 的注册 Evidence；查询、Context 和 Evidence 全链零写入', async () => {
+  it.skipIf(process.platform !== 'win32')('共享 canonical 的 B occurrence 打开 B 的注册 Evidence；查询、Context 和 Evidence 全链零写入', async () => {
     const f = interestFixture(interestMessages().map(message => ({ ...message, timestamp: new Date(2026, 9, 7, 9).toISOString() })))
     ingestRadarItem(f, 1, interestMessages()); processKeywordRadarRun(f.db, f.items[1].id)
     await interestEvidence(f, 0); await interestEvidence(f, 1)
@@ -186,7 +188,7 @@ describe('上下文、证据、只读通信', () => {
     expect(interestDatabaseFingerprint(f)).toEqual(before)
     expect(interestEvidenceFingerprint(f)).toEqual(evidence)
   }, 15000)
-  it('未登记及被改写的 Evidence 不 fallback，命中卡片仍保留，校验不写状态', async () => {
+  it.skipIf(process.platform !== 'win32')('未登记及被改写的 Evidence 不 fallback，命中卡片仍保留，校验不写状态', async () => {
     const f = interestFixture(), open = vi.fn(async () => '')
     const item = query(f).items[0]
     expect(item.source.evidenceRecorded).toBe(false)
@@ -210,5 +212,41 @@ describe('上下文、证据、只读通信', () => {
     const spy = vi.spyOn(f.db, 'prepare').mockImplementation(() => { throw new Error('私有正文 C:/私有路径') })
     expect(await read(null)).toEqual({ ok: false, error: { code: 'OPERATION_FAILED', message: '关键词雷达操作未完成，请稍后重试。' } })
     spy.mockRestore()
+  })
+})
+
+describe('共享今日关注词的真实来源回源',()=>{
+  // 复锁：77。
+  it('今日代表 B occurrence，Query/Context/真实 JSON 回源均只读且使用 B 事实',async()=>{
+    const base=sharedJsonFixture();addKeywordTerm(base.db,createKeywordGroup(base.db,'关注词隔离组').id,'Codex')
+    const a=await importSharedJson(base,interestMessages().map(m=>({...m,timestamp:new Date(2026,9,7,9).toISOString()})),'甲.json')
+    const b=await importSharedJson(base,interestMessages().map(m=>({...m,sender_name:'来源乙',conversation_name:'乙群'})),'乙.json');await drainSharedDerived()
+    const f={...base,session:b.session,items:[a.item,b.item]},before=interestDatabaseFingerprint(f),raw=[sharedEvidenceBytes(f,a.item.id),sharedEvidenceBytes(f,b.item.id)],open=vi.fn(async()=>'')
+    const result=getTodayKeywordInterest(f.db,todayClock()),item=result.items[0]
+    expect(item.batchItemId).toBe(b.item.id);expect(item).toMatchObject({senderName:'来源乙',conversationName:'乙群'})
+    expect(getKeywordHitContext(f.db,item.representativeHitId).entries[0]).toMatchObject({batchItemId:b.item.id,senderName:'来源乙',isCurrent:true})
+    expect(await openKeywordHitEvidence(f.db,f.path,item.representativeHitId,open)).toEqual({batchItemId:b.item.id,opened:true})
+    expect(open).toHaveBeenCalledExactlyOnceWith(join(f.directory,'evidence',b.item.id))
+    expect(interestDatabaseFingerprint(f)).toEqual(before);expect([sharedEvidenceBytes(f,a.item.id),sharedEvidenceBytes(f,b.item.id)]).toEqual(raw)
+  })
+  // 复锁：78 的未登记状态；真实核心 B 不借合法 A。
+  it('未登记 B 的今日卡片保留，导航 fail closed，不 fallback A',async()=>{
+    const f=sharedCoreItems(sharedJsonFixture(),1);addKeywordTerm(f.db,createKeywordGroup(f.db,'关注词隔离组').id,'Codex')
+    await importSharedJson(f,interestMessages().map(m=>({...m,timestamp:new Date(2026,9,7,9).toISOString()})));await drainSharedDerived()
+    ingestSharedCore(f,0,interestMessages());processKeywordRadarRun(f.db,f.items[0].id)
+    const item=getTodayKeywordInterest(f.db,todayClock()).items[0],before=interestDatabaseFingerprint(f),open=vi.fn(async()=>'')
+    expect(item.batchItemId).toBe(f.items[0].id)
+    expect(await safeKeywordRadarAction(()=>openKeywordHitEvidence(f.db,f.path,item.representativeHitId,open))).toMatchObject({ok:false,error:{code:'EVIDENCE_UNAVAILABLE'}})
+    expect(open).not.toHaveBeenCalled();expect(getTodayKeywordInterest(f.db,todayClock()).items).toEqual([item]);expect(interestDatabaseFingerprint(f)).toEqual(before)
+  })
+  // 复锁：78 的 Raw 改写；保留卡片且校验零写入。
+  it('真实 JSON Raw 改写后保留今日 Hit 卡片，不修复或写状态',async()=>{
+    const base=sharedJsonFixture();addKeywordTerm(base.db,createKeywordGroup(base.db,'关注词隔离组').id,'Codex')
+    const b=await importSharedJson(base,interestMessages());await drainSharedDerived()
+    const f={...base,session:b.session,items:[b.item]},path=join(f.directory,b.item.evidence_relative_path!)
+    writeFileSync(path,'被改写')
+    const item=getTodayKeywordInterest(f.db,todayClock()).items[0],before=interestDatabaseFingerprint(f),open=vi.fn(async()=>'')
+    expect(await safeKeywordRadarAction(()=>openKeywordHitEvidence(f.db,f.path,item.representativeHitId,open))).toMatchObject({ok:false,error:{code:'EVIDENCE_UNAVAILABLE'}})
+    expect(open).not.toHaveBeenCalled();expect(getTodayKeywordInterest(f.db,todayClock()).items).toEqual([item]);expect(interestDatabaseFingerprint(f)).toEqual(before)
   })
 })

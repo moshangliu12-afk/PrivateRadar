@@ -1,3 +1,6 @@
+import { sharedCoreState, sharedCount, sharedRows, drainSharedDerived } from './shared-core-fixture'
+import { sharedJsonFixture, importSharedJson, sharedEvidenceBytes } from './shared-json-evidence-fixture'
+import { confirmCommitmentCandidate } from '../src/main/commitment/desktop'
 import { createHash } from 'node:crypto'
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -44,7 +47,7 @@ async function flush() {
 }
 
 describe('承诺批量导入后触发与核心失败隔离', () => {
-  it('批量成功返回时只登记任务，随后独立处理候选项，关键词处理仍正常完成', async () => {
+  it.skipIf(process.platform !== 'win32')('批量成功返回时只登记任务，随后独立处理候选项，关键词处理仍正常完成', async () => {
     const f = prepared(), spy = vi.spyOn(recovery, 'schedulePendingCommitmentExtractorRuns')
     const output = await ingestWorkBuddyBatch(f.db, f.options, { attachments: f.attachments })
     expect(output).toMatchObject({ status: 'success', summary: { imported_total: 4 } })
@@ -59,7 +62,7 @@ describe('承诺批量导入后触发与核心失败隔离', () => {
     expect(radarCount(f.db, 'keyword_hits')).toBe(4)
     expect(f.db.prepare("SELECT count(*) AS n FROM commitment_extractor_runs WHERE status='complete'").get()!.n).toBe(2)
   })
-  it.each([false, true])('匹配异常不改变核心成功与证据，部分成功=%s；关键词仍独立生成命中', async partial => {
+  it.skipIf(process.platform !== 'win32').each([false, true])('匹配异常不改变核心成功与证据，部分成功=%s；关键词仍独立生成命中', async partial => {
     const f = prepared()
     if (partial) f.attachments[0].messages.push({ ...f.attachments[0].messages[0], content: undefined })
     vi.spyOn(matcher, 'matchCommitmentBody').mockImplementation(() => { throw new Error('秘密聊天、证据路径和堆栈') })
@@ -76,7 +79,7 @@ describe('承诺批量导入后触发与核心失败隔离', () => {
     expect(radarCount(f.db, 'keyword_hits')).toBe(4)
     expect(f.db.prepare("SELECT count(*) AS n FROM keyword_radar_runs WHERE status='complete'").get()!.n).toBe(2)
   })
-  it('派生安排自身失败不影响导入成功，运行记录安全保留待处理', async () => {
+  it.skipIf(process.platform !== 'win32')('派生安排自身失败不影响导入成功，运行记录安全保留待处理', async () => {
     const f = prepared(), log = vi.spyOn(console, 'warn').mockImplementation(() => {})
     vi.spyOn(recovery, 'schedulePendingCommitmentExtractorRuns').mockImplementation(() => { throw new Error('秘密') })
     const output = await ingestWorkBuddyBatch(f.db, f.options, { attachments: f.attachments })
@@ -87,7 +90,7 @@ describe('承诺批量导入后触发与核心失败隔离', () => {
     expect(radarCount(f.db, 'commitment_candidates')).toBe(0)
     expect(radarCount(f.db, 'keyword_hits')).toBe(4)
   })
-  it('规范消息强重复新增为零时，新附件来源仍独立登记及生成候选项', async () => {
+  it.skipIf(process.platform !== 'win32')('规范消息强重复新增为零时，新附件来源仍独立登记及生成候选项', async () => {
     const f = prepared(true)
     const first = await ingestWorkBuddyBatch(f.db, f.options, { attachments: f.attachments })
     await flush()
@@ -122,4 +125,65 @@ describe('承诺批量导入后触发与核心失败隔离', () => {
     expect(output.items.every(item => getCommitmentExtractorRun(f.db, item.item_id, COMMITMENT_RULE_VERSION)!.status === 'complete')).toBe(true)
     expect(radarCount(f.db, 'keyword_hits')).toBe(2)
   }, 30_000)
+})
+
+describe('共享承诺导入后处理：真实 JSON 入口',()=>{
+  function values() { return commitmentMessages(['我会把文件发给你','我来处理这个问题']) }
+  function prepareJson() { const f=sharedJsonFixture();addKeywordTerm(f.db,createKeywordGroup(f.db,'共享隔离词').id,'我');return f }
+  // 复锁：37。逐文件检查返回边界，不要求两次异步文件导入同时 pending。
+  it('真实入口返回只冻结本 Item，随后独立生成 Candidate 与 Keyword',async()=>{
+    const f=prepareJson(),entries=[]
+    for(const name of ['甲.json','乙.json']) {
+      const entry=await importSharedJson(f,values().map((m,i)=>({...m,source_message_id:name+i})),name)
+      expect(entry.result.status).toBe('success')
+      expect(getCommitmentExtractorRun(f.db,entry.item.id,COMMITMENT_RULE_VERSION)).toMatchObject({status:'pending',attempt_count:0,source_positions_snapshot_json:'[0,1]'})
+      expect(f.db.prepare('SELECT count(*) AS n FROM commitment_candidates WHERE batch_item_id=?').get(entry.item.id)!.n).toBe(0)
+      entries.push(entry)
+    }
+    const before=sharedCoreState(f.db),raw=entries.map(e=>sharedEvidenceBytes(f,e.item.id)),result=JSON.stringify(entries.map(e=>e.result))
+    await drainSharedDerived()
+    expect(sharedCoreState(f.db)).toEqual(before);expect(entries.map(e=>sharedEvidenceBytes(f,e.item.id))).toEqual(raw)
+    expect(JSON.stringify(entries.map(e=>e.result))).toBe(result)
+    expect(sharedCount(f.db,'commitment_candidates')).toBe(4);expect(sharedCount(f.db,'keyword_hits')).toBe(4)
+    for(const e of entries) expect(getCommitmentExtractorRun(f.db,e.item.id,COMMITMENT_RULE_VERSION)!.status).toBe('complete')
+  })
+  // 复锁：38、39；漏跳：144 的 Raw/核心隔离目标，原四原文的规则目标另见 single-card 核心单位。
+  it.each([false,true])('matcher 异常隔离，真实核心与 Raw 保全：partial=%s',async partial=>{
+    const f=prepareJson()
+    vi.spyOn(matcher,'matchCommitmentBody').mockImplementation(()=>{throw new Error('秘密聊天、绝对路径、堆栈')})
+    const entry=await importSharedJson(f,partial?[...values(),{sender_name:'缺正文'}]:values())
+    expect(entry.result.status).toBe(partial?'partial':'success')
+    const before=sharedCoreState(f.db),raw=sharedEvidenceBytes(f,entry.item.id),returned=JSON.stringify(entry.result)
+    await drainSharedDerived()
+    const run=getCommitmentExtractorRun(f.db,entry.item.id,COMMITMENT_RULE_VERSION)!
+    expect(run).toMatchObject({status:'failed',attempt_count:1});expect(run.error_summary).not.toMatch(/秘密|绝对路径|堆栈/)
+    expect(sharedCount(f.db,'commitment_candidates')).toBe(0);expect(sharedCount(f.db,'keyword_hits')).toBe(2)
+    expect(f.db.prepare('SELECT status FROM keyword_radar_runs WHERE batch_item_id=?').get(entry.item.id)).toEqual({status:'complete'})
+    expect(sharedCoreState(f.db)).toEqual(before);expect(sharedEvidenceBytes(f,entry.item.id)).toEqual(raw)
+    expect(JSON.stringify(entry.result)).toBe(returned)
+  })
+  // 复锁：40；保留手动 JSON 自己的受控错误，不移植旧 WorkBuddy 日志。
+  it('scheduler 异常后真实核心成功，Run pending，Keyword 独立完成',async()=>{
+    const f=prepareJson()
+    vi.spyOn(recovery,'schedulePendingCommitmentExtractorRuns').mockImplementation(()=>{throw new Error('秘密')})
+    const entry=await importSharedJson(f,values()),before=sharedCoreState(f.db),raw=sharedEvidenceBytes(f,entry.item.id)
+    expect(entry.result.status).toBe('success');expect(entry.result.errors).toEqual(['POST_COMMIT_DERIVED_SCHEDULE_FAILED: 核心导入已提交，派生处理保留待恢复状态。'])
+    await drainSharedDerived()
+    expect(getCommitmentExtractorRun(f.db,entry.item.id,COMMITMENT_RULE_VERSION)).toMatchObject({status:'pending',attempt_count:0})
+    expect(sharedCount(f.db,'commitment_candidates')).toBe(0);expect(sharedCount(f.db,'keyword_hits')).toBe(2)
+    expect(sharedCoreState(f.db)).toEqual(before);expect(sharedEvidenceBytes(f,entry.item.id)).toEqual(raw)
+  })
+  // 复锁：41。
+  it('零 canonical 新增仍为新 occurrence 生成独立 Run/Candidate/Hit，不改旧审核',async()=>{
+    const f=prepareJson(),input=values().map((m,i)=>({...m,source_message_id:'真实共享身份'+i}))
+    const a=await importSharedJson(f,input,'甲.json');await drainSharedDerived()
+    const old=f.db.prepare('SELECT id FROM commitment_candidates WHERE batch_item_id=? ORDER BY source_position').all(a.item.id)
+    confirmCommitmentCandidate(f.db,String(old[0].id))
+    const before=sharedRows(f.db,'commitment_candidates'),b=await importSharedJson(f,input,'乙.json')
+    expect(b.result).toMatchObject({status:'success',importedCount:0,duplicateCount:2})
+    await drainSharedDerived()
+    expect(sharedCount(f.db,'messages')).toBe(2);expect(sharedCount(f.db,'batch_item_message_sources')).toBe(4)
+    expect(sharedCount(f.db,'commitment_extractor_runs')).toBe(2);expect(sharedCount(f.db,'commitment_candidates')).toBe(4);expect(sharedCount(f.db,'keyword_hits')).toBe(4)
+    expect(f.db.prepare('SELECT * FROM commitment_candidates WHERE batch_item_id=? ORDER BY rowid').all(a.item.id)).toEqual(before)
+  })
 })

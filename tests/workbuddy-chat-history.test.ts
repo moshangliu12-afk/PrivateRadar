@@ -1,3 +1,4 @@
+import { sharedCoreFixture, sharedCoreItems, ingestSharedCore, sharedRows, sharedCount } from './shared-core-fixture'
 import { createHash } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
@@ -360,5 +361,21 @@ describe('WorkBuddy 聊天解析与既有 Batch 隔离集成', () => {
       expect(db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get()).toEqual({ count: 7 })
     }
     expect(db.prepare('SELECT COUNT(*) AS count FROM import_jobs').get()).toEqual({ count: 2 })
+  })
+})
+
+// 漏跳：124；真实原文 Parser 到内部事务，不构造外部 ZIP 或 Mac WorkBuddy 入口。
+describe('共享聊天原文解析到核心来源',()=>{
+  it('card-a/b 原字段逐条进入真实 Item/Job/occurrence/FTS',()=>{
+    const f=sharedCoreItems(sharedCoreFixture())
+    for(const [i,name] of ['a','b'].entries()) {
+      const values=parse(fixture('card-'+name+'.txt'),i===0?3:4).messages
+      const result=ingestSharedCore(f,i,values)
+      expect(result).toMatchObject({status:'success',importedCount:values.length})
+      expect(f.db.prepare('SELECT batch_item_id FROM import_jobs WHERE id=?').get(result.jobId)).toEqual({batch_item_id:f.items[i].id})
+      expect(f.db.prepare('SELECT m.content,s.source_position,s.source_sender_name,s.source_timestamp,s.source_timestamp_source,s.source_conversation_name,s.source_conversation_name_source FROM batch_item_message_sources s JOIN messages m ON m.id=s.message_id WHERE s.batch_item_id=? ORDER BY s.source_position').all(f.items[i].id))
+        .toEqual(values.map(m=>({content:m.content,source_position:m.source_position,source_sender_name:m.sender_name,source_timestamp:new Date(m.timestamp!).toISOString(),source_timestamp_source:'source_native',source_conversation_name:null,source_conversation_name_source:'unknown'})))
+    }
+    for(const table of ['messages','messages_fts','batch_item_message_sources']) expect(sharedCount(f.db,table)).toBe(7)
   })
 })

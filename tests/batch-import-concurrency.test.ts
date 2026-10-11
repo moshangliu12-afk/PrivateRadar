@@ -1,3 +1,4 @@
+import { sharedCoreFixture, sharedCoreItems, ingestSharedCore, sharedRows, sharedCount } from './shared-core-fixture'
 import { DatabaseSync } from 'node:sqlite'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -61,7 +62,7 @@ describe('alpha.15 跨数据库连接执行权', () => {
     expect(count(f.a, 'import_jobs')).toBe(0)
   })
 
-  it('两个连接竞争首次会话，仅一个认领，两项各一个任务', async () => {
+  it.skipIf(process.platform !== 'win32')('两个连接竞争首次会话，仅一个认领，两项各一个任务', async () => {
     const f = fixture()
     await prepare(f, f.first.id, 3)
     await prepare(f, f.second.id, 6)
@@ -82,7 +83,7 @@ describe('alpha.15 跨数据库连接执行权', () => {
     expect(count(f.b, 'messages_fts')).toBe(9)
   })
 
-  it('两个连接竞争同一附件，只有认领者创建任务', async () => {
+  it.skipIf(process.platform !== 'win32')('两个连接竞争同一附件，只有认领者创建任务', async () => {
     const f = fixture()
     await prepare(f, f.first.id, 3)
     const results = await Promise.allSettled([
@@ -151,7 +152,7 @@ describe('alpha.15 跨数据库连接执行权', () => {
     expect(count(f.a, 'import_jobs')).toBe(1)
   })
 
-  it('附件已认领后进程中断，另一连接不能抢占或猜测恢复', async () => {
+  it.skipIf(process.platform !== 'win32')('附件已认领后进程中断，另一连接不能抢占或猜测恢复', async () => {
     const f = fixture()
     await prepare(f, f.first.id, 3)
     await prepare(f, f.second.id, 6)
@@ -165,5 +166,43 @@ describe('alpha.15 跨数据库连接执行权', () => {
     await expect(resumeInterruptedBatchImportSession(f.b, f.databasePath, f.session.id)).rejects.toThrow('需人工处理')
     expect(f.b.prepare('SELECT COUNT(*) AS count FROM import_jobs WHERE batch_item_id = ?').get(f.second.id)).toEqual({ count: 0 })
     expect(f.b.prepare('SELECT completed_at FROM batch_import_sessions WHERE id = ?').get(f.session.id)).toEqual({ completed_at: null })
+  })
+})
+
+describe('共享核心认领与持久执行权',()=>{
+  // 复锁：1、2；旧双附件原生编排保持原测试。
+  it.each([false,true])('两个真实连接竞争 Session/Item，只有赢家创建核心 Job：乙先=%s',乙先=>{
+    const f=sharedCoreItems(sharedCoreFixture()),b=new DatabaseSync(f.path)
+    initializeDatabase(b)
+    try {
+      const owner=乙先?b:f.db,other=乙先?f.db:b
+      expect(claimBatchSessionForFirstExecution(owner,f.session.id)).toBe('claimed')
+      expect(claimBatchSessionForFirstExecution(other,f.session.id)).toBe('already_running')
+      for(const item of f.items) {
+        expect(claimBatchItemForFirstImport(owner,item.id)).toBe('claimed')
+        expect(claimBatchItemForFirstImport(other,item.id)).toBe('already_running')
+        expect(sharedCount(owner,'import_jobs')).toBe(item.ordinal)
+        const result=ingestSharedCore({...f,db:owner},item.ordinal,Array.from({length:3},(_,source_position)=>({content:'并发测试 '+item.id+' '+source_position,sender_name:'甲',source_position})))
+        expect(result).toMatchObject({status:'success',importedCount:3})
+        expect(owner.prepare('SELECT batch_item_id FROM import_jobs WHERE id=?').get(result.jobId)).toEqual({batch_item_id:item.id})
+      }
+      for(const table of ['messages','messages_fts','batch_item_message_sources']) expect(sharedCount(other,table)).toBe(6)
+      expect(sharedCount(other,'import_jobs')).toBe(2)
+      expect(other.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+    } finally { b.close() }
+  })
+  // 复锁：5；漏跳：135 的含糊认领持久性。
+  it('持久 claim 后关闭 owner，重开连接不能抢占，未开始项没有 Job',()=>{
+    const f=sharedCoreItems(sharedCoreFixture())
+    expect(claimBatchSessionForFirstExecution(f.db,f.session.id)).toBe('claimed')
+    expect(claimBatchItemForFirstImport(f.db,f.items[0].id)).toBe('claimed')
+    f.db.close()
+    const b=new DatabaseSync(f.path);initializeDatabase(b)
+    try {
+      expect(claimBatchSessionForFirstExecution(b,f.session.id)).toBe('already_running')
+      expect(claimBatchItemForFirstImport(b,f.items[0].id)).toBe('already_running')
+      expect(sharedCount(b,'import_jobs')).toBe(0)
+      expect(b.prepare('SELECT status,completed_at FROM batch_import_sessions WHERE id=?').get(f.session.id)).toEqual({status:'in_progress',completed_at:null})
+    } finally { b.close() }
   })
 })

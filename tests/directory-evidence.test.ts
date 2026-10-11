@@ -1,3 +1,8 @@
+import { sharedJsonFixture, createSharedJsonItem, saveSharedJsonRaw, sharedJsonItem, sharedEvidenceBytes } from './shared-json-evidence-fixture'
+import { sharedRows, sharedCount, sharedCoreState, sharedCoreFixture, sharedCoreItems, ingestSharedCore } from './shared-core-fixture'
+import { configureMacEvidenceRoot, saveMacJsonRaw, saveMacJsonSnapshot, verifyMacJsonEvidence } from '../src/main/batch-import/mac-json-evidence'
+import { createManualJsonSnapshot } from '../src/main/import/manual-json-contract'
+import { ingestWorkBuddyMessages } from '../src/main/integrations/workbuddy/ingest'
 import { DatabaseSync } from 'node:sqlite'
 import { createHash } from 'node:crypto'
 import { existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs'
@@ -455,4 +460,82 @@ describe('目录证据：隔离固定磁盘上的持久快照', () => {
     await expect(save(f)).rejects.toThrow('模拟登记失败')
     notReady(f)
   }, 30000)
+})
+
+describe('共享受控文件发布故障边界',()=>{
+  function setup() {const f=sharedJsonFixture();configureMacEvidenceRoot(f.directory);const item=createSharedJsonItem(f);return {...f,item,target:join(f.directory,'evidence',item.id)}}
+  // 漏跳：5、79、109；在 Windows 也直接运行现有受控发布单元，不启用外部目录入口。
+  it('真实临时文件写入故障清理自己文件，后续正常保存可用',async()=>{
+    const f=setup(),open=fs.open
+    vi.spyOn(fs,'open').mockImplementation(async(...args:Parameters<typeof fs.open>)=>{
+      const handle=await open(...args)
+      if(String(args[0]).includes('.mac-json-')&&String(args[0]).endsWith('.tmp')) vi.spyOn(handle,'writeFile').mockRejectedValueOnce(new Error('受控写入故障'))
+      return handle
+    })
+    await expect(saveMacJsonRaw(f.db,f.path,f.item.id,Buffer.from('[]'))).rejects.toThrow('受控写入故障')
+    expect(sharedJsonItem(f,f.item.id).evidence_relative_path).toBeNull();expect(readdirSync(f.target)).toEqual([])
+    expect(sharedCount(f.db,'import_jobs')).toBe(0)
+    vi.restoreAllMocks()
+    await saveMacJsonRaw(f.db,f.path,f.item.id,Buffer.from('[]'));await saveMacJsonSnapshot(f.db,f.path,f.item.id,createManualJsonSnapshot(Buffer.from('[]')))
+    expect((await verifyMacJsonEvidence(f.db,f.path,f.item.id)).status).toBe('available')
+  })
+  // 漏跳：80；修改本次实际临时字节，保留生产读回校验。
+  it('临时文件字节不同阻止发布且清理本次 temporary',async()=>{
+    const f=setup(),open=fs.open
+    vi.spyOn(fs,'open').mockImplementation(async(...args:Parameters<typeof fs.open>)=>{
+      const handle=await open(...args)
+      if(String(args[0]).includes('.mac-json-')&&String(args[0]).endsWith('.tmp')) {
+        const write=handle.writeFile.bind(handle)
+        vi.spyOn(handle,'writeFile').mockImplementation(async()=>{await write(Buffer.from('错误临时字节'))})
+      }
+      return handle
+    })
+    await expect(saveMacJsonRaw(f.db,f.path,f.item.id,Buffer.from('[]'))).rejects.toThrow()
+    expect(sharedJsonItem(f,f.item.id).evidence_relative_path).toBeNull();expect(readdirSync(f.target)).toEqual([])
+    expect(sharedCount(f.db,'import_jobs')).toBe(0)
+  })
+  // 漏跳：81、109；Mac 原子机制是 link，原 Windows rename 全部保留。
+  it('真实 link 发布故障不登记，也不遗留本次临时文件',async()=>{
+    const f=setup();vi.spyOn(fs,'link').mockRejectedValueOnce(new Error('受控发布故障'))
+    await expect(saveMacJsonRaw(f.db,f.path,f.item.id,Buffer.from('[]'))).rejects.toThrow('受控发布故障')
+    expect(sharedJsonItem(f,f.item.id).evidence_relative_path).toBeNull();expect(readdirSync(f.target)).toEqual([])
+    expect(sharedCount(f.db,'import_jobs')).toBe(0)
+  })
+  // 漏跳：93、110；真正发布后由 SQLite trigger 拒绝登记。
+  it('发布成功而登记 UPDATE 失败，撤销自己的 published 文件和临时文件',async()=>{
+    const f=setup(),link=vi.spyOn(fs,'link')
+    f.db.exec("CREATE TRIGGER reject_shared_raw BEFORE UPDATE OF evidence_relative_path ON batch_import_items WHEN new.evidence_relative_path IS NOT NULL BEGIN SELECT RAISE(ABORT,'登记故障'); END")
+    await expect(saveMacJsonRaw(f.db,f.path,f.item.id,Buffer.from('[]'))).rejects.toThrow('登记故障')
+    expect(link).toHaveBeenCalledTimes(1);expect(readdirSync(f.target)).toEqual([])
+    expect(sharedJsonItem(f,f.item.id).evidence_relative_path).toBeNull();expect(sharedJsonItem(f,f.item.id).evidence_status).not.toBe('available')
+    expect(sharedCount(f.db,'import_jobs')).toBe(0)
+  })
+  // 漏跳：92、136；受控 Raw 失效后不能再发布 snapshot，无新消息/Job/来源。
+  it('Raw 篡改阻止真实 snapshot 发布，已有核心基线不变',async()=>{
+    const f=setup(),bytes=Buffer.from('[{"content":"未知群名原文"}]')
+    expect(ingestWorkBuddyMessages(f.db,{messages:[{content:'先前已有的真实核心原文'}]}).status).toBe('success')
+    await saveMacJsonRaw(f.db,f.path,f.item.id,bytes)
+    writeFileSync(join(f.target,'original.zip'),'隔离篡改')
+    const before=sharedCoreState(f.db),bad=readFileSync(join(f.target,'original.zip'))
+    await expect(saveMacJsonSnapshot(f.db,f.path,f.item.id,createManualJsonSnapshot(bytes))).rejects.toThrow()
+    expect(existsSync(join(f.target,'messages.json'))).toBe(false)
+    expect(sharedCoreState(f.db)).toEqual(before);expect(readFileSync(join(f.target,'original.zip'))).toEqual(bad)
+    for(const table of ['import_jobs','messages','messages_fts']) expect(sharedCount(f.db,table)).toBe(1)
+    expect(sharedCount(f.db,'batch_item_message_sources')).toBe(0)
+  })
+})
+
+// 漏跳：89、90；只运行原 snapshot 输入的内部核心，不从证据 TXT 重解析，也不补群名。
+describe('共享原解析记录的核心重放与弱来源身份',()=>{
+  it('原空格、换行、sender/time/位置保全，同 Item duplicate-only，跨 Item 独立 canonical',()=>{
+    const f=sharedCoreItems(sharedCoreFixture()),values=input().messages
+    const a=ingestSharedCore(f,0,values),first=sharedRows(f.db,'messages'),fts=sharedRows(f.db,'messages_fts_data'),sources=sharedRows(f.db,'batch_item_message_sources')
+    expect(a).toMatchObject({status:'success',importedCount:1,duplicateCount:0})
+    expect(ingestSharedCore(f,0,values)).toMatchObject({status:'success',importedCount:0,duplicateCount:1})
+    expect(sharedRows(f.db,'messages')).toEqual(first);expect(sharedRows(f.db,'messages_fts_data')).toEqual(fts);expect(sharedRows(f.db,'batch_item_message_sources')).toEqual(sources)
+    expect(ingestSharedCore(f,1,values)).toMatchObject({status:'success',importedCount:1,duplicateCount:0})
+    for(const item of f.items) expect(f.db.prepare('SELECT m.content,s.source_sender_name,s.source_timestamp,s.source_timestamp_source,s.source_position,s.source_conversation_name,s.source_conversation_name_source FROM batch_item_message_sources s JOIN messages m ON m.id=s.message_id WHERE s.batch_item_id=?').get(item.id))
+      .toEqual({content:values[0].content!.trim(),source_sender_name:values[0].sender_name,source_timestamp:new Date(values[0].timestamp!).toISOString(),source_timestamp_source:'source_native',source_position:0,source_conversation_name:null,source_conversation_name_source:'unknown'})
+    for(const table of ['messages','messages_fts','batch_item_message_sources']) expect(sharedCount(f.db,table)).toBe(2)
+  })
 })

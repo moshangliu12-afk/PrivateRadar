@@ -1,3 +1,6 @@
+import { sharedCoreFixture, sharedCoreItems, ingestSharedCore, sharedRows, sharedCount, sharedCoreState, drainSharedDerived } from './shared-core-fixture'
+import { schedulePendingCommitmentExtractorRuns } from '../src/main/commitment/recovery'
+import { schedulePendingKeywordRadarRuns } from '../src/main/keyword-radar/recovery'
 import { createHash } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
@@ -302,4 +305,75 @@ describe('单卡派生处理的事务及历史边界', () => {
       expect(f.db.prepare(`SELECT DISTINCT batch_item_id FROM ${table}`).all()).toEqual([{ batch_item_id: itemId }])
     expect(existsSync(join(f.data, 'evidence', old.jobId))).toBe(false)
   }, 120000)
+})
+
+describe('共享四锁定原文的真实核心与派生边界',()=>{
+  function shared(total=1) {
+    const f=sharedCoreItems(sharedCoreFixture(),total)
+    addKeywordTerm(f.db,createKeywordGroup(f.db,'隔离来源关键词').id,'处理')
+    const inputs=Array.from({length:total},(_,i)=>gateWorkBuddyBatchCurrentInput([{file:'当前附件'+i+'.zip',extracted_dir_path:join(f.directory,String(i)),message_count:4,
+      first_sender:'·隔离发送人'+i,first_message_at:'2026年10月7日 22:30',transcript:原文.map(body=>'·隔离发送人'+i+'\n2026年10月7日 22:30\n'+body).join('\n\n')+'\n'}]).logical_attachments[0].messages)
+    return {...f,inputs}
+  }
+  function schedule(f:ReturnType<typeof shared>) {const ids=f.items.map(i=>i.id);schedulePendingCommitmentExtractorRuns(f.db,ids);schedulePendingKeywordRadarRuns(f.db,ids)}
+  // 漏跳：139、140、141；复锁37的额外四原文和每 Item 关联目标。
+  it.each([1,2])('%s 个真实核心 Item 分别冻结原四位置，生成两 Candidate/两 KeywordHit',async total=>{
+    const f=shared(total),results=f.inputs.map((messages,i)=>ingestSharedCore(f,i,messages))
+    expect(sharedCount(f.db,'commitment_candidates')).toBe(0)
+    for(const [i,item] of f.items.entries()) {
+      expect(runs.getCommitmentExtractorRun(f.db,item.id,matcher.COMMITMENT_RULE_VERSION)).toMatchObject({core_import_job_id:results[i].jobId,source_positions_snapshot_json:'[0,1,2,3]',status:'pending',attempt_count:0})
+      expect(f.db.prepare('SELECT source_position,source_conversation_name,source_conversation_name_source FROM batch_item_message_sources WHERE batch_item_id=? ORDER BY source_position').all(item.id))
+        .toEqual([0,1,2,3].map(source_position=>({source_position,source_conversation_name:null,source_conversation_name_source:'unknown'})))
+    }
+    const before=sharedCoreState(f.db);schedule(f);await drainSharedDerived()
+    expect(sharedCoreState(f.db)).toEqual(before)
+    for(const item of f.items) {
+      expect(f.db.prepare('SELECT source_position,status,rule_id FROM commitment_candidates WHERE batch_item_id=? ORDER BY source_position').all(item.id)).toEqual([
+        {source_position:0,status:'pending',rule_id:'self_will_action'},{source_position:1,status:'pending',rule_id:'self_take_action'}])
+      expect(f.db.prepare('SELECT source_position FROM keyword_hits WHERE batch_item_id=? ORDER BY source_position').all(item.id)).toEqual([{source_position:1},{source_position:3}])
+    }
+    expect(sharedCount(f.db,'commitment_candidates')).toBe(total*2);expect(sharedCount(f.db,'keyword_hits')).toBe(total*2)
+    expect(sharedCount(f.db,'batch_item_message_sources')).toBe(total*4)
+  })
+  // 漏跳：143。观察真实 register/processor，不能 mock 整个导入链。
+  it('source 已在核心事务内绑定时冻结 Run，提交返回后才独立处理',async()=>{
+    const f=shared(),registered:boolean[]=[],processed:boolean[]=[],register=runs.registerCommitmentExtractorRun,processRun=processor.processCommitmentExtractorRun
+    vi.spyOn(runs,'registerCommitmentExtractorRun').mockImplementation((db,itemId,jobId,version,positions,createdAt)=>{
+      registered.push(db.isTransaction);expect(positions).toEqual([0,1,2,3])
+      expect(db.prepare('SELECT source_position FROM batch_item_message_sources WHERE batch_item_id=? ORDER BY source_position').all(itemId)).toEqual(positions.map(source_position=>({source_position})))
+      expect(sharedCount(db,'commitment_candidates')).toBe(0)
+      return register(db,itemId,jobId,version,positions,createdAt)
+    })
+    vi.spyOn(processor,'processCommitmentExtractorRun').mockImplementation((db,itemId,version)=>{processed.push(db.isTransaction);return processRun(db,itemId,version)})
+    expect(ingestSharedCore(f,0,f.inputs[0]).status).toBe('success')
+    expect(registered).toEqual([true]);expect(processed).toEqual([]);expect(sharedCount(f.db,'commitment_candidates')).toBe(0)
+    schedule(f);await drainSharedDerived()
+    expect(processed).toEqual([false]);expect(sharedCount(f.db,'commitment_candidates')).toBe(2)
+  })
+  // 漏跳：144 的四原文派生失败与关键词独立；真实 Raw 保全复用 JSON post-import 单位。
+  it('四原文 matcher 失败只标记派生失败，核心 Job 成功且 Keyword 两 Hit 完成',async()=>{
+    const f=shared();vi.spyOn(matcher,'matchCommitmentBody').mockImplementation(()=>{throw new Error('秘密原文、证据路径和堆栈')})
+    const result=ingestSharedCore(f,0,f.inputs[0]),before=sharedCoreState(f.db)
+    schedule(f);await drainSharedDerived()
+    const run=runs.getCommitmentExtractorRun(f.db,f.items[0].id,matcher.COMMITMENT_RULE_VERSION)!
+    expect(run).toMatchObject({status:'failed',attempt_count:1});expect(run.error_summary).not.toMatch(/秘密|证据路径|堆栈/)
+    expect(sharedCount(f.db,'commitment_candidates')).toBe(0);expect(sharedCount(f.db,'keyword_hits')).toBe(2)
+    expect(f.db.prepare('SELECT status FROM keyword_radar_runs WHERE batch_item_id=?').get(f.items[0].id)).toEqual({status:'complete'})
+    expect(f.db.prepare('SELECT status,batch_item_id FROM import_jobs WHERE id=?').get(result.jobId)).toEqual({status:'success',batch_item_id:f.items[0].id})
+    expect(sharedCoreState(f.db)).toEqual(before)
+  })
+  // 漏跳：145；原旧四正文无任何来源或派生，保留所有 unknown。
+  it('旧无证据四消息不补来源/任务，只处理本次 Item 的原四 occurrence',async()=>{
+    const f=shared(),old=ingestWorkBuddyMessages(f.db,{source_batch_id:'旧无证据历史',messages:原文.map((content,source_position)=>({content,source_position}))})
+    const oldRows=f.db.prepare('SELECT * FROM messages WHERE import_job_id=? ORDER BY id').all(old.jobId)
+    expect(oldRows).toHaveLength(4)
+    expect(f.db.prepare('SELECT batch_item_id FROM import_jobs WHERE id=?').get(old.jobId)).toEqual({batch_item_id:null})
+    for(const table of ['batch_item_message_sources','commitment_extractor_runs','commitment_candidates','keyword_hits']) expect(sharedCount(f.db,table)).toBe(0)
+    expect(oldRows.every(m=>m.timestamp===null&&m.timestamp_source==='unknown'&&m.sender_name===null&&m.conversation_name===null)).toBe(true)
+    expect(ingestSharedCore(f,0,f.inputs[0]).status).toBe('success');schedule(f);await drainSharedDerived()
+    expect(f.db.prepare('SELECT * FROM messages WHERE import_job_id=? ORDER BY id').all(old.jobId)).toEqual(oldRows)
+    for(const table of ['batch_item_message_sources','commitment_extractor_runs','commitment_candidates','keyword_hits'])
+      expect(f.db.prepare('SELECT DISTINCT batch_item_id FROM '+table).all()).toEqual([{batch_item_id:f.items[0].id}])
+    expect(sharedCount(f.db,'batch_item_message_sources')).toBe(4);expect(sharedCount(f.db,'commitment_candidates')).toBe(2);expect(sharedCount(f.db,'keyword_hits')).toBe(2)
+  })
 })

@@ -1,3 +1,7 @@
+import { sharedJsonFixture, createSharedJsonItem, saveSharedJsonRaw, sharedJsonItem, sharedEvidenceBytes } from './shared-json-evidence-fixture'
+import { sharedRows, sharedCount, sharedCoreState } from './shared-core-fixture'
+import * as sharedEvidence from '../src/main/batch-import/evidence'
+import { createManualJsonSnapshot, createManualJsonZip } from '../src/main/import/manual-json-contract'
 import { createHash } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
@@ -249,5 +253,112 @@ describe('alpha.15 原始证据与结构化快照', () => {
     await saveOriginalZip(db, databasePath, itemId, zipPath)
     db.prepare("UPDATE batch_import_items SET evidence_relative_path = '../escape' WHERE id = ?").run(itemId)
     expect((await verifyBatchEvidence(db, databasePath, itemId)).zip.status).toBe('corrupt')
+  })
+})
+
+describe('共享受控 JSON Raw 与原记录保全',()=>{
+  // 漏跳：1、4。不补原记录缺失的群名，valid=false 也必须保存原文。
+  it('Raw 固定 ZIP 保存捕获字节、相对路径和哈希，snapshot 原记录逐字段不变',async()=>{
+    const f=sharedJsonFixture(),input=messages().messages,entry=await saveSharedJsonRaw(f,input)
+    const zip=readFileSync(join(f.directory,entry.item.evidence_relative_path!))
+    expect(zip).toEqual(createManualJsonZip(entry.bytes));expect(hash(zip)).toBe(entry.item.attachment_identity)
+    expect(zip.subarray(41,41+entry.bytes.length)).toEqual(entry.bytes)
+    expect(entry.item.evidence_relative_path).toBe('evidence/'+entry.item.id+'/original.zip')
+    const restored=await sharedEvidence.loadManualJsonSnapshot(f.db,f.path,entry.item.id)
+    expect(restored.messages.map(m=>m.value)).toEqual(input)
+    expect(restored.messages.map(m=>m.source_position)).toEqual([0,1,2])
+    expect(restored.messages.every(m=>m.valid===false)).toBe(true)
+    expect((await verifyBatchEvidence(f.db,f.path,entry.item.id)).status).toBe('available')
+    expect(sharedCount(f.db,'import_jobs')).toBe(0)
+  })
+  // 漏跳：2、50、98、99、134 的来源删除后持久读取目标。
+  it('原 JSON 删除且 SQLite 关闭重开后，只读恢复持久 Raw 和原 snapshot',async()=>{
+    const f=sharedJsonFixture(),input=messages().messages,source=join(f.directory,'可删除原始.json')
+    const bytes=Buffer.from(JSON.stringify(input));writeFileSync(source,bytes)
+    const entry=await saveSharedJsonRaw(f,JSON.parse(readFileSync(source,'utf8'))),raw=sharedEvidenceBytes(f,entry.item.id)
+    rmSync(source);f.db.close()
+    const db=new DatabaseSync(f.path,{readOnly:true})
+    try {
+      expect(existsSync(source)).toBe(false)
+      expect((await verifyBatchEvidence(db,f.path,entry.item.id)).status).toBe('available')
+      expect((await sharedEvidence.loadManualJsonSnapshot(db,f.path,entry.item.id)).messages.map(m=>m.value)).toEqual(input)
+      expect(raw.map(([p])=>readFileSync(join(f.directory,p)))).toEqual(raw.map(([,bytes])=>bytes))
+      expect(db.prepare('PRAGMA user_version').get()!.user_version).toBe(8)
+    } finally { db.close() }
+  })
+  // 漏跳：3、44、123、130 的相同内容身份也保留独立 Raw 实例。
+  it('相同捕获字节的两个真实 file Item 不合并 Evidence 实例',async()=>{
+    const f=sharedJsonFixture(),a=await saveSharedJsonRaw(f,messages().messages),b=await saveSharedJsonRaw(f,messages().messages)
+    expect(a.item.id).not.toBe(b.item.id);expect(a.item.evidence_relative_path).not.toBe(b.item.evidence_relative_path)
+    expect(a.item.attachment_identity).toBe(b.item.attachment_identity)
+    expect(readFileSync(join(f.directory,a.item.evidence_relative_path!))).toEqual(readFileSync(join(f.directory,b.item.evidence_relative_path!)))
+    for(const entry of [a,b]) expect((await verifyBatchEvidence(f.db,f.path,entry.item.id)).status).toBe('available')
+  })
+  // 漏跳：6、51；不是只比较长度，服务层不修复被改写的文件。
+  it('相同长度 Raw 字节篡改后 fail closed，DB 和坏文件保持不变',async()=>{
+    const f=sharedJsonFixture(),entry=await saveSharedJsonRaw(f,messages().messages),p=join(f.directory,entry.item.evidence_relative_path!)
+    const changed=readFileSync(p);changed[41]^=1;writeFileSync(p,changed)
+    const before=sharedRows(f.db,'batch_import_items'),changes=f.db.prepare('SELECT total_changes() AS n').get()!.n
+    expect((await verifyBatchEvidence(f.db,f.path,entry.item.id)).status).not.toBe('available')
+    expect(readFileSync(p)).toEqual(changed);expect(sharedRows(f.db,'batch_import_items')).toEqual(before)
+    expect(f.db.prepare('SELECT total_changes() AS n').get()!.n).toBe(changes)
+  })
+  // 漏跳：7。Windows 的精确 corrupt/missing 标签仍在原测试验证。
+  it.each(['损坏','缺失'])('snapshot %s 不可用且不借别的来源补写',async kind=>{
+    const f=sharedJsonFixture(),entry=await saveSharedJsonRaw(f,messages().messages),p=join(f.directory,entry.item.snapshot_relative_path!)
+    if(kind==='缺失') rmSync(p);else writeFileSync(p,'隔离损坏')
+    const before=sharedRows(f.db,'batch_import_items')
+    expect((await verifyBatchEvidence(f.db,f.path,entry.item.id)).status).not.toBe('available')
+    expect(sharedRows(f.db,'batch_import_items')).toEqual(before)
+    if(kind==='缺失') expect(existsSync(p)).toBe(false);else expect(readFileSync(p,'utf8')).toBe('隔离损坏')
+  })
+  // 漏跳：8、48。
+  it('同 Item 同字节重复保存幂等，不更换身份或增加文件',async()=>{
+    const f=sharedJsonFixture(),entry=await saveSharedJsonRaw(f,messages().messages),raw=sharedEvidenceBytes(f,entry.item.id),before=sharedRows(f.db,'batch_import_items')
+    await sharedEvidence.saveCapturedJsonEvidence(f.db,f.path,entry.item.id,entry.bytes)
+    await saveStructuredSnapshot(f.db,f.path,entry.item.id,entry.input)
+    expect(sharedEvidenceBytes(f,entry.item.id)).toEqual(raw);expect(sharedRows(f.db,'batch_import_items')).toEqual(before)
+    expect(readdirSync(join(f.directory,'evidence',entry.item.id)).sort()).toEqual(['messages.json','original.zip'])
+  })
+  // 漏跳：9、49。
+  it('不同内容不能替换同 Item，旧 Raw 身份及可用性保留',async()=>{
+    const f=sharedJsonFixture(),entry=await saveSharedJsonRaw(f,messages().messages),before=sharedRows(f.db,'batch_import_items'),raw=sharedEvidenceBytes(f,entry.item.id)
+    await expect(sharedEvidence.saveCapturedJsonEvidence(f.db,f.path,entry.item.id,Buffer.from('[{"content":"不同内容"}]'))).rejects.toThrow()
+    expect(sharedRows(f.db,'batch_import_items')).toEqual(before);expect(sharedEvidenceBytes(f,entry.item.id)).toEqual(raw)
+    expect((await verifyBatchEvidence(f.db,f.path,entry.item.id)).status).toBe('available')
+  })
+  // 漏跳：11、82。
+  it('未登记孤立 original.zip 不接管、不覆盖，也不创建 Job',async()=>{
+    const f=sharedJsonFixture(),item=createSharedJsonItem(f),dir=join(f.directory,'evidence',item.id),p=join(dir,'original.zip')
+    mkdirSync(dir,{recursive:true});writeFileSync(p,'已有未登记原件')
+    await expect(sharedEvidence.saveCapturedJsonEvidence(f.db,f.path,item.id,Buffer.from('[]'))).rejects.toThrow()
+    expect(readFileSync(p,'utf8')).toBe('已有未登记原件');expect(sharedJsonItem(f,item.id).evidence_relative_path).toBeNull()
+    expect(sharedCount(f.db,'import_jobs')).toBe(0)
+  })
+  // 漏跳：12、122、42；真实 Raw 保存后，snapshot 错误不能充当消息事实。
+  it('snapshot 校验故障保留 Raw，尚无可导入证据、Job 或 occurrence',async()=>{
+    const f=sharedJsonFixture(),entry=await saveSharedJsonRaw(f,messages().messages,false),raw=sharedEvidenceBytes(f,entry.item.id)
+    f.db.exec("CREATE TRIGGER reject_shared_snapshot BEFORE UPDATE OF snapshot_relative_path ON batch_import_items WHEN new.snapshot_relative_path IS NOT NULL BEGIN SELECT RAISE(ABORT,'快照登记故障'); END")
+    await expect(saveStructuredSnapshot(f.db,f.path,entry.item.id,entry.input)).rejects.toThrow('快照登记故障')
+    expect(sharedEvidenceBytes(f,entry.item.id)).toEqual(raw);expect(sharedJsonItem(f,entry.item.id).snapshot_relative_path).toBeNull()
+    expect((await verifyBatchEvidence(f.db,f.path,entry.item.id)).status).not.toBe('available')
+    expect(sharedCount(f.db,'import_jobs')).toBe(0);expect(sharedCount(f.db,'batch_item_message_sources')).toBe(0)
+  })
+  // 漏跳：13。
+  it('非法 Item 编号和登记路径逃逸均拒绝，根外文件不被访问或修改',async()=>{
+    const f=sharedJsonFixture(),entry=await saveSharedJsonRaw(f,messages().messages),outside=join(f.directory,'其他来源.zip')
+    writeFileSync(outside,'根外原件')
+    await expect(sharedEvidence.saveCapturedJsonEvidence(f.db,f.path,'../其他来源',Buffer.from('[]'))).rejects.toThrow()
+    f.db.prepare("UPDATE batch_import_items SET evidence_relative_path='../其他来源.zip' WHERE id=?").run(entry.item.id)
+    const before=sharedRows(f.db,'batch_import_items')
+    expect((await verifyBatchEvidence(f.db,f.path,entry.item.id)).status).not.toBe('available')
+    expect(sharedRows(f.db,'batch_import_items')).toEqual(before);expect(readFileSync(outside,'utf8')).toBe('根外原件')
+  })
+  // 漏跳：52、62、63。
+  it('实际 Raw 删除后不可用，不制造替代原件',async()=>{
+    const f=sharedJsonFixture(),entry=await saveSharedJsonRaw(f,messages().messages),p=join(f.directory,entry.item.evidence_relative_path!)
+    rmSync(p);const before=sharedRows(f.db,'batch_import_items')
+    expect((await verifyBatchEvidence(f.db,f.path,entry.item.id)).status).not.toBe('available')
+    expect(existsSync(p)).toBe(false);expect(sharedRows(f.db,'batch_import_items')).toEqual(before)
   })
 })

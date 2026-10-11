@@ -1,3 +1,4 @@
+import { sharedCoreFixture, sharedCoreItems, ingestSharedCore, sharedRows, sharedCount } from './shared-core-fixture'
 import { createHash } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
@@ -285,5 +286,38 @@ describe('alpha.15 WorkBuddy 双附件批量 Tool', () => {
       attachment(f.firstZip, '甲', 1), attachment(join(link, 'outside.zip'), '乙', 1)
     ] })).rejects.toThrow('不在允许的')
     expect(count(f.db, 'batch_import_sessions')).toBe(0)
+  })
+})
+
+describe('共享批量核心原数组与 unknown 元数据',()=>{
+  // 漏跳：118、123 的核心部分；Raw 实例复用受控证据单位。
+  it('原 3+6 输入形成两个真实 Job 和独立来源，不补原群名',()=>{
+    const f=sharedCoreItems(sharedCoreFixture()),input=[attachment(f.directory,'甲',3).messages,attachment(f.directory,'乙',6).messages]
+    const result=input.map((messages,i)=>ingestSharedCore(f,i,messages))
+    expect(result.map(r=>r.importedCount)).toEqual([3,6]);expect(new Set(result.map(r=>r.jobId)).size).toBe(2)
+    for(const [i,item] of f.items.entries()) {
+      expect(f.db.prepare('SELECT batch_item_id FROM import_jobs WHERE id=?').get(result[i].jobId)).toEqual({batch_item_id:item.id})
+      expect(f.db.prepare('SELECT content,source_position FROM messages WHERE source_batch_id=? ORDER BY source_position').all(item.source_batch_id))
+        .toEqual(input[i].map(m=>({content:m.content,source_position:m.source_position})))
+    }
+    for(const table of ['messages','messages_fts','batch_item_message_sources']) expect(sharedCount(f.db,table)).toBe(9)
+  })
+  // 漏跳：119；按原四个交错时间和原顺序，不按时间重排。
+  it('时间交错仍保留原数组位置与 unknown 群名',()=>{
+    const f=sharedCoreItems(sharedCoreFixture()),a=attachment(f.directory,'甲',2),b=attachment(f.directory,'乙',2)
+    a.messages[0].timestamp='2026-09-26T12:00:00+08:00';a.messages[1].timestamp='2026-09-26T09:00:00+08:00'
+    b.messages[0].timestamp='2026-09-26T11:00:00+08:00';b.messages[1].timestamp='2026-09-26T08:00:00+08:00'
+    for(const [i,values] of [a.messages,b.messages].entries()) {
+      ingestSharedCore(f,i,values)
+      const rows=f.db.prepare('SELECT m.content,s.source_position,s.source_timestamp,s.source_sender_name,s.source_conversation_name,s.source_conversation_name_source FROM batch_item_message_sources s JOIN messages m ON m.id=s.message_id WHERE s.batch_item_id=? ORDER BY s.source_position').all(f.items[i].id)
+      expect(rows).toEqual(values.map(m=>({content:m.content,source_position:m.source_position,source_timestamp:new Date(m.timestamp).toISOString(),source_sender_name:'甲',source_conversation_name:null,source_conversation_name_source:'unknown'})))
+    }
+  })
+  // 漏跳：121、137 的原仅正文输入，原未知时间弱身份三条另见 provenance。
+  it('原缺时间、sender、群名的两条正文仍为 NULL/unknown',()=>{
+    const f=sharedCoreItems(sharedCoreFixture())
+    for(const [i,content] of ['甲无时间','乙无时间'].entries()) expect(ingestSharedCore(f,i,[{content}])).toMatchObject({status:'success',importedCount:1})
+    expect(f.db.prepare('SELECT content,timestamp,timestamp_source,sender_name,sender_name_source,conversation_name,conversation_name_source FROM messages ORDER BY rowid').all())
+      .toEqual(['甲无时间','乙无时间'].map(content=>({content,timestamp:null,timestamp_source:'unknown',sender_name:null,sender_name_source:'unknown',conversation_name:null,conversation_name_source:'unknown'})))
   })
 })

@@ -1,4 +1,6 @@
 // 密钥字面量为人工虚构哨兵，仅验证敏感字段不会泄漏。
+import { sharedCoreItems, ingestSharedCore, sharedRows, drainSharedDerived } from './shared-core-fixture'
+import { sharedJsonFixture, importSharedJson, sharedEvidenceBytes } from './shared-json-evidence-fixture'
 import { randomUUID } from 'node:crypto'
 import { readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -241,7 +243,7 @@ describe('候选项上下文和历史只读边界', () => {
 })
 
 describe('候选项证据仅定位当前附件', () => {
-  it('共享规范消息时只打开当前附件目录，证据字节及全部业务记录保持不变', async () => {
+  it.skipIf(process.platform !== 'win32')('共享规范消息时只打开当前附件目录，证据字节及全部业务记录保持不变', async () => {
     const f = reviewFixture(), candidate = secondItem(f)
     const firstDirectory = await saveReviewEvidence(f, 0), secondDirectory = await saveReviewEvidence(f, 1)
     const paths = [join(firstDirectory, 'original.zip'), join(firstDirectory, 'messages.json'), join(secondDirectory, 'original.zip'), join(secondDirectory, 'messages.json')]
@@ -256,7 +258,7 @@ describe('候选项证据仅定位当前附件', () => {
     expect(paths.map(path => readFileSync(path))).toEqual(bytes)
   }, 30000)
 
-  it('当前附件未登记证据时保留候选项，不回退到另一个完整来源', async () => {
+  it.skipIf(process.platform !== 'win32')('当前附件未登记证据时保留候选项，不回退到另一个完整来源', async () => {
     const f = reviewFixture(), candidate = secondItem(f), open = vi.fn(async () => '')
     await saveReviewEvidence(f, 0)
     const before = reviewDatabaseFingerprint(f)
@@ -268,7 +270,7 @@ describe('候选项证据仅定位当前附件', () => {
     expect(reviewDatabaseFingerprint(f)).toBe(before)
   }, 30000)
 
-  it.each(['缺失原始文件', '损坏原始文件', '损坏消息快照'] as const)('%s 时不改候选项、不改变核心状态、不打开其他附件', async condition => {
+  it.skipIf(process.platform !== 'win32').each(['缺失原始文件', '损坏原始文件', '损坏消息快照'] as const)('%s 时不改候选项、不改变核心状态、不打开其他附件', async condition => {
     const f = reviewFixture(), candidate = secondItem(f), open = vi.fn(async () => '')
     await saveReviewEvidence(f, 0); const directory = await saveReviewEvidence(f, 1)
     if (condition === '缺失原始文件') unlinkSync(join(directory, 'original.zip'))
@@ -281,7 +283,7 @@ describe('候选项证据仅定位当前附件', () => {
     expect(reviewDatabaseFingerprint(f)).toBe(before)
   }, 30000)
 
-  it('证据路径逃逸直接失败，不信任数据库中的任意路径', async () => {
+  it.skipIf(process.platform !== 'win32')('证据路径逃逸直接失败，不信任数据库中的任意路径', async () => {
     const f = reviewFixture(), open = vi.fn(async () => '')
     await saveReviewEvidence(f)
     f.db.prepare("UPDATE batch_import_items SET evidence_relative_path='../其他来源.zip' WHERE id=?").run(f.items[0].id)
@@ -291,7 +293,7 @@ describe('候选项证据仅定位当前附件', () => {
     expect(open).not.toHaveBeenCalled(); expect(reviewDatabaseFingerprint(f)).toBe(before)
   }, 30000)
 
-  it('系统打开失败返回受控错误，不把系统路径写入或返回', async () => {
+  it.skipIf(process.platform !== 'win32')('系统打开失败返回受控错误，不把系统路径写入或返回', async () => {
     const f = reviewFixture(); await saveReviewEvidence(f)
     const before = reviewDatabaseFingerprint(f), open = vi.fn(async () => 'C:\\秘密路径 系统错误')
     const result = await safeCommitmentAction(() => openCommitmentCandidateEvidence(f.db, f.path, candidateAt(f).id, open))
@@ -299,4 +301,65 @@ describe('候选项证据仅定位当前附件', () => {
     expect(JSON.stringify(result)).not.toContain('秘密路径')
     expect(reviewDatabaseFingerprint(f)).toBe(before)
   }, 30000)
+})
+
+describe('共享候选审核与真实受控 JSON 回源',()=>{
+  async function pair() {
+    const f=sharedJsonFixture(),input=commitmentMessages(['我会处理这个问题'])
+    const a=await importSharedJson(f,input,'甲.json')
+    const b=await importSharedJson(f,input.map(m=>({...m,sender_name:'来源乙',conversation_name:'乙群',timestamp:'2026-10-06T02:20:00.000Z',timestamp_source:'user_supplied' as const})),'乙.json')
+    await drainSharedDerived()
+    const candidate=listCommitmentCandidates(f.db).find(c=>c.batchItemId===b.item.id)!
+    return {f,a,b,candidate}
+  }
+  // 复锁：43。
+  it('B occurrence 的事实、Context 和导航只指向 B，审核仅改当前 review 字段',async()=>{
+    const {f,a,b,candidate}=await pair(),before=reviewDatabaseFingerprint(f),open=vi.fn(async()=>''),raw=[sharedEvidenceBytes(f,a.item.id),sharedEvidenceBytes(f,b.item.id)]
+    expect(candidate).toMatchObject({senderName:'来源乙',conversationName:'乙群',chatTimestamp:'2026-10-06T02:20:00.000Z',batchItemId:b.item.id})
+    expect(getCommitmentCandidateContext(f.db,candidate.id).entries).toHaveLength(1)
+    expect(getCommitmentCandidateContext(f.db,candidate.id).entries[0]).toMatchObject({batchItemId:b.item.id,senderName:'来源乙',isCurrent:true})
+    expect(await openCommitmentCandidateEvidence(f.db,f.path,candidate.id,open)).toEqual({batchItemId:b.item.id,opened:true})
+    expect(open).toHaveBeenCalledExactlyOnceWith(join(f.directory,'evidence',b.item.id))
+    expect(reviewDatabaseFingerprint(f)).toBe(before)
+    const others=sharedRows(f.db,'commitment_candidates').filter(c=>c.id!==candidate.id),nonReview=reviewDatabaseFingerprint(f,true)
+    const immutable=(row:ReturnType<typeof sharedRows>[number])=>{const {status:_status,reviewed_at:_reviewed,...fields}=row;return fields}
+    const frozen=immutable(f.db.prepare('SELECT * FROM commitment_candidates WHERE id=?').get(candidate.id)!)
+    confirmCommitmentCandidate(f.db,candidate.id);ignoreCommitmentCandidate(f.db,candidate.id)
+    expect(immutable(f.db.prepare('SELECT * FROM commitment_candidates WHERE id=?').get(candidate.id)!)).toEqual(frozen)
+    expect(sharedRows(f.db,'commitment_candidates').filter(c=>c.id!==candidate.id)).toEqual(others)
+    expect(reviewDatabaseFingerprint(f,true)).toBe(nonReview)
+    expect([sharedEvidenceBytes(f,a.item.id),sharedEvidenceBytes(f,b.item.id)]).toEqual(raw)
+  })
+  // 复锁：44；无登记状态由真实核心建立，不伪造 Evidence。
+  it('B 的真实 Candidate 没有 Evidence 时拒绝导航，不借已登记的 A',async()=>{
+    const f=sharedJsonFixture(),input=commitmentMessages(['我会处理这个问题']),a=await importSharedJson(f,input)
+    await drainSharedDerived()
+    const core=sharedCoreItems(f,1);expect(ingestSharedCore(core,0,input).importedCount).toBe(0)
+    processor.processCommitmentExtractorRun(f.db,core.items[0].id)
+    const candidate=listCommitmentCandidates(f.db).find(c=>c.batchItemId===core.items[0].id)!,before=reviewDatabaseFingerprint(f),raw=sharedEvidenceBytes(f,a.item.id),open=vi.fn(async()=>'')
+    expect(candidate.source.evidenceRecorded).toBe(false)
+    expect(await safeCommitmentAction(()=>openCommitmentCandidateEvidence(f.db,f.path,candidate.id,open))).toMatchObject({ok:false,error:{code:'EVIDENCE_UNAVAILABLE'}})
+    expect(open).not.toHaveBeenCalled();expect(listCommitmentCandidates(f.db).find(c=>c.id===candidate.id)).toEqual(candidate)
+    expect(reviewDatabaseFingerprint(f)).toBe(before);expect(sharedEvidenceBytes(f,a.item.id)).toEqual(raw)
+  })
+  // 复锁：45、46、47、48。
+  it.each(['Raw 缺失','Raw 损坏','snapshot 损坏','路径逃逸'])('B %s 保留已审核 Candidate，固定安全失败且无 fallback',async kind=>{
+    const {f,a,b,candidate}=await pair(),raw=join(f.directory,b.item.evidence_relative_path!)
+    if(kind==='Raw 缺失') unlinkSync(raw)
+    else if(kind==='Raw 损坏') writeFileSync(raw,'隔离损坏')
+    else if(kind==='snapshot 损坏') writeFileSync(join(f.directory,b.item.snapshot_relative_path!),'隔离损坏')
+    else f.db.prepare("UPDATE batch_import_items SET evidence_relative_path='../其他来源.zip' WHERE id=?").run(b.item.id)
+    confirmCommitmentCandidate(f.db,candidate.id)
+    const reviewed=listCommitmentCandidates(f.db).find(c=>c.id===candidate.id),before=reviewDatabaseFingerprint(f),aRaw=sharedEvidenceBytes(f,a.item.id),open=vi.fn(async()=>'')
+    expect(await safeCommitmentAction(()=>openCommitmentCandidateEvidence(f.db,f.path,candidate.id,open))).toMatchObject({ok:false,error:{code:'EVIDENCE_UNAVAILABLE'}})
+    expect(open).not.toHaveBeenCalled();expect(listCommitmentCandidates(f.db).find(c=>c.id===candidate.id)).toEqual(reviewed)
+    expect(reviewDatabaseFingerprint(f)).toBe(before);expect(sharedEvidenceBytes(f,a.item.id)).toEqual(aRaw)
+  })
+  // 复锁：49。
+  it('系统导航错误保持安全错误与 DB/Raw 零修改',async()=>{
+    const {f,b,candidate}=await pair(),before=reviewDatabaseFingerprint(f),raw=sharedEvidenceBytes(f,b.item.id)
+    const result=await safeCommitmentAction(()=>openCommitmentCandidateEvidence(f.db,f.path,candidate.id,async()=>{throw new Error('秘密路径和堆栈')}))
+    expect(result).toMatchObject({ok:false,error:{code:'EVIDENCE_UNAVAILABLE'}});expect(JSON.stringify(result)).not.toMatch(/秘密|堆栈/)
+    expect(reviewDatabaseFingerprint(f)).toBe(before);expect(sharedEvidenceBytes(f,b.item.id)).toEqual(raw)
+  })
 })

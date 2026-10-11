@@ -1,3 +1,7 @@
+import { sharedCoreItems, ingestSharedCore, sharedRows, drainSharedDerived } from './shared-core-fixture'
+import { sharedJsonFixture, importSharedJson, sharedEvidenceBytes } from './shared-json-evidence-fixture'
+import { interestMessages } from './today-keyword-interest-fixture'
+import { addKeywordTerm, createKeywordGroup } from '../src/main/keyword-radar/config'
 import { createElement, isValidElement } from 'react'
 import type { ReactElement, ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -247,8 +251,44 @@ describe('独立读取、刷新与导航行为', () => {
     expect(html(render())).toContain('感谢反馈')
     view.dispose()
   })
-  it('实际临时 DB 的 section打开、刷新、Context、Evidence、查看全部全链零写入', async () => {
+  it.skipIf(process.platform !== 'win32')('实际临时 DB 的 section打开、刷新、Context、Evidence、查看全部全链零写入', async () => {
     const f = interestFixture(); await interestEvidence(f, 0)
+    const before = interestDatabaseFingerprint(f), evidence = interestEvidenceFingerprint(f), open = vi.fn(async () => '')
+    const api = { getTodayKeywordInterest: vi.fn(async () => ok(getTodayKeywordInterest(f.db, todayClock()))) }
+    const keyword = {
+      getHitContext: (id: string) => safeKeywordRadarAction(() => getKeywordHitContext(f.db, id)),
+      openHitEvidence: (id: string) => safeKeywordRadarAction(() => openKeywordHitEvidence(f.db, f.path, id, open))
+    } as KeywordRadarDesktopApi
+    const page = host(), onViewAll = vi.fn(), props = { api, keywordApi: keyword, onViewAll }
+    page.render(TodayKeywordInterestSection, props); page.effects(); await settle()
+    let content = page.render(TodayKeywordInterestSection, props).props as Parameters<typeof TodayKeywordInterestContent>[0]
+    button(TodayKeywordInterestContent(content), '刷新').onClick()
+    page.render(TodayKeywordInterestSection, props); page.effects(); await settle()
+    content = page.render(TodayKeywordInterestSection, props).props as Parameters<typeof TodayKeywordInterestContent>[0]
+    expect(content.state.status).toBe('ready')
+    const row = (content.state as { value: TodayKeywordInterest }).value.items[0]
+    const card = host(), renderCard = () => card.render(TodayKeywordInterestCard, { item: row, api: keyword })
+    renderCard(); card.effects()
+    button(renderCard(), '查看上下文').onClick(); await settle()
+    button(renderCard(), '查看证据').onClick()
+    // 证据校验包含文件异步读取，等待真实导航完成。
+    await vi.waitFor(() => expect(open).toHaveBeenCalledTimes(1), { timeout: 10000 })
+    button(TodayKeywordInterestContent(content), '查看全部').onClick()
+    expect(onViewAll).toHaveBeenCalledTimes(1)
+    expect(api.getTodayKeywordInterest).toHaveBeenCalledTimes(2)
+    expect(interestDatabaseFingerprint(f)).toEqual(before)
+    expect(interestEvidenceFingerprint(f)).toEqual(evidence)
+    card.dispose(); page.dispose()
+  }, 15000)
+})
+
+// 复锁：76；真实 DB 读取与合法手动 JSON 证据点击。
+describe('共享今日关注词 UI 全链',()=>{
+  it('实际临时 DB 的 section打开、刷新、Context、Evidence、查看全部全链零写入', async () => {
+    const base = sharedJsonFixture()
+    addKeywordTerm(base.db,createKeywordGroup(base.db,'关注词隔离组').id,'Codex')
+    const entry=await importSharedJson(base,interestMessages());await drainSharedDerived()
+    const f={...base,session:entry.session,items:[entry.item]}
     const before = interestDatabaseFingerprint(f), evidence = interestEvidenceFingerprint(f), open = vi.fn(async () => '')
     const api = { getTodayKeywordInterest: vi.fn(async () => ok(getTodayKeywordInterest(f.db, todayClock()))) }
     const keyword = {

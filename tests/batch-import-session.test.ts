@@ -1,3 +1,4 @@
+import { sharedCoreFixture, sharedCoreItems, ingestSharedCore, sharedRows, sharedCount } from './shared-core-fixture'
 import { DatabaseSync } from 'node:sqlite'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -154,7 +155,7 @@ describe('单附件及双附件会话编排', () => {
     expect(count(f.db, 'messages')).toBe(0)
   })
 
-  it('导入器部分写入及无效消息按有效任务计数，并归为需关注', async () => {
+  it.skipIf(process.platform !== 'win32')('导入器部分写入及无效消息按有效任务计数，并归为需关注', async () => {
     const f = fixture()
     await prepare(f, f.a.id, 3)
     await saveOriginalZip(f.db, f.databasePath, f.b.id, f.zipPath)
@@ -220,7 +221,7 @@ describe('单附件及双附件会话编排', () => {
     expect(count(f.db, 'messages')).toBe(3)
   })
 
-  it('两个附件全部确定性去重时仍为成功，未新增不等于失败', async () => {
+  it.skipIf(process.platform !== 'win32')('两个附件全部确定性去重时仍为成功，未新增不等于失败', async () => {
     const f = fixture()
     for (const [item, total] of [[f.a, 3], [f.b, 6]] as const) {
       const messages = Array.from({ length: total }, (_, index) => ({
@@ -240,7 +241,7 @@ describe('单附件及双附件会话编排', () => {
     expect(count(f.db, 'messages')).toBe(before)
   })
 
-  it('跨来源强身份重复不补写旧时间，仍通过来源关系保持成功', async () => {
+  it.skipIf(process.platform !== 'win32')('跨来源强身份重复不补写旧时间，仍通过来源关系保持成功', async () => {
     const f = fixture()
     for (const item of [f.a, f.b]) {
       const sourceId = `updated:${item.id}`
@@ -322,5 +323,34 @@ describe('单附件及双附件会话编排', () => {
     const f = fixture()
     f.db.prepare('UPDATE batch_import_sessions SET status = ? WHERE id = ?').run(status, f.session.id)
     await expect(resumeInterruptedBatchImportSession(f.db, f.databasePath, f.session.id)).rejects.toThrow('仅执行中')
+  })
+})
+
+describe('共享批量摘要与来源去重',()=>{
+  // 复锁：27。
+  it('真实 partial Job 按有效写入计数，并归为 needs_attention',async()=>{
+    const f=sharedCoreItems(sharedCoreFixture(),1),result=ingestSharedCore(f,0,[{content:'有效消息'},{sender_name:'缺正文'}])
+    expect(result).toMatchObject({status:'partial',recognizedCount:1,importedCount:1,invalidCount:1})
+    const summary=await getBatchImportSessionSummary(f.db,f.path,f.session.id)
+    expect(summary.items[0]).toMatchObject({outcome:'needs_attention',effective_job_id:result.jobId,imported:1,invalid:1,written_messages:1,indexed_messages:1})
+    expect(summary.input_messages_total).toBeNull()
+    expect(summary.attention_required_attachments).toBe(1)
+  })
+  // 复锁：31、32；未知旧时间原样保留。
+  it('跨来源强身份 duplicate-only 为成功，原 unknown canonical 和 FTS 不补写',async()=>{
+    const f=sharedCoreItems(sharedCoreFixture())
+    const original=f.items.map(item=>({content:'更新 '+item.id,source_message_id:'updated:'+item.id}))
+    for(const [index,m] of original.entries()) ingestWorkBuddyMessages(f.db,{source_batch_id:'seed:'+f.items[index].id,messages:[m]})
+    const before=sharedRows(f.db,'messages'),fts=sharedRows(f.db,'messages_fts_data')
+    for(const [index,m] of original.entries()) {
+      const result=ingestSharedCore(f,index,[{...m,timestamp:'2026-09-26T10:00:00+08:00',timestamp_source:'source_native'}])
+      expect(result).toMatchObject({status:'success',importedCount:0,duplicateCount:1,updatedCount:0})
+    }
+    const summary=await getBatchImportSessionSummary(f.db,f.path,f.session.id)
+    expect(summary).toMatchObject({imported_total:0,duplicate_total:2,updated_total:0,failed_attachments:0,attention_required_attachments:0})
+    expect(summary.items.map(item=>item.outcome)).toEqual(['success','success'])
+    expect(sharedRows(f.db,'messages')).toEqual(before);expect(sharedRows(f.db,'messages_fts_data')).toEqual(fts)
+    expect(before.every(m=>m.timestamp===null&&m.timestamp_source==='unknown')).toBe(true)
+    expect(sharedCount(f.db,'batch_item_message_sources')).toBe(2)
   })
 })

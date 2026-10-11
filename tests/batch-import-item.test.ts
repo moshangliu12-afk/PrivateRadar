@@ -1,3 +1,5 @@
+import { sharedCoreFixture, sharedCoreItems, ingestSharedCore, sharedRows, sharedCount } from './shared-core-fixture'
+import { sharedJsonFixture, importSharedJson } from './shared-json-evidence-fixture'
 import { createHash } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
@@ -66,7 +68,7 @@ function count(db: DatabaseSync, table: 'import_jobs' | 'messages' | 'messages_f
 }
 
 describe('alpha.15 已保存附件项确定性导入', () => {
-  it('已准备附件项首次进入现有导入器，任务、消息和全文索引均正确', async () => {
+  it.skipIf(process.platform !== 'win32')('已准备附件项首次进入现有导入器，任务、消息和全文索引均正确', async () => {
     const f = fixture()
     const itemId = await readyItem(f)
     await expect(verifyBatchItemReadyForImport(f.db, f.databasePath, itemId)).rejects.toThrow('稳定来源批次')
@@ -85,7 +87,7 @@ describe('alpha.15 已保存附件项确定性导入', () => {
     expect((await verifyBatchItemReadyForImport(f.db, f.databasePath, itemId)).sourceBatchId).toBe(item.source_batch_id)
   })
 
-  it('导入任务在 INSERT 时已有 batch_item_id，不能依赖事后关联', async () => {
+  it.skipIf(process.platform !== 'win32')('导入任务在 INSERT 时已有 batch_item_id，不能依赖事后关联', async () => {
     const f = fixture()
     const itemId = await readyItem(f)
     f.db.exec(`
@@ -185,7 +187,7 @@ describe('alpha.15 已保存附件项确定性导入', () => {
     expect(count(f.db, 'import_jobs')).toBe(0)
   })
 
-  it('导入器返回失败时保留真实任务并记录附件项失败状态', async () => {
+  it.skipIf(process.platform !== 'win32')('导入器返回失败时保留真实任务并记录附件项失败状态', async () => {
     const f = fixture()
     const itemId = await readyItem(f, { messages: [{ content: '时间无效但正文存在', timestamp: '错误时间' }] })
     const result = await importSavedBatchItem(f.db, f.databasePath, itemId)
@@ -197,7 +199,7 @@ describe('alpha.15 已保存附件项确定性导入', () => {
     expect(f.db.prepare('SELECT status FROM batch_import_items WHERE id = ?').get(itemId)).toEqual({ status: 'failed' })
   })
 
-  it('导入器部分成功时附件项保持部分成功，已写入消息不回滚', async () => {
+  it.skipIf(process.platform !== 'win32')('导入器部分成功时附件项保持部分成功，已写入消息不回滚', async () => {
     const f = fixture()
     const itemId = await readyItem(f, { messages: [{ content: '有效消息' }, { sender_name: '缺正文' }] })
     const result = await importSavedBatchItem(f.db, f.databasePath, itemId)
@@ -261,5 +263,51 @@ describe('alpha.15 已保存附件项确定性导入', () => {
     expect(listBatchItemJobs(f.db, a.id).map((job) => job.id)).toEqual([first.jobId])
     expect(listBatchItemJobs(f.db, b.id).map((job) => job.id)).toEqual([second.jobId])
     expect(count(f.db, 'messages')).toBe(8)
+  })
+})
+
+describe('共享 Item 与真实核心任务关联',()=>{
+  // 复锁：6；漏跳：118、123 的 Job/Item/FTS/source，98 的结构与空归属。
+  it('原无群名输入逐字段进入核心，两个 Item 保持独立 Job 和来源',()=>{
+    const f=sharedCoreItems(sharedCoreFixture()),input=snapshot().messages
+    for(const item of f.items) {
+      const result=ingestSharedCore(f,item.ordinal,input)
+      expect(result).toMatchObject({status:'success',importedCount:4,duplicateCount:0})
+      expect(listBatchItemJobs(f.db,item.id).map(j=>j.id)).toEqual([result.jobId])
+      expect(f.db.prepare('SELECT status,effective_job_id FROM batch_import_items WHERE id=?').get(item.id)).toEqual({status:'success',effective_job_id:result.jobId})
+      const rows=f.db.prepare('SELECT m.content,s.source_position,s.source_sender_name,s.source_conversation_name,s.source_conversation_name_source FROM batch_item_message_sources s JOIN messages m ON m.id=s.message_id WHERE s.batch_item_id=? ORDER BY s.source_position').all(item.id)
+      expect(rows).toEqual(input.map((m,source_position)=>({content:m.content,source_position,source_sender_name:m.sender_name,source_conversation_name:null,source_conversation_name_source:'unknown'})))
+    }
+    for(const table of ['messages','messages_fts','batch_item_message_sources']) expect(sharedCount(f.db,table)).toBe(8)
+    expect(f.db.prepare('PRAGMA user_version').get()!.user_version).toBe(8)
+    expect(f.db.prepare('PRAGMA integrity_check').get()!.integrity_check).toBe('ok')
+    expect(f.db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+    expect(f.session.collection_id).toBeNull()
+  })
+  // 复锁：7。
+  it('真实 JSON Job 在 INSERT 时已有 Item 归属',async()=>{
+    const f=sharedJsonFixture()
+    f.db.exec("CREATE TRIGGER require_shared_item BEFORE INSERT ON import_jobs WHEN new.batch_item_id IS NULL BEGIN SELECT RAISE(ABORT,'缺少来源归属'); END")
+    const entry=await importSharedJson(f,[{platform:'wechat',conversation_name:'明确测试聊天',sender_name:'甲',timestamp:'2026-09-24T02:00:00Z',content:'事务关联原文'}])
+    expect(entry.result.status).toBe('success')
+    expect(f.db.prepare('SELECT batch_item_id FROM import_jobs WHERE id=?').get(entry.result.jobId)).toEqual({batch_item_id:entry.item.id})
+  })
+  // 复锁：17；Manual JSON 的 NO_VALID_MESSAGES/invalidCount=0 不冒充原 Windows invalidCount=1。
+  it('真实 JSON 全部无效保留 failed Job 和 Raw，消息及来源为零',async()=>{
+    const f=sharedJsonFixture(),entry=await importSharedJson(f,[{content:'时间无效但正文存在',timestamp:'错误时间'}])
+    expect(entry.result).toMatchObject({status:'failed',invalidCount:0,importedCount:0})
+    expect(entry.result.errors[0]).toContain('NO_VALID_MESSAGES')
+    expect(entry.item).toMatchObject({status:'failed',effective_job_id:entry.result.jobId,evidence_status:'available'})
+    expect(f.db.prepare('SELECT status,batch_item_id FROM import_jobs WHERE id=?').get(entry.result.jobId)).toEqual({status:'failed',batch_item_id:entry.item.id})
+    for(const table of ['messages','messages_fts','batch_item_message_sources']) expect(sharedCount(f.db,table)).toBe(0)
+  })
+  // 复锁：18。
+  it('原正文有效、另一行缺正文时真实核心 partial 不回滚已提交消息',()=>{
+    const f=sharedCoreItems(sharedCoreFixture(),1),result=ingestSharedCore(f,0,[{content:'有效消息'},{sender_name:'缺正文'}])
+    expect(result).toMatchObject({status:'partial',importedCount:1,invalidCount:1})
+    expect(f.db.prepare('SELECT status FROM batch_import_items WHERE id=?').get(f.items[0].id)).toEqual({status:'partial_success'})
+    expect(f.db.prepare('SELECT status,batch_item_id FROM import_jobs WHERE id=?').get(result.jobId)).toEqual({status:'partial',batch_item_id:f.items[0].id})
+    for(const table of ['messages','messages_fts','batch_item_message_sources']) expect(sharedCount(f.db,table)).toBe(1)
+    expect(f.db.prepare('SELECT timestamp,timestamp_source,sender_name,conversation_name FROM messages').get()).toEqual({timestamp:null,timestamp_source:'unknown',sender_name:null,conversation_name:null})
   })
 })
