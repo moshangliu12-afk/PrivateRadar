@@ -739,11 +739,5 @@
       78
     ]
   },
-  "unapprovedSkips": [
-    {
-      "file": "tests/deployment.test.ts",
-      "test": "Windows 安装与 WorkBuddy 连接组件 正式运行使用 Electron userData，只有测试显式传入时才隔离",
-      "review": "空 override 选 userData，显式 override 选隔离路径。 当前C盘字面量是夹具，runtimeDataDirectory本身只做通用resolve选择，无连接器、句柄或Windows API。"
-    }
-  ]
+  "unapprovedSkips": []
 }
