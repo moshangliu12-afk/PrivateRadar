@@ -20,7 +20,7 @@ app.whenReady().then(async () => {
     Menu.setApplicationMenu(Menu.buildFromTemplate([{ role: 'appMenu' }, { label: '编辑', submenu: [{ role: 'copy' }] }]))
     ipcMain.handle('stage2c:smoke', () => true)
     const window = new BrowserWindow({ show: false, webPreferences: {
-      preload: resolve('out/preload/index.mjs'), contextIsolation: true, nodeIntegration: false, sandbox: false
+      preload: resolve(process.env.PRIVATERADAR_CI_SMOKE_PRELOAD || 'out/preload/index.mjs'), contextIsolation: true, nodeIntegration: false, sandbox: false
     } })
     window.webContents.on('preload-error', (_event, _path, error) => { console.error(error); app.exit(1) })
     await window.loadURL('data:text/html;charset=utf-8,<html><body>隔离验收</body></html>')

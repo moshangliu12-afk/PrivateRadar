@@ -1,0 +1,749 @@
+{
+  "testCommit": "58e75c89afa11190adfba6676501cbc9ff8b5dee",
+  "files": [
+    "tests/batch-import-concurrency.test.ts",
+    "tests/batch-import-evidence.test.ts",
+    "tests/batch-import-item.test.ts",
+    "tests/batch-import-session.test.ts",
+    "tests/collection-workbuddy-bridge.test.ts",
+    "tests/commitment-post-import.test.ts",
+    "tests/commitment-review-desktop.test.ts",
+    "tests/confirmed-commitments-ui.test.ts",
+    "tests/deployment.test.ts",
+    "tests/directory-evidence.test.ts",
+    "tests/keyword-radar-desktop.test.ts",
+    "tests/keyword-radar-post-import.test.ts",
+    "tests/message-provenance.test.ts",
+    "tests/request-scoped-windows-runtime.test.ts",
+    "tests/today-keyword-interest-ui.test.ts",
+    "tests/today-keyword-interest.test.ts",
+    "tests/workbuddy-batch-tool.test.ts",
+    "tests/workbuddy-chat-history.test.ts",
+    "tests/workbuddy-current-context-batch.test.ts",
+    "tests/workbuddy-single-card-ingress.test.ts"
+  ],
+  "units": [
+    {
+      "unit": 1,
+      "file": "tests/batch-import-concurrency.test.ts",
+      "title": "两个真实连接竞争 Session/Item，只有赢家创建核心 Job：乙先=%s",
+      "tests": [
+        "共享核心认领与持久执行权 两个真实连接竞争 Session/Item，只有赢家创建核心 Job：乙先=false",
+        "共享核心认领与持久执行权 两个真实连接竞争 Session/Item，只有赢家创建核心 Job：乙先=true"
+      ]
+    },
+    {
+      "unit": 2,
+      "file": "tests/batch-import-concurrency.test.ts",
+      "title": "持久 claim 后关闭 owner，重开连接不能抢占，未开始项没有 Job",
+      "tests": [
+        "共享核心认领与持久执行权 持久 claim 后关闭 owner，重开连接不能抢占，未开始项没有 Job"
+      ]
+    },
+    {
+      "unit": 3,
+      "file": "tests/batch-import-evidence.test.ts",
+      "title": "Raw 固定 ZIP 保存捕获字节、相对路径和哈希，snapshot 原记录逐字段不变",
+      "tests": [
+        "共享受控 JSON Raw 与原记录保全 Raw 固定 ZIP 保存捕获字节、相对路径和哈希，snapshot 原记录逐字段不变"
+      ]
+    },
+    {
+      "unit": 4,
+      "file": "tests/batch-import-evidence.test.ts",
+      "title": "原 JSON 删除且 SQLite 关闭重开后，只读恢复持久 Raw 和原 snapshot",
+      "tests": [
+        "共享受控 JSON Raw 与原记录保全 原 JSON 删除且 SQLite 关闭重开后，只读恢复持久 Raw 和原 snapshot"
+      ]
+    },
+    {
+      "unit": 5,
+      "file": "tests/batch-import-evidence.test.ts",
+      "title": "相同捕获字节的两个真实 file Item 不合并 Evidence 实例",
+      "tests": [
+        "共享受控 JSON Raw 与原记录保全 相同捕获字节的两个真实 file Item 不合并 Evidence 实例"
+      ]
+    },
+    {
+      "unit": 6,
+      "file": "tests/batch-import-evidence.test.ts",
+      "title": "相同长度 Raw 字节篡改后 fail closed，DB 和坏文件保持不变",
+      "tests": [
+        "共享受控 JSON Raw 与原记录保全 相同长度 Raw 字节篡改后 fail closed，DB 和坏文件保持不变"
+      ]
+    },
+    {
+      "unit": 7,
+      "file": "tests/batch-import-evidence.test.ts",
+      "title": "snapshot %s 不可用且不借别的来源补写",
+      "tests": [
+        "共享受控 JSON Raw 与原记录保全 snapshot 损坏 不可用且不借别的来源补写",
+        "共享受控 JSON Raw 与原记录保全 snapshot 缺失 不可用且不借别的来源补写"
+      ]
+    },
+    {
+      "unit": 8,
+      "file": "tests/batch-import-evidence.test.ts",
+      "title": "同 Item 同字节重复保存幂等，不更换身份或增加文件",
+      "tests": [
+        "共享受控 JSON Raw 与原记录保全 同 Item 同字节重复保存幂等，不更换身份或增加文件"
+      ]
+    },
+    {
+      "unit": 9,
+      "file": "tests/batch-import-evidence.test.ts",
+      "title": "不同内容不能替换同 Item，旧 Raw 身份及可用性保留",
+      "tests": [
+        "共享受控 JSON Raw 与原记录保全 不同内容不能替换同 Item，旧 Raw 身份及可用性保留"
+      ]
+    },
+    {
+      "unit": 10,
+      "file": "tests/batch-import-evidence.test.ts",
+      "title": "未登记孤立 original.zip 不接管、不覆盖，也不创建 Job",
+      "tests": [
+        "共享受控 JSON Raw 与原记录保全 未登记孤立 original.zip 不接管、不覆盖，也不创建 Job"
+      ]
+    },
+    {
+      "unit": 11,
+      "file": "tests/batch-import-evidence.test.ts",
+      "title": "snapshot 校验故障保留 Raw，尚无可导入证据、Job 或 occurrence",
+      "tests": [
+        "共享受控 JSON Raw 与原记录保全 snapshot 校验故障保留 Raw，尚无可导入证据、Job 或 occurrence"
+      ]
+    },
+    {
+      "unit": 12,
+      "file": "tests/batch-import-evidence.test.ts",
+      "title": "非法 Item 编号和登记路径逃逸均拒绝，根外文件不被访问或修改",
+      "tests": [
+        "共享受控 JSON Raw 与原记录保全 非法 Item 编号和登记路径逃逸均拒绝，根外文件不被访问或修改"
+      ]
+    },
+    {
+      "unit": 13,
+      "file": "tests/batch-import-evidence.test.ts",
+      "title": "实际 Raw 删除后不可用，不制造替代原件",
+      "tests": [
+        "共享受控 JSON Raw 与原记录保全 实际 Raw 删除后不可用，不制造替代原件"
+      ]
+    },
+    {
+      "unit": 14,
+      "file": "tests/batch-import-item.test.ts",
+      "title": "原无群名输入逐字段进入核心，两个 Item 保持独立 Job 和来源",
+      "tests": [
+        "共享 Item 与真实核心任务关联 原无群名输入逐字段进入核心，两个 Item 保持独立 Job 和来源"
+      ]
+    },
+    {
+      "unit": 15,
+      "file": "tests/batch-import-item.test.ts",
+      "title": "真实 JSON Job 在 INSERT 时已有 Item 归属",
+      "tests": [
+        "共享 Item 与真实核心任务关联 真实 JSON Job 在 INSERT 时已有 Item 归属"
+      ]
+    },
+    {
+      "unit": 16,
+      "file": "tests/batch-import-item.test.ts",
+      "title": "真实 JSON 全部无效保留 failed Job 和 Raw，消息及来源为零",
+      "tests": [
+        "共享 Item 与真实核心任务关联 真实 JSON 全部无效保留 failed Job 和 Raw，消息及来源为零"
+      ]
+    },
+    {
+      "unit": 17,
+      "file": "tests/batch-import-item.test.ts",
+      "title": "原正文有效、另一行缺正文时真实核心 partial 不回滚已提交消息",
+      "tests": [
+        "共享 Item 与真实核心任务关联 原正文有效、另一行缺正文时真实核心 partial 不回滚已提交消息"
+      ]
+    },
+    {
+      "unit": 18,
+      "file": "tests/batch-import-session.test.ts",
+      "title": "真实 partial Job 按有效写入计数，并归为 needs_attention",
+      "tests": [
+        "共享批量摘要与来源去重 真实 partial Job 按有效写入计数，并归为 needs_attention"
+      ]
+    },
+    {
+      "unit": 19,
+      "file": "tests/batch-import-session.test.ts",
+      "title": "跨来源强身份 duplicate-only 为成功，原 unknown canonical 和 FTS 不补写",
+      "tests": [
+        "共享批量摘要与来源去重 跨来源强身份 duplicate-only 为成功，原 unknown canonical 和 FTS 不补写"
+      ]
+    },
+    {
+      "unit": 20,
+      "file": "tests/collection-workbuddy-bridge.test.ts",
+      "title": "显式关联以持久 Session 为准，临时返回对象与最近归集不能替代事实",
+      "tests": [
+        "共享归集关联与登记事务 显式关联以持久 Session 为准，临时返回对象与最近归集不能替代事实"
+      ]
+    },
+    {
+      "unit": 21,
+      "file": "tests/collection-workbuddy-bridge.test.ts",
+      "title": "已有归集时省略参数仍为 NULL，不选择最近记录",
+      "tests": [
+        "共享归集关联与登记事务 已有归集时省略参数仍为 NULL，不选择最近记录"
+      ]
+    },
+    {
+      "unit": 22,
+      "file": "tests/collection-workbuddy-bridge.test.ts",
+      "title": "同 Collection 的两次核心来源不跨 Item 去重，Session/Item/Job 各自关联",
+      "tests": [
+        "共享归集关联与登记事务 同 Collection 的两次核心来源不跨 Item 去重，Session/Item/Job 各自关联"
+      ]
+    },
+    {
+      "unit": 23,
+      "file": "tests/collection-workbuddy-bridge.test.ts",
+      "title": "早期 collecting 读取不能绕过第二连接 completed 的事务复核",
+      "tests": [
+        "共享归集关联与登记事务 早期 collecting 读取不能绕过第二连接 completed 的事务复核"
+      ]
+    },
+    {
+      "unit": 24,
+      "file": "tests/collection-workbuddy-bridge.test.ts",
+      "title": "第二 Item 登记故障整体回滚 Session 和第一 Item，零 Job/来源",
+      "tests": [
+        "共享归集关联与登记事务 第二 Item 登记故障整体回滚 Session 和第一 Item，零 Job/来源"
+      ]
+    },
+    {
+      "unit": 25,
+      "file": "tests/commitment-post-import.test.ts",
+      "title": "真实入口返回只冻结本 Item，随后独立生成 Candidate 与 Keyword",
+      "tests": [
+        "共享承诺导入后处理：真实 JSON 入口 真实入口返回只冻结本 Item，随后独立生成 Candidate 与 Keyword"
+      ]
+    },
+    {
+      "unit": 26,
+      "file": "tests/commitment-post-import.test.ts",
+      "title": "matcher 异常隔离，真实核心与 Raw 保全：partial=%s",
+      "tests": [
+        "共享承诺导入后处理：真实 JSON 入口 matcher 异常隔离，真实核心与 Raw 保全：partial=false",
+        "共享承诺导入后处理：真实 JSON 入口 matcher 异常隔离，真实核心与 Raw 保全：partial=true"
+      ]
+    },
+    {
+      "unit": 27,
+      "file": "tests/commitment-post-import.test.ts",
+      "title": "scheduler 异常后真实核心成功，Run pending，Keyword 独立完成",
+      "tests": [
+        "共享承诺导入后处理：真实 JSON 入口 scheduler 异常后真实核心成功，Run pending，Keyword 独立完成"
+      ]
+    },
+    {
+      "unit": 28,
+      "file": "tests/commitment-post-import.test.ts",
+      "title": "零 canonical 新增仍为新 occurrence 生成独立 Run/Candidate/Hit，不改旧审核",
+      "tests": [
+        "共享承诺导入后处理：真实 JSON 入口 零 canonical 新增仍为新 occurrence 生成独立 Run/Candidate/Hit，不改旧审核"
+      ]
+    },
+    {
+      "unit": 29,
+      "file": "tests/commitment-review-desktop.test.ts",
+      "title": "B occurrence 的事实、Context 和导航只指向 B，审核仅改当前 review 字段",
+      "tests": [
+        "共享候选审核与真实受控 JSON 回源 B occurrence 的事实、Context 和导航只指向 B，审核仅改当前 review 字段"
+      ]
+    },
+    {
+      "unit": 30,
+      "file": "tests/commitment-review-desktop.test.ts",
+      "title": "B 的真实 Candidate 没有 Evidence 时拒绝导航，不借已登记的 A",
+      "tests": [
+        "共享候选审核与真实受控 JSON 回源 B 的真实 Candidate 没有 Evidence 时拒绝导航，不借已登记的 A"
+      ]
+    },
+    {
+      "unit": 31,
+      "file": "tests/commitment-review-desktop.test.ts",
+      "title": "B %s 保留已审核 Candidate，固定安全失败且无 fallback",
+      "tests": [
+        "共享候选审核与真实受控 JSON 回源 B Raw 缺失 保留已审核 Candidate，固定安全失败且无 fallback",
+        "共享候选审核与真实受控 JSON 回源 B Raw 损坏 保留已审核 Candidate，固定安全失败且无 fallback",
+        "共享候选审核与真实受控 JSON 回源 B snapshot 损坏 保留已审核 Candidate，固定安全失败且无 fallback",
+        "共享候选审核与真实受控 JSON 回源 B 路径逃逸 保留已审核 Candidate，固定安全失败且无 fallback"
+      ]
+    },
+    {
+      "unit": 32,
+      "file": "tests/commitment-review-desktop.test.ts",
+      "title": "系统导航错误保持安全错误与 DB/Raw 零修改",
+      "tests": [
+        "共享候选审核与真实受控 JSON 回源 系统导航错误保持安全错误与 DB/Raw 零修改"
+      ]
+    },
+    {
+      "unit": 33,
+      "file": "tests/confirmed-commitments-ui.test.ts",
+      "title": "真实列表、刷新、上下文和证据在只读数据库下工作，不执行待运行记录，不改变任何业务行或证据字节",
+      "tests": [
+        "共享真实 JSON 与只读 DB 的承诺 UI 真实列表、刷新、上下文和证据在只读数据库下工作，不执行待运行记录，不改变任何业务行或证据字节"
+      ]
+    },
+    {
+      "unit": 34,
+      "file": "tests/deployment.test.ts",
+      "title": "平台临时绝对路径保留 Electron userData 与显式 override 选择",
+      "tests": [
+        "共享运行数据目录选择 平台临时绝对路径保留 Electron userData 与显式 override 选择"
+      ]
+    },
+    {
+      "unit": 35,
+      "file": "tests/directory-evidence.test.ts",
+      "title": "真实临时文件写入故障清理自己文件，后续正常保存可用",
+      "tests": [
+        "共享受控文件发布故障边界 真实临时文件写入故障清理自己文件，后续正常保存可用"
+      ]
+    },
+    {
+      "unit": 36,
+      "file": "tests/directory-evidence.test.ts",
+      "title": "临时文件字节不同阻止发布且清理本次 temporary",
+      "tests": [
+        "共享受控文件发布故障边界 临时文件字节不同阻止发布且清理本次 temporary"
+      ]
+    },
+    {
+      "unit": 37,
+      "file": "tests/directory-evidence.test.ts",
+      "title": "真实 link 发布故障不登记，也不遗留本次临时文件",
+      "tests": [
+        "共享受控文件发布故障边界 真实 link 发布故障不登记，也不遗留本次临时文件"
+      ]
+    },
+    {
+      "unit": 38,
+      "file": "tests/directory-evidence.test.ts",
+      "title": "发布成功而登记 UPDATE 失败，撤销自己的 published 文件和临时文件",
+      "tests": [
+        "共享受控文件发布故障边界 发布成功而登记 UPDATE 失败，撤销自己的 published 文件和临时文件"
+      ]
+    },
+    {
+      "unit": 39,
+      "file": "tests/directory-evidence.test.ts",
+      "title": "Raw 篡改阻止真实 snapshot 发布，已有核心基线不变",
+      "tests": [
+        "共享受控文件发布故障边界 Raw 篡改阻止真实 snapshot 发布，已有核心基线不变"
+      ]
+    },
+    {
+      "unit": 40,
+      "file": "tests/directory-evidence.test.ts",
+      "title": "原空格、换行、sender/time/位置保全，同 Item duplicate-only，跨 Item 独立 canonical",
+      "tests": [
+        "共享原解析记录的核心重放与弱来源身份 原空格、换行、sender/time/位置保全，同 Item duplicate-only，跨 Item 独立 canonical"
+      ]
+    },
+    {
+      "unit": 41,
+      "file": "tests/keyword-radar-desktop.test.ts",
+      "title": "B Hit 与 Context 使用 B source facts，导航只打开 B 受控目录",
+      "tests": [
+        "共享关键词 occurrence 与真实 JSON 回源 B Hit 与 Context 使用 B source facts，导航只打开 B 受控目录"
+      ]
+    },
+    {
+      "unit": 42,
+      "file": "tests/keyword-radar-desktop.test.ts",
+      "title": "未登记 B 的 Hit 保留，不借用 A 的合法 Evidence",
+      "tests": [
+        "共享关键词 occurrence 与真实 JSON 回源 未登记 B 的 Hit 保留，不借用 A 的合法 Evidence"
+      ]
+    },
+    {
+      "unit": 43,
+      "file": "tests/keyword-radar-desktop.test.ts",
+      "title": "B Raw %s 不改 Hit 或 DB，不回退 A",
+      "tests": [
+        "共享关键词 occurrence 与真实 JSON 回源 B Raw 缺失 不改 Hit 或 DB，不回退 A",
+        "共享关键词 occurrence 与真实 JSON 回源 B Raw 改写 不改 Hit 或 DB，不回退 A",
+        "共享关键词 occurrence 与真实 JSON 回源 B Raw 逃逸 不改 Hit 或 DB，不回退 A"
+      ]
+    },
+    {
+      "unit": 44,
+      "file": "tests/keyword-radar-desktop.test.ts",
+      "title": "导航回调错误使用固定安全说明，不泄露系统路径",
+      "tests": [
+        "共享关键词 occurrence 与真实 JSON 回源 导航回调错误使用固定安全说明，不泄露系统路径"
+      ]
+    },
+    {
+      "unit": 45,
+      "file": "tests/keyword-radar-post-import.test.ts",
+      "title": "matcher 失败保留核心与 Raw：partial=%s",
+      "tests": [
+        "共享关键词派生失败：真实 JSON 入口 matcher 失败保留核心与 Raw：partial=false",
+        "共享关键词派生失败：真实 JSON 入口 matcher 失败保留核心与 Raw：partial=true"
+      ]
+    },
+    {
+      "unit": 46,
+      "file": "tests/keyword-radar-post-import.test.ts",
+      "title": "scheduler 抛错保留真实 pending Run 与成功 Item",
+      "tests": [
+        "共享关键词派生失败：真实 JSON 入口 scheduler 抛错保留真实 pending Run 与成功 Item"
+      ]
+    },
+    {
+      "unit": 47,
+      "file": "tests/keyword-radar-post-import.test.ts",
+      "title": "强重复零新增仍为每个新来源冻结规则配置和生成 Hit",
+      "tests": [
+        "共享关键词派生失败：真实 JSON 入口 强重复零新增仍为每个新来源冻结规则配置和生成 Hit"
+      ]
+    },
+    {
+      "unit": 48,
+      "file": "tests/message-provenance.test.ts",
+      "title": "强身份部分重叠保留四 canonical、六 occurrence 和双向真实 Evidence",
+      "tests": [
+        "共享来源关系：真实 JSON 与数据库核心分层 强身份部分重叠保留四 canonical、六 occurrence 和双向真实 Evidence"
+      ]
+    },
+    {
+      "unit": 49,
+      "file": "tests/message-provenance.test.ts",
+      "title": "同 Item 两位置复用强身份，第二文件仍有自己的 canonical 和 occurrence",
+      "tests": [
+        "共享来源关系：真实 JSON 与数据库核心分层 同 Item 两位置复用强身份，第二文件仍有自己的 canonical 和 occurrence"
+      ]
+    },
+    {
+      "unit": 50,
+      "file": "tests/message-provenance.test.ts",
+      "title": "真实 JSON duplicate-only 三来源仍有独立成功 Item/Job 和可用 Evidence",
+      "tests": [
+        "共享来源关系：真实 JSON 与数据库核心分层 真实 JSON duplicate-only 三来源仍有独立成功 Item/Job 和可用 Evidence"
+      ]
+    },
+    {
+      "unit": 51,
+      "file": "tests/message-provenance.test.ts",
+      "title": "真实 JSON 坏行保留 Raw，后续有效来源位置为零和二",
+      "tests": [
+        "共享来源关系：真实 JSON 与数据库核心分层 真实 JSON 坏行保留 Raw，后续有效来源位置为零和二"
+      ]
+    },
+    {
+      "unit": 52,
+      "file": "tests/message-provenance.test.ts",
+      "title": "原 WorkBuddy 弱身份跨 Item 保守保全：%s",
+      "tests": [
+        "共享来源关系：真实 JSON 与数据库核心分层 原 WorkBuddy 弱身份跨 Item 保守保全：分钟时间",
+        "共享来源关系：真实 JSON 与数据库核心分层 原 WorkBuddy 弱身份跨 Item 保守保全：未知时间",
+        "共享来源关系：真实 JSON 与数据库核心分层 原 WorkBuddy 弱身份跨 Item 保守保全：图片占位"
+      ]
+    },
+    {
+      "unit": 53,
+      "file": "tests/message-provenance.test.ts",
+      "title": "真实 JSON 跨 Item 强身份不改 canonical、identity、原来源和 FTS",
+      "tests": [
+        "共享来源关系：真实 JSON 与数据库核心分层 真实 JSON 跨 Item 强身份不改 canonical、identity、原来源和 FTS"
+      ]
+    },
+    {
+      "unit": 54,
+      "file": "tests/message-provenance.test.ts",
+      "title": "真实绑定幂等、冲突及 FK 保持，核心事务不能改绑既有位置",
+      "tests": [
+        "共享来源关系：真实 JSON 与数据库核心分层 真实绑定幂等、冲突及 FK 保持，核心事务不能改绑既有位置"
+      ]
+    },
+    {
+      "unit": 55,
+      "file": "tests/message-provenance.test.ts",
+      "title": "真实 JSON 来源 INSERT 故障整体回滚 B，保留 A 和真实 failed Job",
+      "tests": [
+        "共享来源关系：真实 JSON 与数据库核心分层 真实 JSON 来源 INSERT 故障整体回滚 B，保留 A 和真实 failed Job"
+      ]
+    },
+    {
+      "unit": 56,
+      "file": "tests/message-provenance.test.ts",
+      "title": "真实 JSON 强身份正文冲突：同 Item=%s，整体回滚且 Raw 保留",
+      "tests": [
+        "共享来源关系：真实 JSON 与数据库核心分层 真实 JSON 强身份正文冲突：同 Item=false，整体回滚且 Raw 保留",
+        "共享来源关系：真实 JSON 与数据库核心分层 真实 JSON 强身份正文冲突：同 Item=true，整体回滚且 Raw 保留"
+      ]
+    },
+    {
+      "unit": 57,
+      "file": "tests/message-provenance.test.ts",
+      "title": "来源丢失影响摘要，Search 始终只召回 canonical 一次",
+      "tests": [
+        "共享来源关系：真实 JSON 与数据库核心分层 来源丢失影响摘要，Search 始终只召回 canonical 一次"
+      ]
+    },
+    {
+      "unit": 58,
+      "file": "tests/message-provenance.test.ts",
+      "title": "不同连接并发插入同一来源位置：%s保持唯一绑定",
+      "tests": [
+        "共享来源位置的真实并发 不同连接并发插入同一来源位置：不同消息保持唯一绑定",
+        "共享来源位置的真实并发 不同连接并发插入同一来源位置：相同消息保持唯一绑定"
+      ]
+    },
+    {
+      "unit": 59,
+      "file": "tests/request-scoped-windows-runtime.test.ts",
+      "title": "failed/无 Job 项零写入，另一真实成功 Item 不回滚，partial 前提可读且 FK 完整",
+      "tests": [
+        "共享准备失败与健康 Item 的摘要 failed/无 Job 项零写入，另一真实成功 Item 不回滚，partial 前提可读且 FK 完整"
+      ]
+    },
+    {
+      "unit": 60,
+      "file": "tests/today-keyword-interest-ui.test.ts",
+      "title": "实际临时 DB 的 section打开、刷新、Context、Evidence、查看全部全链零写入",
+      "tests": [
+        "共享今日关注词 UI 全链 实际临时 DB 的 section打开、刷新、Context、Evidence、查看全部全链零写入"
+      ]
+    },
+    {
+      "unit": 61,
+      "file": "tests/today-keyword-interest.test.ts",
+      "title": "今日代表 B occurrence，Query/Context/真实 JSON 回源均只读且使用 B 事实",
+      "tests": [
+        "共享今日关注词的真实来源回源 今日代表 B occurrence，Query/Context/真实 JSON 回源均只读且使用 B 事实"
+      ]
+    },
+    {
+      "unit": 62,
+      "file": "tests/today-keyword-interest.test.ts",
+      "title": "未登记 B 的今日卡片保留，导航 fail closed，不 fallback A",
+      "tests": [
+        "共享今日关注词的真实来源回源 未登记 B 的今日卡片保留，导航 fail closed，不 fallback A"
+      ]
+    },
+    {
+      "unit": 63,
+      "file": "tests/today-keyword-interest.test.ts",
+      "title": "真实 JSON Raw 改写后保留今日 Hit 卡片，不修复或写状态",
+      "tests": [
+        "共享今日关注词的真实来源回源 真实 JSON Raw 改写后保留今日 Hit 卡片，不修复或写状态"
+      ]
+    },
+    {
+      "unit": 64,
+      "file": "tests/workbuddy-batch-tool.test.ts",
+      "title": "原 3+6 输入形成两个真实 Job 和独立来源，不补原群名",
+      "tests": [
+        "共享批量核心原数组与 unknown 元数据 原 3+6 输入形成两个真实 Job 和独立来源，不补原群名"
+      ]
+    },
+    {
+      "unit": 65,
+      "file": "tests/workbuddy-batch-tool.test.ts",
+      "title": "时间交错仍保留原数组位置与 unknown 群名",
+      "tests": [
+        "共享批量核心原数组与 unknown 元数据 时间交错仍保留原数组位置与 unknown 群名"
+      ]
+    },
+    {
+      "unit": 66,
+      "file": "tests/workbuddy-batch-tool.test.ts",
+      "title": "原缺时间、sender、群名的两条正文仍为 NULL/unknown",
+      "tests": [
+        "共享批量核心原数组与 unknown 元数据 原缺时间、sender、群名的两条正文仍为 NULL/unknown"
+      ]
+    },
+    {
+      "unit": 67,
+      "file": "tests/workbuddy-chat-history.test.ts",
+      "title": "card-a/b 原字段逐条进入真实 Item/Job/occurrence/FTS",
+      "tests": [
+        "共享聊天原文解析到核心来源 card-a/b 原字段逐条进入真实 Item/Job/occurrence/FTS"
+      ]
+    },
+    {
+      "unit": 68,
+      "file": "tests/workbuddy-current-context-batch.test.ts",
+      "title": "原上下文、媒体占位与内部空行逐字段进入 canonical/occurrence",
+      "tests": [
+        "共享当前原文到核心来源的分层单位 原上下文、媒体占位与内部空行逐字段进入 canonical/occurrence"
+      ]
+    },
+    {
+      "unit": 69,
+      "file": "tests/workbuddy-current-context-batch.test.ts",
+      "title": "原 3+4 source facts 保全，原无群名三条输入的跨 Item 弱身份不自动合并",
+      "tests": [
+        "共享当前原文到核心来源的分层单位 原 3+4 source facts 保全，原无群名三条输入的跨 Item 弱身份不自动合并"
+      ]
+    },
+    {
+      "unit": 70,
+      "file": "tests/workbuddy-current-context-batch.test.ts",
+      "title": "B 来源 INSERT 故障保留 A 与真实 failed Job，双 Item 摘要仍反映失败",
+      "tests": [
+        "共享当前原文到核心来源的分层单位 B 来源 INSERT 故障保留 A 与真实 failed Job，双 Item 摘要仍反映失败"
+      ]
+    },
+    {
+      "unit": 71,
+      "file": "tests/workbuddy-current-context-batch.test.ts",
+      "title": "同 Item 重放 duplicate-only/updated-only 不改 identity、位置、来源或 FTS 数量",
+      "tests": [
+        "共享当前原文到核心来源的分层单位 同 Item 重放 duplicate-only/updated-only 不改 identity、位置、来源或 FTS 数量"
+      ]
+    },
+    {
+      "unit": 72,
+      "file": "tests/workbuddy-current-context-batch.test.ts",
+      "title": "成功 A 重启后不再认领，只有未开始 B 获得首次执行权",
+      "tests": [
+        "共享当前原文到核心来源的分层单位 成功 A 重启后不再认领，只有未开始 B 获得首次执行权"
+      ]
+    },
+    {
+      "unit": 73,
+      "file": "tests/workbuddy-current-context-batch.test.ts",
+      "title": "真实失败/部分成功终态不能首次再 claim：partial=%s",
+      "tests": [
+        "共享当前原文到核心来源的分层单位 真实失败/部分成功终态不能首次再 claim：partial=false",
+        "共享当前原文到核心来源的分层单位 真实失败/部分成功终态不能首次再 claim：partial=true"
+      ]
+    },
+    {
+      "unit": 74,
+      "file": "tests/workbuddy-current-context-batch.test.ts",
+      "title": "七条固定原文的 Parser 输出、正文、来源位置和 FTS 全部保留",
+      "tests": [
+        "共享当前原文到核心来源的分层单位 七条固定原文的 Parser 输出、正文、来源位置和 FTS 全部保留"
+      ]
+    },
+    {
+      "unit": 75,
+      "file": "tests/workbuddy-single-card-ingress.test.ts",
+      "title": "%s 个真实核心 Item 分别冻结原四位置，生成两 Candidate/两 KeywordHit",
+      "tests": [
+        "共享四锁定原文的真实核心与派生边界 1 个真实核心 Item 分别冻结原四位置，生成两 Candidate/两 KeywordHit",
+        "共享四锁定原文的真实核心与派生边界 2 个真实核心 Item 分别冻结原四位置，生成两 Candidate/两 KeywordHit"
+      ]
+    },
+    {
+      "unit": 76,
+      "file": "tests/workbuddy-single-card-ingress.test.ts",
+      "title": "source 已在核心事务内绑定时冻结 Run，提交返回后才独立处理",
+      "tests": [
+        "共享四锁定原文的真实核心与派生边界 source 已在核心事务内绑定时冻结 Run，提交返回后才独立处理"
+      ]
+    },
+    {
+      "unit": 77,
+      "file": "tests/workbuddy-single-card-ingress.test.ts",
+      "title": "四原文 matcher 失败只标记派生失败，核心 Job 成功且 Keyword 两 Hit 完成",
+      "tests": [
+        "共享四锁定原文的真实核心与派生边界 四原文 matcher 失败只标记派生失败，核心 Job 成功且 Keyword 两 Hit 完成"
+      ]
+    },
+    {
+      "unit": 78,
+      "file": "tests/workbuddy-single-card-ingress.test.ts",
+      "title": "旧无证据四消息不补来源/任务，只处理本次 Item 的原四 occurrence",
+      "tests": [
+        "共享四锁定原文的真实核心与派生边界 旧无证据四消息不补来源/任务，只处理本次 Item 的原四 occurrence"
+      ]
+    }
+  ],
+  "groups": {
+    "MESSAGE_PROVENANCE": [
+      48,
+      49,
+      50,
+      51,
+      52,
+      53,
+      54,
+      55,
+      56,
+      57,
+      58
+    ],
+    "WEAK_IDENTITY_CASES": [
+      52
+    ],
+    "BATCH_IMPORT_SESSION_SHARED": [
+      18,
+      19
+    ],
+    "BATCH_IMPORT_ITEM_SHARED": [
+      14,
+      15,
+      16,
+      17
+    ],
+    "BATCH_IMPORT_CONCURRENCY_SHARED": [
+      1,
+      2
+    ],
+    "KEYWORD_SHARED": [
+      41,
+      42,
+      43,
+      44,
+      45,
+      46,
+      47,
+      61,
+      62,
+      63
+    ],
+    "COMMITMENT_SHARED": [
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      75,
+      76,
+      77,
+      78
+    ],
+    "CONTEXT_SHARED": [
+      29,
+      41,
+      61
+    ],
+    "UI_SHARED": [
+      33,
+      60
+    ],
+    "DEPLOYMENT_PATH_SELECTION_SHARED": [
+      34
+    ],
+    "SINGLE_CARD_SHARED_PARTS": [
+      75,
+      76,
+      77,
+      78
+    ]
+  },
+  "unapprovedSkips": [
+    {
+      "file": "tests/deployment.test.ts",
+      "test": "Windows 安装与 WorkBuddy 连接组件 正式运行使用 Electron userData，只有测试显式传入时才隔离",
+      "review": "空 override 选 userData，显式 override 选隔离路径。 当前C盘字面量是夹具，runtimeDataDirectory本身只做通用resolve选择，无连接器、句柄或Windows API。"
+    }
+  ]
+}
