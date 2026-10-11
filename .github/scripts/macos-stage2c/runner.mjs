@@ -67,6 +67,74 @@ function suitePassed(summary, names) {
       && classifySkipped(summary).filter(row => row.file === file.file).every(row => row.category === 'WINDOWS_ONLY_CONTRACT')
   })
 }
+const scopeAnchors = Object.freeze({
+  product: '4a7823fad1820b5c71a8584dab213cc46ff11477',
+  portability: '58e75c89afa11190adfba6676501cbc9ff8b5dee',
+  reviewedManifest: '4878de9dcb58f2b7de2730ba0ee7c2d46e63082b',
+  stabilization: 'f5de104507f296054811deec605ac0ed7cfbde72'
+})
+const exactCIAllowedPaths = Object.freeze([
+  // 首次已审核的验收提交：3ffa6db6382a8e483c17b8448a969a86a883e6b9。
+  '.github/scripts/macos-stage2c/electron-smoke.cjs',
+  '.github/scripts/macos-stage2c/runner.mjs',
+  '.github/scripts/macos-stage2c/runtime-core.ts',
+  '.github/workflows/macos-stage2c-validation.yml',
+  // 第二次已审核的门禁提交：e189a5328f9883cc9ff6403a0ca3627d1c672731。
+  '.github/scripts/macos-stage2c/search-runtime.ts',
+  '.github/scripts/macos-stage2c/windows-only-cases.json',
+  '.github/scripts/macos-stage2c/windows-search-baseline.json',
+  // 第三次已审核的门禁提交：4878de9dcb58f2b7de2730ba0ee7c2d46e63082b。
+  '.github/scripts/macos-stage2c/portability-cases.json',
+  '.github/scripts/macos-stage2c/result-audit.mjs'
+])
+// 仅分类内存中的真实文件清单；调用方先保存全部诊断，再触发失败门禁。
+function classifyCommitScope({ manifest, reviewedManifest, originalFiles, stabilizationFiles, changedFiles, afterStabilization, ancestry }) {
+  const samePaths = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort())
+  const files = Array.isArray(manifest.files) ? manifest.files : []
+  const units = Array.isArray(manifest.units) ? manifest.units : []
+  const sharedCases = units.flatMap(unit => Array.isArray(unit?.tests) ? unit.tests : [])
+  const originalMetadataPreserved = ['files', 'units', 'groups'].every(key => JSON.stringify(manifest[key]) === JSON.stringify(reviewedManifest[key]))
+  const originalFilesMatch = samePaths(originalFiles, [...files, 'tests/shared-core-fixture.ts', 'tests/shared-json-evidence-fixture.ts'])
+  const portabilityValid = ancestry.product && ancestry.portability && manifest.testCommit === scopeAnchors.portability
+    && originalFilesMatch && originalMetadataPreserved && files.length === 20 && units.length === 78 && sharedCases.length === 93
+    && originalFiles.every(file => file.startsWith('tests/'))
+  const stabilizationFilesMatch = samePaths(stabilizationFiles, Array.isArray(manifest.stabilizationFiles) ? manifest.stabilizationFiles : [])
+  const stabilizationTestOnly = stabilizationFiles.length === 7 && stabilizationFiles.every(file => file.startsWith('tests/'))
+  const stabilizationValid = ancestry.stabilization && manifest.stabilizationCommit === scopeAnchors.stabilization
+    && stabilizationFilesMatch && stabilizationTestOnly
+  const approvedTests = new Set([...originalFiles, ...stabilizationFiles].filter(file => file.startsWith('tests/')))
+  const approvedCI = new Set(exactCIAllowedPaths)
+  const unauthorizedTests = changedFiles.filter(file => file.startsWith('tests/') && !approvedTests.has(file))
+  const unauthorizedCI = changedFiles.filter(file => file.startsWith('.github/') && !approvedCI.has(file))
+  // 其余文件均不在本轮授权范围，包含生产源码、数据库结构、依赖、版本及构建配置。
+  const productionFiles = changedFiles.filter(file => !approvedTests.has(file) && !approvedCI.has(file)
+    && !file.startsWith('tests/') && !file.startsWith('.github/'))
+  const afterTestViolations = afterStabilization.filter(file => !approvedCI.has(file))
+  const portabilityViolation = !portabilityValid
+  const stabilizationViolation = !stabilizationValid || unauthorizedTests.length > 0
+  const ciViolation = unauthorizedCI.length > 0 || afterTestViolations.length > 0
+  return {
+    PRODUCT_PROTECTION_BASE: scopeAnchors.product, ORIGINAL_PORTABILITY_ANCHOR: scopeAnchors.portability,
+    TEST_ONLY_COMMIT: scopeAnchors.stabilization, TEST_STABILIZATION_COMMIT: scopeAnchors.stabilization,
+    ORIGINAL_PORTABILITY_FILES_PRESERVED: originalFilesMatch && originalMetadataPreserved ? 'YES' : 'NO',
+    ORIGINAL_SHARED_FUNCTION_COUNT: units.length, ORIGINAL_EXPANDED_SHARED_CASE_COUNT: sharedCases.length,
+    TEST_STABILIZATION_FILES_MATCH: stabilizationFilesMatch ? 'YES' : 'NO',
+    TEST_STABILIZATION_COMMIT_SCOPE: stabilizationTestOnly ? 'TEST_ONLY' : 'INVALID',
+    TEST_PORTABILITY_SCOPE_VIOLATION: portabilityViolation ? 'YES' : 'NO',
+    TEST_STABILIZATION_SCOPE_VIOLATION: stabilizationViolation ? 'YES' : 'NO', CI_SCOPE_VIOLATION: ciViolation ? 'YES' : 'NO',
+    TEST_PORTABILITY_SCOPE: portabilityViolation ? 'FAIL' : 'PASS',
+    TEST_STABILIZATION_SCOPE: stabilizationViolation ? 'FAIL' : 'PASS', CI_SCOPE: ciViolation ? 'FAIL' : 'PASS',
+    PRODUCT_CODE_CHANGED: productionFiles.length > 0 ? 'YES' : 'NO',
+    PRODUCT_CODE_CHANGED_AFTER_TEST_COMMIT: productionFiles.length > 0 ? 'YES' : 'NO',
+    PRODUCT_CLASSIFICATION_BEFORE_GATE: 'YES', PRODUCT_CHANGED_FILES: productionFiles,
+    CHANGED_FILES_FROM_PRODUCT_BASE: changedFiles, UNAUTHORIZED_TEST_FILES: unauthorizedTests,
+    CI_SCOPE_VIOLATION_FILES: [...new Set([...unauthorizedCI, ...afterTestViolations])],
+    CI_FILES_CHANGED_AFTER_TEST_COMMIT: afterStabilization.filter(file => approvedCI.has(file)),
+    CI_ALLOWLIST_SCOPE: 'EXACT', CI_EXACT_ALLOWED_PATH_COUNT: approvedCI.size,
+    CURRENT_HEAD_SCOPE: changedFiles.length > 0 && productionFiles.length === 0
+      && !portabilityViolation && !stabilizationViolation && !ciViolation ? 'PASS' : 'FAIL'
+  }
+}
 async function main() {
   // 环境不符时，不安装依赖或继续测试。
   for (const [command, args] of [['uname', ['-a']], ['uname', ['-m']], ['sw_vers', []], ['node', ['--version']], ['npm', ['--version']]]) {
@@ -80,22 +148,32 @@ async function main() {
   result.MACOS_VERSION = commandText('sw_vers', ['-productVersion'])
   result.HEAD = commandText('git', ['rev-parse', 'HEAD']); assert.equal(result.HEAD, process.env.GITHUB_SHA)
   result.BRANCH = process.env.GITHUB_REF_NAME; assert.equal(result.BRANCH, 'feat/macos-stage2b-platform')
-  const base = '4a7823fad1820b5c71a8584dab213cc46ff11477'
+  const base = scopeAnchors.product
   result.SEARCH_COMMIT = base
   result.STABILIZATION_COMMIT = '0ef3a79ba5c00d9e60aa56945a5f266bcf07a70b'
+  const filesBetween = (from, to) => commandText('git', ['diff', '--no-renames', '--name-only', '-z', from, to]).split('\0').filter(Boolean)
+  const ancestor = (from, to) => {
+    try { commandText('git', ['merge-base', '--is-ancestor', from, to]); return true } catch { return false }
+  }
+  const scope = classifyCommitScope({
+    manifest: portability,
+    reviewedManifest: JSON.parse(commandText('git', ['show', scopeAnchors.reviewedManifest + ':.github/scripts/macos-stage2c/portability-cases.json'])),
+    originalFiles: filesBetween(scopeAnchors.portability + '^', scopeAnchors.portability),
+    stabilizationFiles: filesBetween(scopeAnchors.stabilization + '^', scopeAnchors.stabilization),
+    changedFiles: filesBetween(base, 'HEAD'), afterStabilization: filesBetween(scopeAnchors.stabilization, 'HEAD'),
+    ancestry: {
+      product: ancestor(base, 'HEAD'),
+      portability: ancestor(scopeAnchors.portability, scopeAnchors.reviewedManifest) && ancestor(scopeAnchors.reviewedManifest, scopeAnchors.stabilization),
+      stabilization: ancestor(scopeAnchors.stabilization, 'HEAD')
+    }
+  })
+  Object.assign(result, scope)
+  assert.equal(scope.PRODUCT_CODE_CHANGED, 'NO', '生产保护基线之后存在未经授权的生产文件变化')
+  assert.equal(scope.TEST_PORTABILITY_SCOPE_VIOLATION, 'NO', '原测试迁移范围或共享用例清单不完整')
+  assert.equal(scope.TEST_STABILIZATION_SCOPE_VIOLATION, 'NO', '测试稳定化提交、范围或后续测试文件不符合授权')
+  assert.equal(scope.CI_SCOPE_VIOLATION, 'NO', '最新测试提交之后存在未经批准的文件或不在精确名单中的验收文件')
+  assert.equal(scope.CURRENT_HEAD_SCOPE, 'PASS', '当前提交范围未通过全部保护门禁')
   assert.equal(commandText('git', ['rev-parse', base + '^']), result.STABILIZATION_COMMIT)
-  commandText('git', ['merge-base', '--is-ancestor', base, 'HEAD'])
-  const changed = commandText('git', ['diff', '--name-only', base, 'HEAD']).split('\n')
-  result.TEST_ONLY_COMMIT = portability.testCommit
-  commandText('git', ['merge-base', '--is-ancestor', portability.testCommit, 'HEAD'])
-  const testFiles = commandText('git', ['diff', '--name-only', portability.testCommit + '^', portability.testCommit]).split('\n')
-  assert.deepEqual([...testFiles].sort(), [...portability.files, 'tests/shared-core-fixture.ts', 'tests/shared-json-evidence-fixture.ts'].sort())
-  const ciOnly = file => file === '.github/workflows/macos-stage2c-validation.yml' || file.startsWith('.github/scripts/macos-stage2c/')
-  assert.ok(changed.length > 0 && changed.every(file => ciOnly(file) || testFiles.includes(file)))
-  const afterTest = commandText('git', ['diff', '--name-only', portability.testCommit, 'HEAD']).split('\n').filter(Boolean)
-  assert.ok(afterTest.every(ciOnly), '已审核测试提交之后只允许 CI 文件变化')
-  result.PRODUCT_CODE_CHANGED_AFTER_TEST_COMMIT = 'NO'
-  result.CI_FILES_CHANGED_AFTER_TEST_COMMIT = afterTest
   assert.equal(commandText('git', ['status', '--porcelain', '--untracked-files=no']), '')
   assert.equal(commandText('git', ['rev-parse', 'v0.2.0-alpha.20^{}']), '34e0a292416e7720585e3aabf84e5f1d857cfc36')
   const tempParent = fs.realpathSync(process.env.RUNNER_TEMP)

@@ -1,5 +1,15 @@
 {
   "testCommit": "58e75c89afa11190adfba6676501cbc9ff8b5dee",
+  "stabilizationCommit": "f5de104507f296054811deec605ac0ed7cfbde72",
+  "stabilizationFiles": [
+    "tests/batch-import-concurrency.test.ts",
+    "tests/batch-import-item.test.ts",
+    "tests/batch-import-session.test.ts",
+    "tests/commitment-post-import.test.ts",
+    "tests/deployment.test.ts",
+    "tests/keyword-radar-desktop.test.ts",
+    "tests/keyword-radar-post-import.test.ts"
+  ],
   "files": [
     "tests/batch-import-concurrency.test.ts",
     "tests/batch-import-evidence.test.ts",
