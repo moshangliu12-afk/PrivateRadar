@@ -1,0 +1,77 @@
+name: macOS Stage3C 已签名及公证发行候选
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  signed-candidate:
+    if: github.ref == 'refs/heads/feat/macos-stage3-packaging'
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - name: 首先核对凭据是否存在
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        shell: bash
+        run: |
+          missing=0
+          for name in CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY_P8 APPLE_API_KEY_ID APPLE_API_ISSUER; do
+            if [[ -n "${!name}" ]]; then
+              printf '%s: 存在\n' "$name"
+            else
+              printf '%s: 不存在\n' "$name"
+              missing=1
+            fi
+          done
+          if [[ "$missing" == 1 ]]; then
+            echo 'MISSING_SIGNING_CREDENTIALS'
+            exit 1
+          fi
+      - name: 检出受控 Stage3 源码
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: 使用已验证的 Node 版本
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.14.0'
+      - name: 核对实际平台、架构及源码身份
+        run: |
+          node -e "const assert = require('node:assert/strict'); assert.equal(process.platform, 'darwin'); assert.equal(process.arch, 'arm64'); assert.equal(process.version, 'v24.14.0')"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --short)"
+      - name: 按锁文件安装依赖
+        run: npm ci
+      - name: 构建、签名、公证与后验检查
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: npm run dist:mac:arm64:signed
+      - name: 清除本次流程的临时密钥
+        if: always()
+        run: |
+          if [[ -f scripts/package-macos-arm64-signed.mjs ]]; then
+            node scripts/package-macos-arm64-signed.mjs --cleanup
+          fi
+      - name: 上传通过检查的最终候选
+        uses: actions/upload-artifact@v4
+        with:
+          name: PrivateRadar-macOS-arm64-signed-notarized-${{ github.sha }}
+          path: |
+            release/stage3c-arm64/*.dmg
+            release/stage3c-arm64/stage3c-package-report.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7

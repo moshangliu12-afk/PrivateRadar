@@ -17,6 +17,7 @@
     "dist:win": "npm run build && electron-builder --win nsis --x64",
     "dist:win:dir": "npm run build && electron-builder --win --x64 --dir",
     "dist:mac:arm64": "node scripts/package-macos-arm64.mjs",
+    "dist:mac:arm64:signed": "node scripts/package-macos-arm64-signed.mjs",
     "preview": "electron-vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
