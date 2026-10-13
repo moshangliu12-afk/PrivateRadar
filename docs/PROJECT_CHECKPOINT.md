@@ -114,7 +114,7 @@
 - alpha.9 只修复 Search 中文本空白不一致导致的漏召回：Query 已归一化空白，但 hybrid-search 对原始正文直接 `includes`，双空格、多空格、换行或制表符会使 lexical / expansion 失配，即使 FTS 已命中仍可能被后续硬筛选淘汰。
 - 修复将 Search 比较文本统一为 Unicode NFKC、连续空白折叠、trim 与 lowercase；未改变 Search V2 权重、阈值、实体、时间或排序逻辑。
 - 未修改 D1、Daily Value、Topic、WorkBuddy Connector、MCP 协议、SQLite schema、identity / fingerprint 或去重规则。
-- Windows 真实升级安装验收通过：既有 146 条消息、12 批导入和本地数据库保留；WorkBuddy 已连接；`圆点贴纸` 双空格历史消息无需重新导入即可命中 1 条并展示证据和 Search 反馈；普通关键词正常命中，不存在关键词保持 0；Daily、Topic 与 Settings 正常。（本条查询文本为本次隐私修订从零构造的合成等价展示；保留原始验收事实及计数，不宣称原始数据为合成数据。）
+- Windows 真实升级安装验收通过：既有 146 条消息、12 批导入和本地数据库保留；WorkBuddy 已连接；双空格正文与单空格查询的历史归一化搜索案例（私人字段已移除）无需重新导入即可命中 1 条并展示证据和 Search 反馈；普通关键词正常命中，不存在关键词保持 0；Daily、Topic 与 Settings 正常。
 - 最新安装包：`release/PrivateRadar-Setup-0.2.0-alpha.9-x64.exe`（116,724,220 字节，2026-09-19 20:49:58）。
 - alpha.9 是新的最终冻结基线。
 
@@ -124,7 +124,7 @@
 - 未修改 Search、Topic、WorkBuddy / MCP、SQLite schema、原始消息、FTS、identity / fingerprint、去重或反馈结构。
 - `DAILY_VALUE_VERSION` 为 `daily-value-v2`，只负责 Value / Brief 缓存；`DAILY_ALGORITHM_VERSION` 为 `daily-candidate-v1.3-action-signals`，使旧 `v1.2` 历史 D1 candidate 自然失效并重新计算。
 - 隔离副本持久化重算：2026-09-19 为 D1 `4`、Final `2`（社保认证 `MUST_SHOW / HIGH`、周六安全提醒 `MAY_SHOW / MEDIUM`）；2026-09-20 为 D1 `5`、Final `4`（模型替换、聊天转入工具为 `MAY_SHOW / MEDIUM`；失效风险、生成失败积分损失为 `MAY_SHOW / LOW`）。
-- Windows 真实覆盖安装验收通过：167 条消息、14 个聊天批次和 167 条 FTS 保留；WorkBuddy、Topic、Search、Daily / Search 反馈正常；`圆点贴纸` 与“纸鲸调色”正常命中，不存在词保持 0，未发现普通闲聊明显误入 Daily。（本条查询文本为本次隐私修订从零构造的合成等价展示；保留原始验收事实及计数，不宣称原始数据为合成数据。）
+- Windows 真实覆盖安装验收通过：167 条消息、14 个聊天批次和 167 条 FTS 保留；WorkBuddy、Topic、Search、Daily / Search 反馈正常；空白归一化历史验收案例（私人字段已移除）与“纸鲸调色”正常命中，不存在词保持 0，未发现普通闲聊明显误入 Daily。（本条查询文本为本次隐私修订从零构造的合成等价展示；保留原始验收事实及计数，不宣称原始数据为合成数据。）
 - 最新安装包：`release/PrivateRadar-Setup-0.2.0-alpha.10-x64.exe`（116,725,107 字节，2026-09-21 16:00:04）。
 - alpha.10 是新的最终冻结基线。
 
