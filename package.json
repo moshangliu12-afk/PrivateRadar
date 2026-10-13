@@ -3,6 +3,7 @@
   "version": "0.2.0-alpha.20",
   "productName": "PrivateRadar",
   "private": true,
+  "license": "Apache-2.0",
   "author": "PrivateRadar",
   "description": "本地优先的个人聊天情报系统",
   "engines": {
