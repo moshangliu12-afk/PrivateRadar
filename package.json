@@ -16,6 +16,7 @@
     "build:mcp": "esbuild ./src/main/integrations/workbuddy/server.ts --bundle --platform=node --format=esm --outfile=./integrations/workbuddy/connector/dist/server.mjs",
     "dist:win": "npm run build && electron-builder --win nsis --x64",
     "dist:win:dir": "npm run build && electron-builder --win --x64 --dir",
+    "dist:mac:arm64": "node scripts/package-macos-arm64.mjs",
     "preview": "electron-vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
@@ -74,6 +75,16 @@
         }
       ],
       "artifactName": "PrivateRadar-Setup-${version}-x64.${ext}"
+    },
+    "mac": {
+      "target": [
+        { "target": "dmg", "arch": ["arm64"] },
+        { "target": "dir", "arch": ["arm64"] }
+      ],
+      "identity": null,
+      "forceCodeSigning": false,
+      "notarize": false,
+      "artifactName": "PrivateRadar-${version}-macOS-arm64-unsigned.${ext}"
     },
     "nsis": {
       "oneClick": false,

@@ -1,0 +1,62 @@
+name: macOS Stage3A 未签名 arm64 开发包
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/macos-stage3-packaging]
+    paths:
+      - package.json
+      - scripts/package-macos-arm64.mjs
+      - .github/workflows/macos-stage3a-packaging.yml
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    if: github.ref == 'refs/heads/feat/macos-stage3-packaging'
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - name: 检出本次 Stage3 提交
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: 使用已验证的 Node 版本
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.14.0'
+      - name: 核对真实平台、架构及源码身份
+        run: |
+          node -e "const assert = require('node:assert/strict'); assert.equal(process.platform, 'darwin'); assert.equal(process.arch, 'arm64'); assert.equal(process.version, 'v24.14.0'); console.log(process.platform, process.arch, process.version)"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --short)"
+      - name: 按锁文件安装依赖
+        run: npm ci
+      - name: 类型检查、构建与未签名 arm64 打包
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run dist:mac:arm64
+      - name: 上传开发态 DMG 和保留属性的应用压缩包
+        uses: actions/upload-artifact@v4
+        with:
+          name: PrivateRadar-macOS-arm64-unsigned-${{ github.sha }}
+          path: |
+            release/stage3a-arm64/*.dmg
+            release/stage3a-arm64/*.app.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: 上传打包检查记录
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-stage3a-diagnostics-${{ github.run_id }}
+          path: |
+            release/stage3a-arm64/stage3a-package-report.json
+            release/stage3a-arm64/builder.log
+            release/stage3a-arm64/builder-mac-config.json
+          if-no-files-found: warn
+          retention-days: 7
