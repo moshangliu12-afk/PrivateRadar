@@ -6,12 +6,14 @@ import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import electronLicenseDelivery from './mac-electron-license-delivery.cjs'
+import thirdPartyLicenseDelivery from './prepare-third-party-licenses.cjs'
 
 const require = createRequire(import.meta.url)
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const outputRelative = 'release/stage3a-arm64'
 const output = join(root, outputRelative)
 export const { ensureMacElectronRuntime, inspectMacElectronRuntime, verifyAppElectronLicenses } = electronLicenseDelivery
+export const { verifyAppLicenses } = thirdPartyLicenseDelivery
 
 // 只为 Mac 命令创建独立配置，保留 Windows 的共享资源和命名。
 export function macConfiguration(product) {
@@ -20,11 +22,11 @@ export function macConfiguration(product) {
     ...shared,
     extends: null,
     directories: { ...shared.directories, output: outputRelative },
-    extraResources: [],
+    extraResources: [{ from: 'licenses/runtime', to: 'licenses', filter: ['**/*'] }],
     extraFiles: [],
     electronVersion: electronLicenseDelivery.expected.electron,
     electronDist: electronLicenseDelivery.runtimeDirectory(root),
-    afterPack: join(root, 'scripts', 'mac-electron-license-delivery.cjs'),
+    afterPack: join(root, 'scripts', 'prepare-third-party-licenses.cjs'),
     dmg: { sign: false }
   }
 }
@@ -136,6 +138,7 @@ async function packageMac() {
     assert.equal(existsSync(join(resources, 'workbuddy-connector')), false, 'Mac 包不得包含 Windows 连接器资源')
     assert.deepEqual(windowsPayloadFiles(resources), [], 'Mac 资源目录含 Windows 负载文件')
     report.electronLicenses = verifyAppElectronLicenses(app, electronRuntime)
+    report.thirdPartyLicenses = verifyAppLicenses(resources, root)
     const asarPath = join(resources, 'app.asar')
     const asar = require('@electron/asar')
     const entries = asar.listPackage(asarPath).map(path => path.replaceAll('\\', '/'))
@@ -163,6 +166,7 @@ async function packageMac() {
       assert.equal(hash(join(mountedApp, 'Contents', 'MacOS', executableName)), hash(executable))
       assert.equal(hash(join(mountedApp, 'Contents', 'Resources', 'app.asar')), hash(asarPath))
       report.dmgElectronLicenses = verifyAppElectronLicenses(mountedApp, electronRuntime)
+      report.dmgThirdPartyLicenses = verifyAppLicenses(join(mountedApp, 'Contents', 'Resources'), root)
       report.DMG_INSPECTION = 'PASS'
     } finally {
       await run('/usr/bin/hdiutil', ['detach', mountPoint], env)

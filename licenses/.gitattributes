@@ -1,0 +1,3 @@
+runtime/** -text
+runtime/** whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+runtime/*-LICENSE.txt -whitespace

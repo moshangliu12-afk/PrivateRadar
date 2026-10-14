@@ -22,7 +22,7 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build && npm run build:mcp",
-    "build:mcp": "esbuild ./src/main/integrations/workbuddy/server.ts --bundle --platform=node --format=esm --outfile=./integrations/workbuddy/connector/dist/server.mjs",
+    "build:mcp": "node scripts/prepare-third-party-licenses.cjs && esbuild ./src/main/integrations/workbuddy/server.ts --bundle --platform=node --format=esm --outfile=./integrations/workbuddy/connector/dist/server.mjs --metafile=./integrations/workbuddy/connector/dist/license-inputs.json && node scripts/prepare-third-party-licenses.cjs --check",
     "dist:win": "npm run build && electron-builder --win nsis --x64",
     "dist:win:dir": "npm run build && electron-builder --win --x64 --dir",
     "dist:mac:arm64": "node scripts/package-macos-arm64.mjs",
@@ -54,6 +54,8 @@
     "appId": "cn.privateradar.desktop",
     "productName": "PrivateRadar",
     "asar": true,
+    "beforePack": "./scripts/prepare-third-party-licenses.cjs",
+    "afterPack": "./scripts/prepare-third-party-licenses.cjs",
     "directories": {
       "output": "release"
     },
@@ -72,8 +74,14 @@
           "mcp.json",
           "icon.svg",
           "skills/**/*",
-          "dist/server.mjs"
+          "dist/server.mjs",
+          "licenses/**/*"
         ]
+      },
+      {
+        "from": "licenses/runtime",
+        "to": "licenses",
+        "filter": ["**/*"]
       }
     ],
     "win": {

@@ -6,7 +6,7 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { macConfiguration, unsignedEnvironment, ensureMacElectronRuntime, verifyAppElectronLicenses } from './package-macos-arm64.mjs'
+import { macConfiguration, unsignedEnvironment, ensureMacElectronRuntime, verifyAppElectronLicenses, verifyAppLicenses } from './package-macos-arm64.mjs'
 
 const require = createRequire(import.meta.url)
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -193,6 +193,7 @@ async function packageSignedMac() {
     const app = join(output, 'mac-arm64', `${product.productName}.app`)
     // 签名后这里只读核验，许可注入已在共享 afterPack 阶段完成。
     const electronLicenses = verifyAppElectronLicenses(app, electronRuntime)
+    const thirdPartyLicenses = verifyAppLicenses(join(app, 'Contents', 'Resources'), root)
     const appSummary = await verifyApplication(app, product, buildEnvironment)
     const dmgName = `PrivateRadar-${product.version}-macOS-arm64-signed-notarized.dmg`
     const dmg = join(output, dmgName)
@@ -200,7 +201,7 @@ async function packageSignedMac() {
     const report = {
       stage: 'MACOS_STAGE3C_SIGNED_NOTARIZED_CANDIDATE', sourceCommit,
       productVersion: product.version, platform: process.platform, arch: process.arch,
-      electronLicenses,
+      electronLicenses, thirdPartyLicenses,
       ...bundleVersions(product.version), signing: appSummary,
       appStaple: 'PASS', appGatekeeper: 'PASS', dmgNotarization,
       dmgStaple: 'PASS', dmgGatekeeper: 'PASS', artifact: dmgName,
