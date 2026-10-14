@@ -82,6 +82,10 @@
         "from": "licenses/runtime",
         "to": "licenses",
         "filter": ["**/*"]
+      },
+      {
+        "from": "LICENSE",
+        "to": "licenses/PrivateRadar-LICENSE.txt"
       }
     ],
     "win": {

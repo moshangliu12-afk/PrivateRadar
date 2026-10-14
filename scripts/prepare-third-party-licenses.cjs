@@ -2,6 +2,7 @@ const assert = require('node:assert/strict')
 const { createHash } = require('node:crypto')
 const { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } = require('node:fs')
 const { basename, join, resolve } = require('node:path')
+const projectLicenseDelivery = require('./project-license-delivery.cjs')
 
 const root = resolve(__dirname, '..')
 const requiredComponents = ['@modelcontextprotocol/core', '@modelcontextprotocol/server', 'zod', 'content-type',
@@ -132,15 +133,17 @@ function verifyConnectorInputs(projectRoot, inventory) {
 
 function verifyConnector(projectRoot, validated = validateInventory(projectRoot), checkInputs = true) {
   const directory = join(projectRoot, 'integrations', 'workbuddy', 'connector', 'licenses')
-  const result = verifyDirectory(directory, connectorFiles(validated))
+  const result = verifyDirectory(directory, { ...connectorFiles(validated), ...projectLicenseDelivery.files(projectRoot) })
+  delete result[projectLicenseDelivery.fileName]
   if (checkInputs) verifyConnectorInputs(projectRoot, validated.inventory)
   return result
 }
 
 function syncConnector(projectRoot = root) {
+  const projectFiles = projectLicenseDelivery.files(projectRoot)
   const validated = validateInventory(projectRoot)
   const directory = join(projectRoot, 'integrations', 'workbuddy', 'connector', 'licenses')
-  const files = connectorFiles(validated)
+  const files = { ...connectorFiles(validated), ...projectFiles }
   if (existsSync(directory)) {
     ordinaryDirectory(directory)
     // 写入前检查全部生成目标，避免通过链接改写 canonical 或产品文件。
@@ -156,17 +159,25 @@ function syncConnector(projectRoot = root) {
 }
 
 function verifyAppLicenses(resources, projectRoot = root, includeConnector = false) {
+  const projectFiles = projectLicenseDelivery.files(projectRoot)
   const validated = validateInventory(projectRoot)
-  const files = verifyDirectory(join(resources, 'licenses'), validated.files, includeConnector ? [] : electronFiles)
+  const directory = join(resources, 'licenses')
+  const files = verifyDirectory(directory, { ...validated.files, ...projectFiles }, includeConnector ? [] : electronFiles)
+  delete files[projectLicenseDelivery.fileName]
+  const projectLicense = projectLicenseDelivery.verifyTarget(directory, projectRoot)
+  const connectorDirectory = join(resources, 'workbuddy-connector', 'licenses')
   const connector = includeConnector
-    ? verifyDirectory(join(resources, 'workbuddy-connector', 'licenses'), connectorFiles(validated))
+    ? verifyDirectory(connectorDirectory, { ...connectorFiles(validated), ...projectFiles })
     : null
+  if (connector) delete connector[projectLicenseDelivery.fileName]
+  const connectorProjectLicense = includeConnector ? projectLicenseDelivery.verifyTarget(connectorDirectory, projectRoot) : null
   if (!includeConnector) assert.equal(existsSync(join(resources, 'workbuddy-connector')), false, 'Mac 不得包含 Windows Connector')
-  return { componentCount: validated.inventory.components.length, files, connector }
+  return { componentCount: validated.inventory.components.length, files, connector, projectLicense, connectorProjectLicense }
 }
 
 function beforePack(context) {
   const projectRoot = context.packager.projectDir
+  projectLicenseDelivery.validateRoot(projectRoot)
   const validated = validateInventory(projectRoot)
   verifyConnector(projectRoot, validated)
 }

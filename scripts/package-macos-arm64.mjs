@@ -7,6 +7,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import electronLicenseDelivery from './mac-electron-license-delivery.cjs'
 import thirdPartyLicenseDelivery from './prepare-third-party-licenses.cjs'
+import projectLicenseDelivery from './project-license-delivery.cjs'
 
 const require = createRequire(import.meta.url)
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -22,7 +23,7 @@ export function macConfiguration(product) {
     ...shared,
     extends: null,
     directories: { ...shared.directories, output: outputRelative },
-    extraResources: [{ from: 'licenses/runtime', to: 'licenses', filter: ['**/*'] }],
+    extraResources: [{ from: 'licenses/runtime', to: 'licenses', filter: ['**/*'] }, projectLicenseDelivery.extraResource()],
     extraFiles: [],
     electronVersion: electronLicenseDelivery.expected.electron,
     electronDist: electronLicenseDelivery.runtimeDirectory(root),
