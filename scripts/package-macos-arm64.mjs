@@ -11,7 +11,7 @@ const require = createRequire(import.meta.url)
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const outputRelative = 'release/stage3a-arm64'
 const output = join(root, outputRelative)
-export const { inspectMacElectronRuntime, verifyAppElectronLicenses } = electronLicenseDelivery
+export const { ensureMacElectronRuntime, inspectMacElectronRuntime, verifyAppElectronLicenses } = electronLicenseDelivery
 
 // 只为 Mac 命令创建独立配置，保留 Windows 的共享资源和命名。
 export function macConfiguration(product) {
@@ -88,7 +88,7 @@ async function packageMac() {
   assert.equal(config.publish, undefined)
   assert.equal(require('electron-builder/package.json').version, '26.0.12')
   const env = unsignedEnvironment(process.env)
-  const electronRuntime = inspectMacElectronRuntime(root)
+  const electronRuntime = ensureMacElectronRuntime(root)
   config.electronDist = electronRuntime.sourceDirectory
   mkdirSync(output, { recursive: true })
   const reportPath = join(output, 'stage3a-package-report.json')

@@ -6,7 +6,7 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { macConfiguration, unsignedEnvironment, inspectMacElectronRuntime, verifyAppElectronLicenses } from './package-macos-arm64.mjs'
+import { macConfiguration, unsignedEnvironment, ensureMacElectronRuntime, verifyAppElectronLicenses } from './package-macos-arm64.mjs'
 
 const require = createRequire(import.meta.url)
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -165,7 +165,7 @@ async function packageSignedMac() {
   assert.ok(Object.values(presence).every(Boolean), 'MISSING_SIGNING_CREDENTIALS')
   const product = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
   const configuration = signedConfiguration(product)
-  const electronRuntime = inspectMacElectronRuntime(root)
+  const electronRuntime = ensureMacElectronRuntime(root)
   configuration.electronDist = electronRuntime.sourceDirectory
   const output = join(root, outputRelative)
   const buildEnvironment = unsignedEnvironment(process.env)

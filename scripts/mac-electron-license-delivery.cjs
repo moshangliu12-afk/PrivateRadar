@@ -35,6 +35,37 @@ function runtimeDirectory(projectRoot) {
   return join(dirname(require.resolve('electron/package.json', { paths: [projectRoot] })), 'dist')
 }
 
+function ensureMacElectronRuntime(projectRoot) {
+  assert.equal(process.platform, 'darwin', '运行时准备必须在真实 macOS 上执行')
+  assert.equal(process.arch, 'arm64', '运行时准备必须在真实 arm64 上执行')
+  const packagePath = require.resolve('electron/package.json', { paths: [projectRoot] })
+  const packageRoot = dirname(packagePath)
+  const installed = JSON.parse(readFileSync(packagePath, 'utf8'))
+  const lockVersion = JSON.parse(readFileSync(join(projectRoot, 'package-lock.json'), 'utf8')).packages['node_modules/electron'].version
+  assert.equal(lockVersion, expected.electron, '锁文件 Electron 版本不匹配')
+  assert.equal(installed.version, expected.electron, '已安装 Electron 包版本不匹配')
+  const directory = runtimeDirectory(projectRoot)
+  if (!existsSync(directory)) {
+    assert.equal(installed.bin['install-electron'], 'install.js', '官方 Electron 安装入口不匹配')
+    const installer = join(packageRoot, 'install.js')
+    regularFile(installer)
+    const checksums = JSON.parse(readFileSync(join(packageRoot, 'checksums.json'), 'utf8'))
+    assert.equal(checksums[`electron-v${expected.electron}-darwin-arm64.zip`],
+      '49b91ef265c603c8888500f807484b63816069c30f87ba2b403e7c87f0f45035', '官方 Mac 发行包校验和不匹配')
+    // 只传递基本系统变量，固定官方目标；不继承镜像、缓存覆盖、跳过下载、调试或签名变量。
+    const env = {}
+    for (const name of ['PATH', 'HOME', 'TMPDIR', 'LANG', 'LC_ALL']) {
+      if (process.env[name] !== undefined) env[name] = process.env[name]
+    }
+    Object.assign(env, { ELECTRON_INSTALL_PLATFORM: 'darwin', ELECTRON_INSTALL_ARCH: 'arm64' })
+    console.log('准备固定版本的官方 macOS arm64 Electron 运行时。')
+    execFileSync(process.execPath, [installer], { cwd: projectRoot, env, timeout: 600000, maxBuffer: 1048576 })
+    assert.ok(existsSync(directory), '官方运行时安装完成后仍缺少 dist')
+  }
+  // 已有目录也必须通过原有门禁，不以重新下载掩盖版本或来源不符。
+  return inspectMacElectronRuntime(projectRoot)
+}
+
 function verifyRuntimeVersions(lockVersion, packageVersion, actual) {
   assert.equal(lockVersion, expected.electron, '锁文件 Electron 版本不匹配')
   assert.equal(packageVersion, expected.electron, '已安装 Electron 包版本不匹配')
@@ -147,5 +178,5 @@ async function afterPack(context) {
 }
 
 module.exports = afterPack
-Object.assign(module.exports, { expected, filenames, runtimeDirectory, verifyRuntimeVersions,
+Object.assign(module.exports, { expected, filenames, runtimeDirectory, ensureMacElectronRuntime, verifyRuntimeVersions,
   verifyNodeNotice, inspectMacElectronRuntime, copyLicenseMaterials, verifyAppElectronLicenses })
