@@ -5,11 +5,13 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSy
 import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import electronLicenseDelivery from './mac-electron-license-delivery.cjs'
 
 const require = createRequire(import.meta.url)
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const outputRelative = 'release/stage3a-arm64'
 const output = join(root, outputRelative)
+export const { inspectMacElectronRuntime, verifyAppElectronLicenses } = electronLicenseDelivery
 
 // 只为 Mac 命令创建独立配置，保留 Windows 的共享资源和命名。
 export function macConfiguration(product) {
@@ -20,6 +22,9 @@ export function macConfiguration(product) {
     directories: { ...shared.directories, output: outputRelative },
     extraResources: [],
     extraFiles: [],
+    electronVersion: electronLicenseDelivery.expected.electron,
+    electronDist: electronLicenseDelivery.runtimeDirectory(root),
+    afterPack: join(root, 'scripts', 'mac-electron-license-delivery.cjs'),
     dmg: { sign: false }
   }
 }
@@ -83,6 +88,8 @@ async function packageMac() {
   assert.equal(config.publish, undefined)
   assert.equal(require('electron-builder/package.json').version, '26.0.12')
   const env = unsignedEnvironment(process.env)
+  const electronRuntime = inspectMacElectronRuntime(root)
+  config.electronDist = electronRuntime.sourceDirectory
   mkdirSync(output, { recursive: true })
   const reportPath = join(output, 'stage3a-package-report.json')
   const report = {
@@ -128,6 +135,7 @@ async function packageMac() {
     assert.equal((await run('/usr/bin/lipo', ['-archs', framework], env)).text.trim(), 'arm64')
     assert.equal(existsSync(join(resources, 'workbuddy-connector')), false, 'Mac 包不得包含 Windows 连接器资源')
     assert.deepEqual(windowsPayloadFiles(resources), [], 'Mac 资源目录含 Windows 负载文件')
+    report.electronLicenses = verifyAppElectronLicenses(app, electronRuntime)
     const asarPath = join(resources, 'app.asar')
     const asar = require('@electron/asar')
     const entries = asar.listPackage(asarPath).map(path => path.replaceAll('\\', '/'))
@@ -154,6 +162,7 @@ async function packageMac() {
       assert.ok(existsSync(join(mountedApp, 'Contents', 'Info.plist')))
       assert.equal(hash(join(mountedApp, 'Contents', 'MacOS', executableName)), hash(executable))
       assert.equal(hash(join(mountedApp, 'Contents', 'Resources', 'app.asar')), hash(asarPath))
+      report.dmgElectronLicenses = verifyAppElectronLicenses(mountedApp, electronRuntime)
       report.DMG_INSPECTION = 'PASS'
     } finally {
       await run('/usr/bin/hdiutil', ['detach', mountPoint], env)

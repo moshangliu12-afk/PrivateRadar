@@ -6,7 +6,7 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { macConfiguration, unsignedEnvironment } from './package-macos-arm64.mjs'
+import { macConfiguration, unsignedEnvironment, inspectMacElectronRuntime, verifyAppElectronLicenses } from './package-macos-arm64.mjs'
 
 const require = createRequire(import.meta.url)
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -165,6 +165,8 @@ async function packageSignedMac() {
   assert.ok(Object.values(presence).every(Boolean), 'MISSING_SIGNING_CREDENTIALS')
   const product = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
   const configuration = signedConfiguration(product)
+  const electronRuntime = inspectMacElectronRuntime(root)
+  configuration.electronDist = electronRuntime.sourceDirectory
   const output = join(root, outputRelative)
   const buildEnvironment = unsignedEnvironment(process.env)
   const sourceCommit = (await run('git', ['rev-parse', 'HEAD'], buildEnvironment, 'SOURCE_COMMIT_READ_FAILED')).trim()
@@ -189,6 +191,8 @@ async function packageSignedMac() {
       '--mac', '--arm64', '--publish', 'never'
     ], environment, 'SIGNED_APPLICATION_BUILD_FAILED')
     const app = join(output, 'mac-arm64', `${product.productName}.app`)
+    // 签名后这里只读核验，许可注入已在共享 afterPack 阶段完成。
+    const electronLicenses = verifyAppElectronLicenses(app, electronRuntime)
     const appSummary = await verifyApplication(app, product, buildEnvironment)
     const dmgName = `PrivateRadar-${product.version}-macOS-arm64-signed-notarized.dmg`
     const dmg = join(output, dmgName)
@@ -196,6 +200,7 @@ async function packageSignedMac() {
     const report = {
       stage: 'MACOS_STAGE3C_SIGNED_NOTARIZED_CANDIDATE', sourceCommit,
       productVersion: product.version, platform: process.platform, arch: process.arch,
+      electronLicenses,
       ...bundleVersions(product.version), signing: appSummary,
       appStaple: 'PASS', appGatekeeper: 'PASS', dmgNotarization,
       dmgStaple: 'PASS', dmgGatekeeper: 'PASS', artifact: dmgName,
