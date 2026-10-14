@@ -1,21 +1,21 @@
 # PrivateRadar alpha.20 使用指南
 
-PrivateRadar 帮你整理主动导入的聊天，并能回到原始消息查看依据。当前完成并封板版本为 `0.2.0-alpha.20`，已完成正式部署与验收；当前验证平台为 Windows 11 x64。macOS 尚不支持，下一阶段仍在评估。
+PrivateRadar 帮你整理主动导入的聊天，并能回到原始消息查看依据。当前完成并封板版本为 `0.2.0-alpha.20`，已完成正式部署与验收；Windows 11 x64 的正式导入与安装版已验收。Apple Silicon Mac 为开发候选，已通过源码运行与未签名打包 CI，打包应用实体验收、签名、公证和正式发行尚未完成。
 
-## 安装与初次体验
+## Windows 安装与初次体验
 
-alpha.20 在 GitHub 上只归档源码和 annotated tag，没有 GitHub Release 或安装器下载资产。已有可信 alpha.20 安装器时，按安装向导安装；不要把历史 Release 的旧安装包当作 alpha.20。如果 Windows 提示发布者未知，先确认来源，再决定是否继续。
+alpha.20 已有 [GitHub Pre-release 档案页](https://github.com/moshangliu12-afk/PrivateRadar/releases/tag/v0.2.0-alpha.20)，保留源码与 annotated tag 封板记录；该 Release 没有上传 Windows 安装器、Skill 或 macOS 资产。GitHub 自动生成的源码压缩包不属于手工上传的安装资产。已有可信 alpha.20 安装器时，按安装向导安装；不要把历史 Release 的旧安装包当作 alpha.20。如果 Windows 提示发布者未知，先确认来源，再决定是否继续。
 
 安装后可在开始菜单或桌面打开 PrivateRadar，不需要安装 Node.js 或使用命令行。首次打开可点击“体验 Demo”，页面会明确标记演示数据。
 
-## 连接 WorkBuddy
+## Windows 连接 WorkBuddy
 
 1. 在 PrivateRadar 中点击“导入我的微信聊天”，再点击“配置 WorkBuddy”。
 2. 回到 WorkBuddy 连接器列表，找到 PrivateRadar（`privateradar-workbuddy`），由你本人确认信任。
 3. 回到 PrivateRadar，点击“检查连接”。更新后若提示需要重新确认信任，请在 WorkBuddy 中确认。
 4. 若连接器更新后仍未刷新连接，请重新启动 WorkBuddy，再检查连接与信任状态。
 
-## 单张微信聊天记录
+## Windows 单张微信聊天记录
 
 在 Windows 微信中选择聊天记录，通过系统分享发送一张微信聊天记录卡片到 WorkBuddy，并说：
 
@@ -23,7 +23,7 @@ alpha.20 在 GitHub 上只归档源码和 annotated tag，没有 GitHub Release 
 
 正式导入需要当前卡片提供完整原文和原始来源。逐条发送人、完整日期与时分必须能可靠解析；缺失、截断、数量不符或来源冲突时会停止导入，不会补造，也不能改用旧入口绕过。群名没有可靠来源时保持未知，不必自行猜填。
 
-## 两张微信聊天记录
+## Windows 两张微信聊天记录
 
 同一次发送两张微信聊天卡片到 WorkBuddy，并说：
 
@@ -32,6 +32,14 @@ alpha.20 在 GitHub 上只归档源码和 annotated tag，没有 GitHub Release 
 单卡或同次两张卡片都使用正式原始来源链。导入结束后查看整次及各附件的成功、重复或失败统计。当前不支持三张以上卡片；若提示材料缺失或冲突，请重新分享完整卡片，不要要求应用猜测历史附件或补造发送人和时间。
 
 你不需要找 ZIP、填写路径或 JSON、复制聊天文本、选择证据，或手工调用工具。
+
+## macOS 开发候选的手动 JSON
+
+当前 Mac 没有正式发行安装器。内部源码运行方式见 [README](README.md) 和 [贡献指南](CONTRIBUTING.md)。未签名 `.app` / DMG 仅完成 CI 打包；打包应用的实体安装验收仍为 `NOT_RUN / BLOCKED`，Developer ID 签名、公证与 stapling 未执行，真实 Apple 凭据未核验。
+
+在 Mac 的文件导入入口选择 JSON 文件。该入口仅接受 JSON，不提供 Windows WorkBuddy 配置或正式分享链，也不承诺 CSV / TXT 能力。手动 JSON 会保留原始文件字节与消息快照为本地 Evidence；其来源身份与 WorkBuddy 原始卡片分开，不从文件声明恢复微信卡片来源事实。
+
+实体源码验收已覆盖导入后搜索、关键词命中、承诺候选确认 / 忽略、已确认表达、同来源上下文、Finder 打开对应 Evidence 目录，以及退出后重新启动的持久化。可以使用 Command+A / C / V 操作输入框。来源缺失或冲突按既有保守规则处理，不猜造。
 
 ## 查看结果
 
@@ -43,8 +51,10 @@ alpha.20 在 GitHub 上只归档源码和 annotated tag，没有 GitHub Release 
 - 承诺表达（已确认）：只读回看你已确认的原话及来源；确认的是原话表达了承诺，不表示承诺已履行。
 - 批量收集：查看批量导入及归集记录；加入指定收集集合仅支持同次双卡，单卡暂不支持。
 
-关键词和承诺结果的“查看上下文”“查看证据”对应当前来源。证据暂不可用时，保留原话并提示，不替换成其他附件。普通文件格式另见 [文件导入格式](IMPORT_FORMATS.md)。部分展示正文仍可能裁剪末尾换行，完整来源与其他边界见 [已知问题](KNOWN_ISSUES.md)。
+关键词和承诺结果的“查看上下文”“查看证据”对应当前来源。证据暂不可用时，保留原话并提示，不替换成其他附件。普通文件格式另见 [文件导入格式](IMPORT_FORMATS.md)。Windows 封板的部分展示正文仍可能裁剪末尾换行，专项限制见 [已知问题](KNOWN_ISSUES.md)；Mac 手动 JSON 的原文保留与来源冲突使用独立契约，平台边界以上述章节为准。
 
 ## 数据与卸载
 
-数据默认保存在 `%APPDATA%\PrivateRadar\`，可在设置页打开数据或日志目录。安装器默认卸载配置保留用户数据；升级前仍应备份，不删除正式数据。PrivateRadar 自己的原生微信分享入口已延期，当前继续通过 WorkBuddy 主动分享导入。
+数据默认保存在 Electron 本地用户数据目录；Windows 通常为 `%APPDATA%\PrivateRadar\`，实际位置可在设置页打开。Windows 安装器默认卸载配置保留用户数据；升级前仍应备份。Mac 当前没有已验收的正式安装 / 卸载保证。PrivateRadar 原生微信分享入口已延期，Windows 继续通过 WorkBuddy 主动分享导入。
+
+远程 AI 与 Embedding 由用户在本机独立配置；启用后可能发送聊天证据，没有逐次确认门禁。数据库没有实现加密，详见 [隐私说明](PRIVACY.md)。问题报告应遵循 [安全说明](SECURITY.md)，不上传真实聊天、数据库或 Evidence。

@@ -2,9 +2,13 @@
 
 ## 当前参考入口
 
-当前完整封板版本为 `0.2.0-alpha.20`，标签 `v0.2.0-alpha.20` 继续指向 `34e0a292416e7720585e3aabf84e5f1d857cfc36`。当前产品状态、正式入口与下一阶段边界以 [README](../README.md) 和 [开发进度顶部](../DEVELOPMENT_PROGRESS.md) 为准。
+截至 2026-10-14，Windows 完整封板版本为 `0.2.0-alpha.20`。当前源码归档身份以现有 [v0.2.0-alpha.20 annotated tag](https://github.com/moshangliu12-afk/PrivateRadar/tree/v0.2.0-alpha.20) 为准；已有 [GitHub Pre-release](https://github.com/moshangliu12-afk/PrivateRadar/releases/tag/v0.2.0-alpha.20)，未上传该版本 Windows 安装器、Skill 或 macOS 资产。
 
-本文件下方保留早期历史检查点，包括 alpha.14 / alpha.14.1 与 alpha.15 RC 准备。当时的“当前版本”“冻结状态”、验收数字和旧会话交接提示均只适用于对应历史阶段，不是当前状态依据。历史内容原样保留；不得将旧提示当作当前执行授权。
+Apple Silicon 源码 / 运行时验收与 Stage3A 未签名 arm64 `.app` / DMG CI 打包已通过。打包应用实体验收仍为 `NOT_RUN / BLOCKED`；Stage3C 签名 / 公证配置为 `PASS_WITH_ISSUE`，真实 Apple 凭据未核验，签名、公证和 stapling 未执行，正式 macOS 发行未就绪。Mac 当前只提供手动 JSON；Windows WorkBuddy 正式链及 CSV / TXT 能力不归入 Mac 验收范围。
+
+当前候选树已完成真实搜索案例合成替换与 Apache-2.0 落地；本地开源准备文档仍不推送。仓库保持 Private，GitHub Support 清理、公开前仓库 / 安全设置与二进制许可归属最终核验尚未完成。alpha.21 尚未启动，原生微信分享继续延期。
+
+当前产品状态和边界以 [README](../README.md)、[使用指南](../USER_GUIDE.md) 和 [开发进度顶部](../DEVELOPMENT_PROGRESS.md) 为准。下方保留早期历史检查点、验收数字与当时决策；私人字段和旧提交标识已移除。历史章节中的“当前”“冻结”和旧会话提示仅适用于相应阶段，不作为当前源码身份或执行授权。
 
 ## 历史检查点原文
 
@@ -277,7 +281,7 @@
 
 ## alpha.15 RC 准备（2026-10-01）
 
-- 本检查点父提交基线：`master`，`74fc0c7d9bf7e6c43bec791f6a1907d902e8f556`，Step 5L-B 打包契约已完成。Step 5L-C 开始时 tracked 工作区干净，仅三个历史 Skill ZIP 未跟踪；随后完成的 RC 候选与测试稳定性修复由本检查点固化。
+- 本检查点父提交基线：`master`，`[历史提交标识已移除]`，Step 5L-B 打包契约已完成。Step 5L-C 开始时 tracked 工作区干净，仅三个历史 Skill ZIP 未跟踪；随后完成的 RC 候选与测试稳定性修复由本检查点固化。
 - 当前产品、Connector 与 MCP 版本：`0.2.0-alpha.15`；两份正式 Skill 保持字节同步的 `0.2.0-alpha.15-skill.3`。
 - 正式公开单卡与当前上下文恰好双卡工具，旧批量入口仅内部兼容。用户级官方 Skill 安全升级、自定义 Skill 保留与原子替换维持 Step 5L-B 契约。
 - Step 5G / 5H / 5I 已完成确定性输入契约、目录证据与当前上下文集成；Step 5J 真实双卡 5 + 5 条通过并带已知问题，随后验证回滚；Step 5K 已合入 alpha.14.1 维护修复。提交与匿名统计见 `docs/ALPHA15_STATUS.md`，隔离验收证据已保留。

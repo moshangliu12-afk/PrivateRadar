@@ -4,6 +4,14 @@
   "productName": "PrivateRadar",
   "private": true,
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/moshangliu12-afk/PrivateRadar"
+  },
+  "homepage": "https://github.com/moshangliu12-afk/PrivateRadar#readme",
+  "bugs": {
+    "url": "https://github.com/moshangliu12-afk/PrivateRadar/issues"
+  },
   "author": "PrivateRadar",
   "description": "本地优先的个人聊天情报系统",
   "engines": {

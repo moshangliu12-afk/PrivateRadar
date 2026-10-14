@@ -2,21 +2,40 @@
 
 ## 当前项目状态
 
-截至 2026-10-09，PrivateRadar `0.2.0-alpha.20` 已完成并封板。开发、隔离 UI 验收、界面调整、版本构建、正式部署、本地最终封板与 GitHub 归档均已完成。
+截至 2026-10-14，Windows 11 x64 的 `0.2.0-alpha.20` 已完成正式部署、验收与封板；GitHub 已建立 [alpha.20 Pre-release](https://github.com/moshangliu12-afk/PrivateRadar/releases/tag/v0.2.0-alpha.20)。该页面没有上传 Windows 安装器、Skill 或 macOS 资产。
 
-封板源码为 `34e0a292416e7720585e3aabf84e5f1d857cfc36`，[v0.2.0-alpha.20](https://github.com/moshangliu12-afk/PrivateRadar/tree/v0.2.0-alpha.20) 继续指向该提交。本轮归档后的文档同步是独立普通提交，不改变封板源码或标签。
+当前封板源码身份以现有 [v0.2.0-alpha.20 annotated tag](https://github.com/moshangliu12-afk/PrivateRadar/tree/v0.2.0-alpha.20) 为准。隐私清理后的 Git 身份已更新，历史阶段的旧提交不作为当前公开源码身份。后续 macOS 与开源准备是开发分支上的独立提交，未合并 master，未移动封板标签。
 
-| 已完成版本 | 高层摘要 |
+| 已完成 Windows 版本 | 高层摘要 |
 |---|---|
-| alpha.18 | 承诺候选、确认 / 忽略审核、来源上下文与原始证据回看；正式单卡与双卡统一使用原始上下文来源链 |
-| alpha.19 | 承诺表达（已确认）：只读回看用户已确认的原话及来源 |
-| alpha.20 | 今日情报中的关注词区块，展示用户显式关注信号，独立于“今天最重要” |
+| alpha.18 | 承诺候选、确认 / 忽略审核、来源上下文与 Evidence；单卡与双卡使用原始上下文来源链 |
+| alpha.19 | 承诺表达（已确认），只读回看用户确认的原话及来源 |
+| alpha.20 | 今日情报关注词区块，用户显式关注信号独立于“今天最重要” |
 
-当前验证平台为 Windows 11 x64，正式导入链为微信 → WorkBuddy → PrivateRadar。GitHub 使用源码与 annotated tag 归档，没有 alpha.20 GitHub Release 或安装器下载资产。
+Windows 正式导入链为微信 → WorkBuddy → PrivateRadar；原生微信分享入口继续延期，alpha.21 尚未启动。
 
-下一阶段尚待决定，仍在评估；alpha.21 尚未启动。macOS 当前不支持，尚未进入实现；PrivateRadar 原生微信分享入口已延期。
+## macOS 开发阶段
 
-当前使用与文档导航见 [README](README.md)，当前问题与范围见 [KNOWN_ISSUES](KNOWN_ISSUES.md)。
+| 阶段 | 当前状态 |
+|---|---|
+| Stage2C-A / B：Apple Silicon 自动化与实体 M4 源码运行 | `PASS` |
+| Stage3A：unsigned arm64 `.app` / DMG CI 打包 | `PASS` |
+| Stage3B：打包应用实体安装与产品验收 | `NOT_RUN / BLOCKED`，延期 |
+| Stage3C：签名 / 公证配置实施 | `PASS_WITH_ISSUE`，仅配置与本地检查完成 |
+| 真实 Apple 凭据 | `NOT_VERIFIED` |
+| Developer ID 签名 | `NOT_EXECUTED` |
+| notarization / stapling | `NOT_EXECUTED` |
+| 正式 macOS 发行 | `NOT_READY` |
+
+Mac 当前入口仅为手动 JSON，已完成的源码验收覆盖核心浏览、搜索、关键词、承诺审核、来源上下文、Finder Evidence 与重启持久化。Windows WorkBuddy 正式链、CSV / TXT 全能力和正式 Mac 安装器均未成为 Mac 已验收能力。
+
+## 开源准备
+
+当前候选树的遗留真实搜索案例已替换为合成数据；项目自身已采用 Apache-2.0，npm 的 `private: true` 保留。隐私、安全、贡献、第三方基础许可说明与公开仓库 metadata 已整理为本地候选文档。
+
+仓库仍保持 Private，本轮文档与元数据不推送。GitHub Support 敏感数据服务器端清理仍待完成，公开前仓库 / 安全设置、可用私密漏洞通道与二进制第三方归属最终核验仍待后续单独处理，公开条件尚未满足。
+
+当前使用与平台边界见 [README](README.md)、[使用指南](USER_GUIDE.md)；隐私、安全、贡献与许可说明见根目录对应文档。下方早期日志只说明当时阶段，保留历史验证事实，不作当前实施授权或下一阶段计划。
 
 ## 早期开发日志（历史记录）
 
