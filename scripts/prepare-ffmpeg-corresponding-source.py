@@ -7,7 +7,9 @@ import hashlib
 import io
 import json
 import lzma
+import os
 import re
+import subprocess
 import sys
 import tarfile
 import urllib.request
@@ -39,6 +41,38 @@ def json_bytes(value):
 
 def read_json(path):
     return json.loads(path.read_text(encoding='utf-8'))
+
+
+def validate_commit(commit):
+    require(isinstance(commit, str) and re.fullmatch(r'[0-9a-f]{40}', commit), '提交必须为 40 位小写十六进制 SHA')
+    return commit
+
+
+def git_text(project_root, *args):
+    # 排除调用者对仓库、索引或配置的环境覆盖，始终读取指定工作区；不刷新索引。
+    environment = {name: value for name, value in os.environ.items() if not name.startswith('GIT_')}
+    result = subprocess.run(['git', '--no-optional-locks', '-C', str(project_root), *args],
+                            env=environment, capture_output=True, timeout=30, check=False)
+    require(result.returncode == 0, '无法读取当前 Git 仓库状态或 HEAD')
+    return result.stdout.decode('utf-8').strip()
+
+
+def current_source_commit(project_root=None):
+    project_root = (ROOT if project_root is None else Path(project_root)).resolve()
+    require(Path(git_text(project_root, 'rev-parse', '--show-toplevel')).resolve() == project_root,
+            '源码准备目录不是当前 Git 工作区根目录')
+    require(not git_text(project_root, 'status', '--porcelain', '--untracked-files=all'),
+            '源码包要求干净工作区，拒绝未提交、暂存或未跟踪文件')
+    return validate_commit(git_text(project_root, 'rev-parse', 'HEAD'))
+
+
+def verify_private_radar_source_binding(expected_commit, manifest):
+    """验收方将 Windows 候选、Mac CI 与清单分别绑定到同一个预期提交。"""
+    validate_commit(expected_commit)
+    require(isinstance(manifest, dict) and isinstance(manifest.get('privateradar'), dict), '来源清单缺少 PrivateRadar 身份')
+    actual = validate_commit(manifest['privateradar'].get('source_commit'))
+    require(actual == expected_commit, 'PrivateRadar source_commit 与预期提交不一致')
+    return actual
 
 
 def safe_name(name):
@@ -160,6 +194,7 @@ def validate_project(metadata):
 
 
 def collect(cache, download=False):
+    source_commit = current_source_commit()
     lock = read_json(INPUT / 'sources.lock.json')
     require(lock['schema_version'] == 1 and lock['strategy'] == 'conservative_superset', '来源锁格式不匹配')
     files = {}
@@ -178,6 +213,7 @@ def collect(cache, download=False):
         add(files, spec['target'], value, spec.get('mode', '100644'))
     metadata = read_json(INPUT / 'provenance-inputs.json')
     require(metadata['schema_version'] == 1, '交付元数据格式不匹配')
+    require('source_commit' not in metadata['privateradar'], '静态模板不得写入发行提交身份')
     validate_project(metadata)
     for platform, receipt in metadata['effective_gn_args']['original_receipts'].items():
         name = 'build-receipts/' + platform + '/args.gn'
@@ -227,12 +263,15 @@ def collect(cache, download=False):
     opus_src = {name.removeprefix('opus/src/'): value for name, value in files.items() if name.startswith('opus/src/')}
     require(git_tree(opus_src) == metadata['opus']['src_tree'], '实际 Chromium Opus src tree 身份不符')
     licenses = [name for name in sorted(files) if re.search(r'(^|/)(LICENSE[^/]*|COPYING[^/]*|NOTICE[^/]*|CREDITS[^/]*)$', name, re.I)]
-    manifest = {**metadata, 'generated_configs': configs, 'source_trees': trees, 'build_inputs': lock['blobs'],
+    manifest = {**metadata, 'privateradar': {**metadata['privateradar'], 'source_commit': source_commit},
+                'generated_configs': configs, 'source_trees': trees, 'build_inputs': lock['blobs'],
                 'source_delivery_strategy': 'conservative_superset', 'llvm_runtime_source_strategy': 'FULL_FIXED_SPLIT_REPOS',
                 'reproducibility': {'official_binary_bit_reproduction': False, 'official_target_graph_receipt': 'unavailable', 'official_link_receipt': 'unavailable'},
                 'inventory_scope': '全部归档文件；包内 manifest 自身除外，以避免循环摘要。外置 manifest 另含完整 archive_inventory。',
                 'license_files': licenses, 'file_inventory': inventory(files),
                 'source_archive': {'sha256': None, 'reason': '最终归档摘要仅由外置 manifest 记录，避免自引用。'}}
+    verify_private_radar_source_binding(source_commit, manifest)
+    require(current_source_commit() == source_commit, '准备期间 HEAD 改变，拒绝交付')
     return files, manifest
 
 
@@ -270,8 +309,11 @@ def main():
     args = parser.parse_args()
     cache, output = external(args.cache), external(args.output)
     require(not output.exists(), '交付目录已经存在，拒绝覆盖')
+    source_commit = current_source_commit()
     cache.mkdir(parents=True, exist_ok=True)
     files, manifest = collect(cache, args.download)
+    verify_private_radar_source_binding(source_commit, manifest)
+    require(current_source_commit() == source_commit, '归档前 HEAD 改变，拒绝交付')
     version = manifest['privateradar']['version']
     prefix = 'PrivateRadar-' + version + '-ffmpeg-corresponding-source'
     add(files, MANIFEST, json_bytes(manifest))
@@ -282,6 +324,9 @@ def main():
     require(size < LIMIT, '发行资产体积达到或超过 2 GiB；禁止自动拆分')
     extracted = read_tar(archive)
     require(inventory(extracted) == inventory({prefix + '/' + name: value for name, value in files.items()}), '归档解包内容与完整清单不一致')
+    internal = json.loads(extracted[prefix + '/' + MANIFEST][1])
+    verify_private_radar_source_binding(source_commit, internal)
+    require(current_source_commit() == source_commit, '归档期间 HEAD 改变，拒绝交付')
     final = {**manifest, 'archive_inventory': inventory(files), 'source_archive': {
         'file': archive.name, 'bytes': size, 'sha256': digest(archive.read_bytes()),
         'uncompressed_source_bytes': sum(len(value) for _, value in files.values()),
@@ -290,8 +335,10 @@ def main():
         'extraction_verified': True, 'release_asset_limit_bytes_exclusive': LIMIT,
         'release_asset_limit_source': 'https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases',
         'uploaded': False}}
+    verify_private_radar_source_binding(source_commit, final)
     (output / MANIFEST).write_bytes(json_bytes(final))
-    print(json.dumps({'状态': 'PASS', '文件数': len(files), '归档字节': size, 'SHA256': final['source_archive']['sha256']}, ensure_ascii=False), flush=True)
+    require(current_source_commit() == source_commit, '交付结束时 HEAD 改变，拒绝交付')
+    print(json.dumps({'状态': 'PASS', '来源提交': source_commit, '文件数': len(files), '归档字节': size, 'SHA256': final['source_archive']['sha256']}, ensure_ascii=False), flush=True)
 
 
 if __name__ == '__main__':

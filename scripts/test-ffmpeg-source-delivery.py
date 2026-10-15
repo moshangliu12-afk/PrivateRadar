@@ -1,11 +1,14 @@
 """源码交付的独立拒绝行为测试，不涉及产品或业务断言。"""
 
 import importlib.util
+import json
+import subprocess
 import sys
 import tarfile
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.dont_write_bytecode = True
 spec = importlib.util.spec_from_file_location('delivery', Path(__file__).with_name('prepare-ffmpeg-corresponding-source.py'))
@@ -91,6 +94,90 @@ class DeliveryTests(unittest.TestCase):
             self.assertEqual(delivery.read_tar(first), {'synthetic/' + name: value for name, value in files.items()})
             with self.assertRaises(FileExistsError):
                 delivery.write_archive(first, 'synthetic', files)
+
+
+class SourceBindingTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.directory = Path(self.temporary.name)
+        self.root = self.directory / 'repository'
+        self.root.mkdir()
+        self.git('init', '-q')
+        self.input = self.root / 'source.txt'
+        self.input.write_text('合成来源\n', encoding='utf-8')
+        self.git('add', 'source.txt')
+        self.git('-c', 'user.name=合成验证', '-c', 'user.email=fixture@example.invalid', 'commit', '-q', '-m', '合成基线')
+        self.commit = self.git('rev-parse', 'HEAD')
+
+    def git(self, *args):
+        return subprocess.check_output(['git', '-C', str(self.root), *args], stderr=subprocess.DEVNULL).decode().strip()
+
+    def test_current_and_detached_head(self):
+        self.assertEqual(delivery.current_source_commit(self.root), self.commit)
+        self.git('checkout', '--detach', '-q')
+        self.assertEqual(delivery.current_source_commit(self.root), self.commit)
+
+    def test_dirty_tracked_file(self):
+        self.input.write_text('合成未提交变更\n', encoding='utf-8')
+        with self.assertRaisesRegex(ValueError, '干净工作区'):
+            delivery.current_source_commit(self.root)
+
+    def test_staged_change(self):
+        self.input.write_text('合成暂存变更\n', encoding='utf-8')
+        self.git('add', 'source.txt')
+        with self.assertRaisesRegex(ValueError, '干净工作区'):
+            delivery.current_source_commit(self.root)
+
+    def test_untracked_input_and_official_entry(self):
+        (self.root / 'untracked-source.txt').write_text('合成新增输入', encoding='utf-8')
+        output, cache = self.directory / 'output', self.directory / 'cache'
+        with patch.object(delivery, 'ROOT', self.root), patch.object(sys, 'argv', ['delivery', '--cache', str(cache), '--output', str(output)]):
+            with self.assertRaisesRegex(ValueError, '干净工作区'):
+                delivery.main()
+        self.assertFalse(output.exists())
+        self.assertFalse(cache.exists())
+
+    def test_stale_manifest_and_missing_release_field(self):
+        historical = delivery.read_json(delivery.INPUT / 'provenance-inputs.json')['privateradar']['source_commit_before_delivery_change']
+        with self.assertRaisesRegex(ValueError, '与预期提交不一致'):
+            delivery.verify_private_radar_source_binding(self.commit, {'privateradar': {'source_commit': historical}})
+        with self.assertRaises(ValueError):
+            delivery.verify_private_radar_source_binding(self.commit, {'privateradar': {'source_commit_before_delivery_change': historical}})
+
+    def test_commit_format_and_git_failure(self):
+        for value in [None, 'A' * 40, 'a' * 39, 'a' * 41, 'z' * 40]:
+            with self.assertRaises(ValueError):
+                delivery.validate_commit(value)
+        with patch.object(delivery, 'git_text', side_effect=ValueError('合成 Git 读取失败')):
+            with self.assertRaisesRegex(ValueError, 'Git 读取失败'):
+                delivery.current_source_commit(self.root)
+
+    def test_git_head_format_rejected_without_fallback(self):
+        with patch.object(delivery, 'git_text', side_effect=[str(self.root), '', 'A' * 40]):
+            with self.assertRaisesRegex(ValueError, '小写十六进制'):
+                delivery.current_source_commit(self.root)
+
+    def test_real_archive_manifest_binding(self):
+        output, cache = self.directory / 'output', self.directory / 'cache'
+        files = {'synthetic.c': ('100644', b'int synthetic;\n')}
+        manifest = {'privateradar': {'version': 'synthetic', 'source_commit': self.commit}}
+        with patch.object(delivery, 'ROOT', self.root), patch.object(delivery, 'collect', return_value=(files, manifest)), patch.object(sys, 'argv', ['delivery', '--cache', str(cache), '--output', str(output)]):
+            delivery.main()
+        external = delivery.read_json(output / delivery.MANIFEST)
+        archive = next(output.glob('*.tar.xz'))
+        extracted = delivery.read_tar(archive)
+        internal = json.loads(next(value[1] for name, value in extracted.items() if name.endswith('/' + delivery.MANIFEST)))
+        self.assertEqual(delivery.verify_private_radar_source_binding(self.commit, external), self.commit)
+        self.assertEqual(delivery.verify_private_radar_source_binding(self.commit, internal), self.commit)
+
+    def test_changed_head_during_material_preparation(self):
+        output, cache = self.directory / 'output', self.directory / 'cache'
+        manifest = {'privateradar': {'version': 'synthetic', 'source_commit': self.commit}}
+        with patch.object(delivery, 'ROOT', self.root), patch.object(delivery, 'collect', return_value=({}, manifest)), patch.object(delivery, 'current_source_commit', side_effect=[self.commit, '0' * 40]), patch.object(sys, 'argv', ['delivery', '--cache', str(cache), '--output', str(output)]):
+            with self.assertRaisesRegex(ValueError, '归档前 HEAD 改变'):
+                delivery.main()
+        self.assertFalse(output.exists())
 
 
 if __name__ == '__main__':
