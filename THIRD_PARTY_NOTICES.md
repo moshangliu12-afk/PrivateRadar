@@ -48,3 +48,19 @@ BINARY_DISTRIBUTION_ATTRIBUTION_FOLLOWUP_REQUIRED = YES
 ```
 
 本文件用于项目级许可说明。Apache `NOTICE` 按实际来源通知义务另行处理，本轮没有创建根目录 NOTICE，也没有生成替代上游原通知的自定义文本。
+
+## FFmpeg 对应源码交付候选（B0-4）
+
+PrivateRadar 通过 Electron 44.3.0 分发 FFmpeg，当前已核验配置适用 LGPL-2.1-or-later。
+PrivateRadar 未修改该动态运行库。实际来源为 Chromium FFmpeg fork 固定提交
+`2b68d2babae73714846961fb0ee47e3b3d2e39a9`。
+
+`scripts/prepare-ffmpeg-corresponding-source.py` 按固定来源与摘要准备两平台共用的保守超集：
+完整 FFmpeg fork、Electron 补丁、原始参数、生成配置、Chromium Opus、固定 LLVM split 源码及构建上下文。
+原许可全文保留，来源与缺失项见生成的 `FFMPEG_SOURCE_PROVENANCE.json`。
+官方完整目标图和最终链接收据不可用，本候选不承诺按位重现官方二进制。
+
+App 的 `licenses/FFmpeg-LGPL-NOTICE.txt` 由现有资源规则交付并经许可钩子核验；
+独立 Connector 不包含 FFmpeg，因此不添加此通知。
+源码包仍是本地候选，尚未作为新增 Release 资产上传。正式二进制发行时应同时提供源码包与外置来源清单。
+真实安装包交付及 macOS 正式签名后动态库替换行为仍须单独验收。

@@ -1,0 +1,9 @@
+import("//electron/build/args/release.gn")
+use_remoteexec = true
+use_reclient = false
+use_siso = true
+target_cpu="arm64"
+mac_sdk_path = "//out/Default/xcode_links/electron/MacOSX26.5.sdk"
+
+thin_lto_enable_cache=false
+v8_snapshot_toolchain="//electron/build/toolchain/mac:clang_arm64_snapshot"

@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "evidence": {
+    "kind": "官方匹配 PDB 的模块列表与节贡献",
+    "pdb_guid": "0c4c0486-5612-12c0-4c4c-44205044422e",
+    "pdb_age": 1,
+    "ffmpeg_dll_sha256": "336587847c4ed3ef1a195d1aaea3d3951c9749a035ffa7951df4c0e02971e4e0"
+  },
+  "msvc_version": "14.50.35717",
+  "toolchain_identity": "vs_files/e66617bc68",
+  "windows_sdk": "10.0.26100.0",
+  "toolchain_profile": {
+    "url": "https://github.com/electron/electron/releases/download/v44.3.0/electron-v44.3.0-win32-x64-toolchain-profile.zip",
+    "bytes": 79717,
+    "sha256": "90386280bc7e4ac5d451e43e26a7c76ed1c8bcdc0206ec50762c7e4f09c59c28",
+    "included": false
+  },
+  "libraries": [
+    {
+      "name": "libcmt.lib",
+      "classification": "MSVC_C_RUNTIME",
+      "observed_archive_modules": 36,
+      "observed_section_contribution_bytes": 6052,
+      "system_or_toolchain_input": true,
+      "source_distributed_by_privateradar": false,
+      "binaries_in_source_bundle": false,
+      "reason": "由 Windows 平台或 MSVC 工具链提供；不伪造闭源源码，不把工具链二进制装入此源码包。模块观察不等于完整链接收据；节贡献是调试记录统计，不能当作完整链接后代码字节。"
+    },
+    {
+      "name": "libcpmt.lib",
+      "classification": "MSVC_CPP_RUNTIME",
+      "observed_archive_modules": 1,
+      "observed_section_contribution_bytes": 713,
+      "system_or_toolchain_input": true,
+      "source_distributed_by_privateradar": false,
+      "binaries_in_source_bundle": false,
+      "reason": "由 Windows 平台或 MSVC 工具链提供；不伪造闭源源码，不把工具链二进制装入此源码包。模块观察不等于完整链接收据；节贡献是调试记录统计，不能当作完整链接后代码字节。"
+    },
+    {
+      "name": "libvcruntime.lib",
+      "classification": "MSVC_COMPILER_RUNTIME",
+      "observed_archive_modules": 40,
+      "observed_section_contribution_bytes": 34554,
+      "system_or_toolchain_input": true,
+      "source_distributed_by_privateradar": false,
+      "binaries_in_source_bundle": false,
+      "reason": "由 Windows 平台或 MSVC 工具链提供；不伪造闭源源码，不把工具链二进制装入此源码包。模块观察不等于完整链接收据；节贡献是调试记录统计，不能当作完整链接后代码字节。"
+    },
+    {
+      "name": "libucrt.lib",
+      "classification": "WINDOWS_SDK_UCRT",
+      "observed_archive_modules": 294,
+      "observed_section_contribution_bytes": 299982,
+      "system_or_toolchain_input": true,
+      "source_distributed_by_privateradar": false,
+      "binaries_in_source_bundle": false,
+      "reason": "由 Windows 平台或 MSVC 工具链提供；不伪造闭源源码，不把工具链二进制装入此源码包。模块观察不等于完整链接收据；节贡献是调试记录统计，不能当作完整链接后代码字节。"
+    },
+    {
+      "name": "odbccp32.lib",
+      "classification": "WINDOWS_SDK_SYSTEM_LIBRARY",
+      "observed_archive_modules": 7,
+      "observed_section_contribution_bytes": 203,
+      "system_or_toolchain_input": true,
+      "source_distributed_by_privateradar": false,
+      "binaries_in_source_bundle": false,
+      "reason": "由 Windows 平台或 MSVC 工具链提供；不伪造闭源源码，不把工具链二进制装入此源码包。模块观察不等于完整链接收据；节贡献是调试记录统计，不能当作完整链接后代码字节。"
+    },
+    {
+      "name": "oldnames.lib",
+      "classification": "TOOLCHAIN_COMPATIBILITY_ARCHIVE",
+      "observed_archive_modules": 3,
+      "observed_section_contribution_bytes": 0,
+      "system_or_toolchain_input": true,
+      "source_distributed_by_privateradar": false,
+      "binaries_in_source_bundle": false,
+      "reason": "由 Windows 平台或 MSVC 工具链提供；不伪造闭源源码，不把工具链二进制装入此源码包。模块观察不等于完整链接收据；节贡献是调试记录统计，不能当作完整链接后代码字节。"
+    }
+  ],
+  "redistribution_boundary": "本记录保留平台/工具链输入分类，不授予 Microsoft 再分发权，也不将完整商业工具链声明为自由源码。最终二进制的全部发行材料仍须单独验收。"
+}

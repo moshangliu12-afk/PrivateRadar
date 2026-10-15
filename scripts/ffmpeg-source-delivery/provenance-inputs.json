@@ -1,0 +1,361 @@
+{
+  "schema_version": 1,
+  "privateradar": {
+    "name": "PrivateRadar",
+    "version": "0.2.0-alpha.20",
+    "source_commit_before_delivery_change": "8b94bbbad38729c9a57cf64fe3d4cd6d62a9f821",
+    "source_bundle_internal_version": "0.2.0-alpha.20",
+    "modified_ffmpeg_runtime": false,
+    "publication_state": "LOCAL_VALIDATION_CANDIDATE"
+  },
+  "electron": {
+    "version": "44.3.0",
+    "commit": "07e460719c75b2ec5ee4893f7d2192ef31c7b8c2",
+    "repository": "https://github.com/electron/electron",
+    "official_assets": [
+      {
+        "platform": "win32",
+        "arch": "x64",
+        "asset_url": "https://github.com/electron/electron/releases/download/v44.3.0/electron-v44.3.0-win32-x64.zip",
+        "bytes": 158149320,
+        "sha256": "26bf9a617d58d81772b3d68305d59ee48272969c15083c06db634a77358a8d9d",
+        "member": "ffmpeg.dll",
+        "member_bytes": 3113472,
+        "member_sha256": "336587847c4ed3ef1a195d1aaea3d3951c9749a035ffa7951df4c0e02971e4e0",
+        "privateradar_byte_identical": true,
+        "evidence": "前置官方运行库与 PrivateRadar 产物逐字节比对，本轮未重建或重下载运行库。"
+      },
+      {
+        "platform": "darwin",
+        "arch": "arm64",
+        "asset_url": "https://github.com/electron/electron/releases/download/v44.3.0/electron-v44.3.0-darwin-arm64.zip",
+        "bytes": 129788539,
+        "sha256": "49b91ef265c603c8888500f807484b63816069c30f87ba2b403e7c87f0f45035",
+        "member": "Electron.app/Contents/Frameworks/Electron Framework.framework/Versions/A/Libraries/libffmpeg.dylib",
+        "member_bytes": 2317968,
+        "member_sha256": "73fc0f18b5d30dbed26bf1c2ecbd061f4cd793ebf905a0c884c9ba10ef4c1e41",
+        "privateradar_byte_identical": true,
+        "evidence": "前置官方运行库与 PrivateRadar 产物逐字节比对，本轮未重建或重下载运行库。"
+      }
+    ]
+  },
+  "chromium": {
+    "version": "152.0.7977.78",
+    "commit": "170c2c9ffb4da86532459d72d9eda6b4944d1670",
+    "repository": "https://chromium.googlesource.com/chromium/src",
+    "tree": "5e3eae6de842319a9418af614a9cd1d49602fc7a",
+    "deps_sha256": "2557b5a638eb7f6d4efc81afee0e94e8ac811e70dfbca32d4214715c1fb3c4c9",
+    "full_source_included": false
+  },
+  "ffmpeg": {
+    "commit": "2b68d2babae73714846961fb0ee47e3b3d2e39a9",
+    "repository": "https://chromium.googlesource.com/chromium/third_party/ffmpeg",
+    "tree": "c60e6b597c312801ce91d81110442d40fbf4d672",
+    "full_fixed_fork": true,
+    "upstream_ancestor": "a5e6c0175a7245fc1a9f4639da2810156128aa8b",
+    "version_identity": "Electron 44.3.0 / Chromium 152.0.7977.78 固定 FFmpeg fork；上游祖先不能替代实际 fork。"
+  },
+  "target": [
+    {
+      "platform": "win32",
+      "arch": "x64",
+      "library_kind": "DLL"
+    },
+    {
+      "platform": "darwin",
+      "arch": "arm64",
+      "library_kind": "DYLIB"
+    }
+  ],
+  "effective_gn_args": {
+    "original_receipts": {
+      "windows": {
+        "run_id": 34254346496,
+        "job_id": 102157037781,
+        "artifact_id": 10069228426,
+        "report_member": "siso-report-541991697.tgz",
+        "run_url": "https://github.com/electron/electron/actions/runs/34254346496",
+        "report_sha256": "459418b49ac778ad6648dff98a1adc1a6bfa4942a49220124507fbc35b909ed8",
+        "sha256": "aa72bd93d3b421593da98a7a1fba9f1102b6ac2163aed350ab1798cbbe98d887",
+        "bytes": 122,
+        "original_bytes": true
+      },
+      "macos": {
+        "run_id": 34254346610,
+        "job_id": 102156981254,
+        "artifact_id": 10071500756,
+        "report_member": "siso-report-4104367579.tgz",
+        "run_url": "https://github.com/electron/electron/actions/runs/34254346610",
+        "report_sha256": "bb30f58e85826325a9599ef7e7268daae6955b9e3bb7b6a66ea4d1c26f1e81c6",
+        "sha256": "a24b6da16a834c067477adef594312fb3e24929337b18884384995dc5b97a0d9",
+        "bytes": 292,
+        "original_bytes": true
+      }
+    },
+    "final_effective_target_arguments_complete": false,
+    "recipe": {
+      "ffmpeg_branding": "Chrome",
+      "proprietary_codecs": true,
+      "is_component_ffmpeg": true,
+      "evidence": "固定 Electron release.gn/all.gn；不冒充完整最终目标参数收据。"
+    },
+    "target_label_from_source": "//third_party/ffmpeg:ffmpeg",
+    "official_target_graph": null
+  },
+  "patches": {
+    "applied_to_bundled_original_tree": false,
+    "ffmpeg_queue_commit": "07e460719c75b2ec5ee4893f7d2192ef31c7b8c2",
+    "ffmpeg_queue_path": "electron-ffmpeg-patches/.patches",
+    "ffmpeg": [
+      {
+        "order": 1,
+        "path": "electron-ffmpeg-patches/link_with_loader_path.patch",
+        "git_blob_sha": "2b0311ce5bca38db638f54b1ffc29d5325e6d3e7",
+        "sha256": "bc6cdc29ad4ec2641dd59b4c3a25375b9166c35e202e5122cb73190885ec647d",
+        "effect": "仅 macOS 动态库 install_name 从 @rpath 改为 @loader_path"
+      }
+    ],
+    "chromium_build_subset": [
+      {
+        "path": "electron-build-context/electron/patches/chromium/build_gn.patch",
+        "queue_index_1_based": 1,
+        "git_blob_sha": "1179f0aba3e8104fc3f7bafabd9f943bd8ad61be",
+        "sha256": "db553ae200f698e14f4c6465037b642fe2f6a2af7234178776e6c6aae1a4b210"
+      },
+      {
+        "path": "electron-build-context/electron/patches/chromium/build_resolve_pgo_profiles_from_electron_state_files.patch",
+        "queue_index_1_based": 2,
+        "git_blob_sha": "0b08235bdba4bb526f8ba8d1f8b463b4d1314bc8",
+        "sha256": "1fcce05d072ce91aaaa1126218a420e7485c9b2437971796cf4fd116d5647324"
+      },
+      {
+        "path": "electron-build-context/electron/patches/chromium/gtk_visibility.patch",
+        "queue_index_1_based": 13,
+        "git_blob_sha": "ac34883fb196d7b209f2359a7f6a4a95f65c2378",
+        "sha256": "001e719f6723302ea92708824860dbfe28f299e1af8383a5172485574c210663"
+      },
+      {
+        "path": "electron-build-context/electron/patches/chromium/ignore_rc_check.patch",
+        "queue_index_1_based": 40,
+        "git_blob_sha": "0e92b98969025e3c5d9efa8ec51f53051f7cf2a6",
+        "sha256": "4247c230bb2d62575a6e25c73d538041437486c40ec56cce61145b82efd49ac5"
+      },
+      {
+        "path": "electron-build-context/electron/patches/chromium/build_allow_resource_allowlist_generation_for_linux_and_macos.patch",
+        "queue_index_1_based": 159,
+        "git_blob_sha": "c9ab5505a6f04697a519da60ea7b2c0d0e832077",
+        "sha256": "2efe1d0c0efff9b620dabb4c21a56e9055ac1883c4e3c96db842073314c019da"
+      },
+      {
+        "path": "electron-build-context/electron/patches/chromium/build_fix_profile_runtime_resolution_for_pgo_instrumented_builds.patch",
+        "queue_index_1_based": 160,
+        "git_blob_sha": "6d7b879ff85b7ae699827e05ccc2ac638f6bb96d",
+        "sha256": "00a843df544c8aa94f0a3dfc92286bf372a55d082089399578b87b961451f5d8"
+      },
+      {
+        "path": "electron-build-context/electron/patches/chromium/build_disable_llvm_unroll-add-parallel-reductions_on_apple_targets.patch",
+        "queue_index_1_based": 161,
+        "git_blob_sha": "741c4c489ba7c4910800811bf647ee48acd09148",
+        "sha256": "cf240f0cf718b5e8ebd002efe8b2a823c10878448deae2c755f02cbe2c51487c"
+      },
+      {
+        "path": "electron-build-context/electron/patches/chromium/remove_cr_xcode_build_define_from_build_gn.patch",
+        "queue_index_1_based": 169,
+        "git_blob_sha": "abf5ab3dd91897d53777e6bf06df8c1f908762ea",
+        "sha256": "cf0991197811cdfea09eacd2e9876ed4f8d1110b5119d97d744fa1c1efaf67c8"
+      }
+    ],
+    "chromium_queue": "electron-build-context/electron/patches/chromium/.patches",
+    "subset_only": true
+  },
+  "opus": {
+    "chromium_commit": "170c2c9ffb4da86532459d72d9eda6b4944d1670",
+    "tree": "3c15a5719ecbcbbe1178633e7ef0d85677b1c2b2",
+    "src_tree": "b14b42adc7aecf699826c1ac4a16568fe71aae19",
+    "upstream_commit": "55513e81d8f606bd75d0ff773d2144e5f2a732f5",
+    "chromium_modifications_included": true,
+    "full_chromium_component": true
+  },
+  "static_dependencies": {
+    "opus": "两平台实际保留的静态代码",
+    "libcxx": "Windows 实际输入；另含 macOS 固定构建依赖的保守快照",
+    "libcxxabi": "macOS 固定构建依赖，保守纳入；未声称最终全部保留",
+    "compiler_rt": "Windows atomic 对象实际输入，已观察节贡献为 0；保守纳入完整固定 split repo",
+    "llvm_libc": "HEADER_ONLY_INPUT",
+    "windows_system_libraries": {
+      "schema_version": 1,
+      "evidence": {
+        "kind": "官方匹配 PDB 的模块列表与节贡献",
+        "pdb_guid": "0c4c0486-5612-12c0-4c4c-44205044422e",
+        "pdb_age": 1,
+        "ffmpeg_dll_sha256": "336587847c4ed3ef1a195d1aaea3d3951c9749a035ffa7951df4c0e02971e4e0"
+      },
+      "msvc_version": "14.50.35717",
+      "toolchain_identity": "vs_files/e66617bc68",
+      "windows_sdk": "10.0.26100.0",
+      "toolchain_profile": {
+        "url": "https://github.com/electron/electron/releases/download/v44.3.0/electron-v44.3.0-win32-x64-toolchain-profile.zip",
+        "bytes": 79717,
+        "sha256": "90386280bc7e4ac5d451e43e26a7c76ed1c8bcdc0206ec50762c7e4f09c59c28",
+        "included": false
+      },
+      "libraries": [
+        {
+          "name": "libcmt.lib",
+          "classification": "MSVC_C_RUNTIME",
+          "observed_archive_modules": 36,
+          "observed_section_contribution_bytes": 6052,
+          "system_or_toolchain_input": true,
+          "source_distributed_by_privateradar": false,
+          "binaries_in_source_bundle": false,
+          "reason": "由 Windows 平台或 MSVC 工具链提供；不伪造闭源源码，不把工具链二进制装入此源码包。模块观察不等于完整链接收据；节贡献是调试记录统计，不能当作完整链接后代码字节。"
+        },
+        {
+          "name": "libcpmt.lib",
+          "classification": "MSVC_CPP_RUNTIME",
+          "observed_archive_modules": 1,
+          "observed_section_contribution_bytes": 713,
+          "system_or_toolchain_input": true,
+          "source_distributed_by_privateradar": false,
+          "binaries_in_source_bundle": false,
+          "reason": "由 Windows 平台或 MSVC 工具链提供；不伪造闭源源码，不把工具链二进制装入此源码包。模块观察不等于完整链接收据；节贡献是调试记录统计，不能当作完整链接后代码字节。"
+        },
+        {
+          "name": "libvcruntime.lib",
+          "classification": "MSVC_COMPILER_RUNTIME",
+          "observed_archive_modules": 40,
+          "observed_section_contribution_bytes": 34554,
+          "system_or_toolchain_input": true,
+          "source_distributed_by_privateradar": false,
+          "binaries_in_source_bundle": false,
+          "reason": "由 Windows 平台或 MSVC 工具链提供；不伪造闭源源码，不把工具链二进制装入此源码包。模块观察不等于完整链接收据；节贡献是调试记录统计，不能当作完整链接后代码字节。"
+        },
+        {
+          "name": "libucrt.lib",
+          "classification": "WINDOWS_SDK_UCRT",
+          "observed_archive_modules": 294,
+          "observed_section_contribution_bytes": 299982,
+          "system_or_toolchain_input": true,
+          "source_distributed_by_privateradar": false,
+          "binaries_in_source_bundle": false,
+          "reason": "由 Windows 平台或 MSVC 工具链提供；不伪造闭源源码，不把工具链二进制装入此源码包。模块观察不等于完整链接收据；节贡献是调试记录统计，不能当作完整链接后代码字节。"
+        },
+        {
+          "name": "odbccp32.lib",
+          "classification": "WINDOWS_SDK_SYSTEM_LIBRARY",
+          "observed_archive_modules": 7,
+          "observed_section_contribution_bytes": 203,
+          "system_or_toolchain_input": true,
+          "source_distributed_by_privateradar": false,
+          "binaries_in_source_bundle": false,
+          "reason": "由 Windows 平台或 MSVC 工具链提供；不伪造闭源源码，不把工具链二进制装入此源码包。模块观察不等于完整链接收据；节贡献是调试记录统计，不能当作完整链接后代码字节。"
+        },
+        {
+          "name": "oldnames.lib",
+          "classification": "TOOLCHAIN_COMPATIBILITY_ARCHIVE",
+          "observed_archive_modules": 3,
+          "observed_section_contribution_bytes": 0,
+          "system_or_toolchain_input": true,
+          "source_distributed_by_privateradar": false,
+          "binaries_in_source_bundle": false,
+          "reason": "由 Windows 平台或 MSVC 工具链提供；不伪造闭源源码，不把工具链二进制装入此源码包。模块观察不等于完整链接收据；节贡献是调试记录统计，不能当作完整链接后代码字节。"
+        }
+      ],
+      "redistribution_boundary": "本记录保留平台/工具链输入分类，不授予 Microsoft 再分发权，也不将完整商业工具链声明为自由源码。最终二进制的全部发行材料仍须单独验收。"
+    }
+  },
+  "dynamic_system_dependencies": {
+    "win32-x64": [
+      "KERNEL32.dll"
+    ],
+    "darwin-arm64": [
+      "/usr/lib/libSystem.B.dylib"
+    ],
+    "system_binaries_included": false
+  },
+  "toolchain": {
+    "clang": "llvmorg-23-init-19482-g53d18800-1",
+    "llvm_producer_commit": "53d18800eda3b7407e53366f27ca78e922c6e0db",
+    "gn_revision": "641ace93dd9560e75e7add0d08f77b446fbb3b78",
+    "build_tools_commit": "5a3a3bf9ad0bea0bd7cf24121b9b636d6cb5c9ea",
+    "nasm_commit": "525a09a813be0f75b646ee93fc2a31c27b87d722",
+    "mac_sdk": {
+      "version": "26.5",
+      "url": "https://dev-cdn-experimental.electronjs.org/xcode/MacOSX-26.5.sdk.zip",
+      "expected_sha256": "4d800d3de31f7042d18e3b740930222d5897414f0cfe328a9bb58dc29e4e4186",
+      "measured_sha256": null,
+      "status": "NOT_INCLUDED",
+      "selection_source": "固定 build-tools src/utils/sdks.json；实际 args.gn 同时记录 SDK 选择"
+    },
+    "windows": {
+      "msvc": "14.50.35717",
+      "sdk": "10.0.26100.0",
+      "profile": {
+        "url": "https://github.com/electron/electron/releases/download/v44.3.0/electron-v44.3.0-win32-x64-toolchain-profile.zip",
+        "bytes": 79717,
+        "sha256": "90386280bc7e4ac5d451e43e26a7c76ed1c8bcdc0206ec50762c7e4f09c59c28",
+        "included": false
+      }
+    }
+  },
+  "pgo": [
+    {
+      "platform": "win-x64",
+      "state": "electron-build-context/electron/build/pgo_profiles/win-x64.pgo.txt",
+      "state_sha256": "424d8c6e8e86223a4463dcac59ed8baed4c6025fcb4ed55a819011524c27817a",
+      "url": "https://dev-cdn-experimental.electronjs.org/pgo/electron-win-x64-1788664530-949f5f529a.profdata",
+      "expected_sha256": "7067e6c897004b66c12b61030fa9e998dc13dfba82872a4cd1f947901425d3f2",
+      "measured_sha256": null,
+      "status": "NOT_INCLUDED",
+      "reason": "大型 profile 数据未下载，尚未核验其再分发授权；保留固定官方状态文件与预期摘要。"
+    },
+    {
+      "platform": "macos-arm64",
+      "state": "electron-build-context/electron/build/pgo_profiles/macos-arm64.pgo.txt",
+      "state_sha256": "67a99bd90bfbde476f092fa9f71b15a3f2ccfaa80f470fee4af04ee014191132",
+      "url": "https://dev-cdn-experimental.electronjs.org/pgo/electron-macos-arm64-1788664530-949f5f529a.profdata",
+      "expected_sha256": "0cf8749960f228f706c6a6bd15753ba1c1936dbfb0a2da2ca6e72b57ddada6d7",
+      "measured_sha256": null,
+      "status": "NOT_INCLUDED",
+      "reason": "大型 profile 数据未下载，尚未核验其再分发授权；保留固定官方状态文件与预期摘要。"
+    }
+  ],
+  "license_classification": {
+    "ffmpeg": "LGPL-2.1-or-later",
+    "CONFIG_GPL": 0,
+    "CONFIG_GPLV3": 0,
+    "CONFIG_NONFREE": 0,
+    "CONFIG_LIBOPUS": 1,
+    "evidence": "固定 Chrome/win/x64 与 Chrome/mac/arm64 原始生成配置；未启用 GPL/非自由选项",
+    "optional_source_license_texts_preserved": true,
+    "opus": "BSD-3-Clause",
+    "llvm_runtime": "Apache-2.0 WITH LLVM-exception；各原文件的独立声明保留",
+    "chromium_context": "BSD 风格；各原文件及随附依赖许可保留",
+    "electron_context": "MIT"
+  },
+  "completeness": {
+    "delivery_strategy": "CONSERVATIVE_SUPERSET",
+    "exact_minimum_claimed": false,
+    "original_args": true,
+    "platform_configs": true,
+    "full_ffmpeg_fork": true,
+    "full_target_graph": false,
+    "final_link_receipt": false,
+    "llvm_runtime": "FULL_FIXED_SPLIT_REPOS",
+    "llvm_libc_classification": "HEADER_ONLY_INPUT"
+  },
+  "known_limitations": [
+    "官方完整目标图、link response 与 link map 不可恢复",
+    "部分 PGO 数据、工具链和 SDK 未装入源码包",
+    "不是完整 Chromium 或 Electron 构建树，不承诺官方二进制按位复现",
+    "源码验证不等于最终二进制发行验收；本轮未上传任何发行资产",
+    "macOS 正式签名后的兼容动态库替换与本地重新签名仍须验收"
+  ],
+  "mac_signed_ffmpeg_replacement_acceptance_required": true,
+  "reverse_engineering_restriction_conflict": false,
+  "eula": "NO_SEPARATE_EULA",
+  "evidence": {
+    "official_receipt_report_sha256": "9e465d652b54e30b8b1fde7e2259a7f8501b25c1e6ab88fb4685e84b9062f036",
+    "provenance_audit_sha256": "3ce98873b28daf151c657652d66f5be8eb22654dfb2001af39dfc33229962e63"
+  }
+}

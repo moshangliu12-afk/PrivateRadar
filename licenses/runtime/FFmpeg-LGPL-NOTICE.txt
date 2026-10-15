@@ -1,0 +1,24 @@
+FFmpeg 许可与对应源码说明
+
+PrivateRadar 经由 Electron 44.3.0 包含 FFmpeg。此发行配置中的 FFmpeg 适用
+GNU Lesser General Public License 2.1 或更新版本（LGPL-2.1-or-later）。
+PrivateRadar 未修改随附的 FFmpeg 动态运行库二进制。
+
+固定来源：Chromium FFmpeg fork
+https://chromium.googlesource.com/chromium/third_party/ffmpeg
+提交：2b68d2babae73714846961fb0ee47e3b3d2e39a9
+
+本地交付候选包含对应的完整固定 FFmpeg fork、Electron 补丁、两平台原始参数、
+生成配置、Opus、LLVM 运行库源码、许可原文及保守构建上下文。
+正式二进制发行时应一同提供对应的源码包与 FFMPEG_SOURCE_PROVENANCE.json。
+预期包名：PrivateRadar-0.2.0-alpha.20-ffmpeg-corresponding-source.tar.xz。
+本通知不表示这些新增资产已经上传；实际资产及校验和以对应发行页为准。
+
+官方完整目标图与最终链接收据不可用。本源码包采用保守超集交付，
+不承诺按位重现 Electron 官方二进制。详见包内 BUILD_RECEIPT_LIMITATIONS.md。
+完整 LGPL 正文保留于源码包中的 ffmpeg/COPYING.LGPLv2.1。
+
+用户可以修改 LGPL 组件、替换兼容的动态 FFmpeg 库，并为调试这些修改进行逆向工程。
+替换仍受操作系统安全机制与签名行为影响。macOS 修改 App bundle 或替换 dylib
+可能需要本地重新签名；正式签名版本的替换流程尚待单独验收，本轮未验证签名行为。
+本通知不限制 LGPL 赋予用户的权利。项目没有单独的最终用户许可协议。
