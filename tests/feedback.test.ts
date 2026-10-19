@@ -1,3 +1,4 @@
+// 手工消息为从零构造的合成场景，日期为人工测试锚点；不代表真实聊天或事件。
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -33,7 +34,7 @@ function database(): DatabaseSync {
     source_batch_id: '反馈测试批次',
     batch_metadata: { conversation_name: '反馈测试群' },
     messages: [
-      { content: '虚构折页工具发布了星纹索引功能。', timestamp: '2004-02-03T09:00:00.000Z', sender_name: '合成成员甲', source_position: 0 },
+      { content: '虚构折页工具现已支持星纹索引功能。', timestamp: '2004-02-03T09:00:00.000Z', sender_name: '合成成员甲', source_position: 0 },
       { content: '合成隔离哨兵：银色棋子留在未关联的沙盘格。', timestamp: '2004-02-03T09:01:00.000Z', sender_name: '合成成员乙', source_position: 1 }
     ]
   })
@@ -46,7 +47,7 @@ function item(db: DatabaseSync): DailyBriefItem {
     candidateId: 'daily-feedback-candidate',
     date: '2004-02-03',
     title: '折页工具 功能更新',
-    representativeText: '虚构折页工具发布了星纹索引功能。',
+    representativeText: '虚构折页工具现已支持星纹索引功能。',
     importanceScore: 6.2,
     sourceMessageIds: [sourceId],
     sourceConversationIds: ['conversation:反馈测试群'],
@@ -56,7 +57,7 @@ function item(db: DatabaseSync): DailyBriefItem {
     firstSeenAt: '2004-02-03T09:00:00.000Z',
     lastSeenAt: '2004-02-03T09:00:00.000Z',
     reasonCodes: ['PRODUCT_OR_VERSION', 'EVENT_OR_RELEASE'],
-    summary: '虚构折页工具发布了星纹索引功能。',
+    summary: '虚构折页工具现已支持星纹索引功能。',
     whyItMatters: '产品出现明确功能更新。',
     category: '产品 / 技术',
     importanceLevel: 'medium',
@@ -132,7 +133,7 @@ describe('本地用户反馈', () => {
     saveSearchFeedback(db, { question: '折页工具', response: response(dailyItem.sourceMessageIds[0]), vote: 'INCORRECT', reasonCode: '找到了错误内容', appVersion: '0.2.0-alpha.8' })
     expect(runDailyIntelligence(db, '2004-02-03').candidates.map((candidate) => candidate.candidateId)).toEqual(dailyBefore)
     expect((await askChat(db, '折页工具', { anchorDate: '2004-02-03', aiProvider: null, embeddingProvider: null })).sourceMessageIds).toEqual(searchBefore.sourceMessageIds)
-    expect(db.prepare(`SELECT content FROM messages WHERE id = ?`).get(dailyItem.sourceMessageIds[0])).toEqual({ content: '虚构折页工具发布了星纹索引功能。' })
+    expect(db.prepare(`SELECT content FROM messages WHERE id = ?`).get(dailyItem.sourceMessageIds[0])).toEqual({ content: '虚构折页工具现已支持星纹索引功能。' })
   })
 
   it('初始化旧数据库后保留原消息并安全创建反馈表', () => {
@@ -156,7 +157,7 @@ describe('本地用户反馈', () => {
     const exportPath = join(directory, 'feedback.json')
     expect(exportFeedback(db, exportPath)).toBe(1)
     const payload = readFileSync(exportPath, 'utf8')
-    expect(payload).toContain('虚构折页工具发布了星纹索引功能。')
+    expect(payload).toContain('虚构折页工具现已支持星纹索引功能。')
     expect(payload).not.toContain('银色棋子留在未关联的沙盘格')
   })
 

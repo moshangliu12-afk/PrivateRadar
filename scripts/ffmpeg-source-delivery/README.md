@@ -1,5 +1,8 @@
 # FFmpeg 保守源码交付
 
+当前交付目标为 `0.2.0-alpha.21`。B0-4 的对应源码设计和现有候选验证已闭环；
+旧 alpha.20 源码包仅保留为历史验收参考，alpha.21 必须从统一最终候选提交重新生成并核验。
+
 使用 Python 3.12 或更新版本的标准库执行 `scripts/prepare-ffmpeg-corresponding-source.py`，
 指定仓库外的 `--cache` 和尚不存在的 `--output` 目录。
 默认仅使用缓存；显式加 `--download` 才会从 `sources.lock.json` 中的固定官方地址下载。
@@ -26,7 +29,9 @@ FFmpeg patch 队列仅含 `link_with_loader_path.patch`；构建上下文的 Chr
 
 包内 manifest 不写自身及整个 archive 的摘要，避免循环；外置同名 manifest
 包含完整归档清单（含包内 manifest）、压缩后大小和最终 SHA-256。
-两份文件用途不同，发行时应把外置 manifest 与 `.tar.xz` 一同交付。
+正式源码交付资产仅为 `PrivateRadar-0.2.0-alpha.21-ffmpeg-corresponding-source.tar.xz`，
+包内交付 `FFMPEG_SOURCE_PROVENANCE.json`。外置 manifest 只作内部验收材料，
+不作为第五项 Release 资产；最终公开摘要记录于 `SHA256SUMS.txt`。
 固定排序、Git 权限、零时间与所有者；压缩工具版本改变仍可能改变压缩字节，
 每次生成必须重新核验最终摘要。
 
@@ -44,3 +49,7 @@ FFmpeg patch 队列仅含 `link_with_loader_path.patch`；构建上下文的 Chr
 `verify_private_radar_source_binding(expected_commit, manifest)`：
 分别以 Windows 候选提交与 Mac CI `head_sha` 作为预期值核对清单。
 验收方还必须确认这两个预期值相同；旧清单、缺失字段及任何 SHA 不一致都必须拒绝。
+
+FFmpeg 动态链接，用户修改、替换兼容库及调试修改的 LGPL 权利保持不变。
+替换启动实测仅是可选工程验证，不是许可证发布硬门槛；当前 unsigned 发行不要求
+Developer ID、notarization 或签名后替换验收。对应源码、许可与必要材料的交付义务仍须履行。

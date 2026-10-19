@@ -1,10 +1,14 @@
-# PrivateRadar alpha.20 使用指南
+# PrivateRadar alpha.21 使用指南
 
-PrivateRadar 帮你整理主动导入的聊天，并能回到原始消息查看依据。当前完成并封板版本为 `0.2.0-alpha.20`，已完成正式部署与验收；Windows 11 x64 的正式导入与安装版已验收。Apple Silicon Mac 为开发候选，已通过源码运行与未签名打包 CI，打包应用实体验收、签名、公证和正式发行尚未完成。
+PrivateRadar 帮你整理主动导入的聊天，并能回到原始消息查看依据。当前准备 `0.2.0-alpha.21` 预发布，目标标签为 `v0.2.0-alpha.21`；Windows 本地安装候选已完成构建与人工验收；尚未提交、推送或创建目标标签，GitHub Release 尚未创建，alpha.21 尚未正式公开发布。历史 alpha.20 的 Windows 11 x64 封板结论保留；此前 Apple Silicon unsigned 包的实机结果仅为参考，不代表 alpha.21 DMG 已通过实机验收。
 
 ## Windows 安装与初次体验
 
-alpha.20 已有 [GitHub Pre-release 档案页](https://github.com/moshangliu12-afk/PrivateRadar/releases/tag/v0.2.0-alpha.20)，保留源码与 annotated tag 封板记录；该 Release 没有上传 Windows 安装器、Skill 或 macOS 资产。GitHub 自动生成的源码压缩包不属于手工上传的安装资产。已有可信 alpha.20 安装器时，按安装向导安装；不要把历史 Release 的旧安装包当作 alpha.20。如果 Windows 提示发布者未知，先确认来源，再决定是否继续。
+alpha.21 已生成并通过人工验收的本地 Windows 安装候选为 `PrivateRadar-Setup-0.2.0-alpha.21-x64.exe`，仅 Windows x64，unsigned，非 Microsoft Store 分发。发布后应从对应版本发行页获取，并与 `SHA256SUMS.txt` 核对摘要，再按安装向导安装；不要使用历史版本安装器替代。当前尚无 alpha.21 正式下载资产。
+
+Windows 可能出现 SmartScreen / 未知发布者提示。核验来源和摘要后，如果系统提供“更多信息 → 仍要运行”，可由你选择单次继续；组织策略可能禁止继续。不指导关闭 Defender 或系统级安全功能。
+
+历史 [alpha.20 Pre-release 档案页](https://github.com/moshangliu12-afk/PrivateRadar/releases/tag/v0.2.0-alpha.20)保留原源码与 annotated tag 封板记录，没有上传该版本 Windows 安装器、Skill 或 macOS 资产。GitHub 自动生成的源码压缩包不属于手工上传安装资产。
 
 安装后可在开始菜单或桌面打开 PrivateRadar，不需要安装 Node.js 或使用命令行。首次打开可点击“体验 Demo”，页面会明确标记演示数据。
 
@@ -33,13 +37,31 @@ alpha.20 已有 [GitHub Pre-release 档案页](https://github.com/moshangliu12-a
 
 你不需要找 ZIP、填写路径或 JSON、复制聊天文本、选择证据，或手工调用工具。
 
-## macOS 开发候选的手动 JSON
+## macOS 安装与首次启动
 
-当前 Mac 没有正式发行安装器。内部源码运行方式见 [README](README.md) 和 [贡献指南](CONTRIBUTING.md)。未签名 `.app` / DMG 仅完成 CI 打包；打包应用的实体安装验收仍为 `NOT_RUN / BLOCKED`，Developer ID 签名、公证与 stapling 未执行，真实 Apple 凭据未核验。
+alpha.21 计划提供 `PrivateRadar-0.2.0-alpha.21-macOS-arm64.dmg`，仅 Apple Silicon / arm64，不提供 Intel x64。文件名不含 `unsigned`，但实际仍为 unsigned、not notarized、无 Developer ID；用户无需 Apple Developer Program。当前尚未构建或发布 alpha.21 DMG。
+
+发布后的安装步骤：
+
+1. 从对应版本发行页取得 DMG 与 `SHA256SUMS.txt`，核验下载来源及 DMG SHA256。
+2. 打开 DMG，将 `PrivateRadar.app` 拖入 `/Applications`，再从“应用程序”打开。
+3. 此前参考候选首次直接打开曾提示“PrivateRadar 已损坏，无法打开”。若下载来源可信且 SHA256 一致，并且你选择继续，可在终端仅执行下面这条针对 PrivateRadar 自身的命令，再重新打开 App：
+
+```sh
+xattr -dr com.apple.quarantine "/Applications/PrivateRadar.app"
+```
+
+该命令仅移除 `/Applications/PrivateRadar.app` 自身的 quarantine 属性，不修复损坏的下载文件。不要扩大到其他路径或其他 App，不关闭 Gatekeeper、SIP，也不降低系统级安全策略。若摘要不符，先停止，不执行该操作。终端无需安装 Node.js 或开发工具。
+
+此前已完成的 **alpha.20-derived reference runtime acceptance** 包括 DMG integrity、安装到 `/Applications`、synthetic JSON 导入、Search、Commitment Candidate、Confirm、Confirmed、Evidence、完全退出后重启及数据持久化，均通过；无崩溃、无数据丢失。首次启动体验为 `PASS_WITH_ISSUE`，按上述单 App 操作后成功运行。不能将这些结果写成 alpha.21 DMG 已完成实机验收。
+
+alpha.21 新包需先完成 CI / 包核验及可解释的运行代码、运行库差异比较，再决定是否补做最小实机测试。源码开发方式另见 [README](README.md) 和 [贡献指南](CONTRIBUTING.md)。
+
+## macOS 手动 JSON
 
 在 Mac 的文件导入入口选择 JSON 文件。该入口仅接受 JSON，不提供 Windows WorkBuddy 配置或正式分享链，也不承诺 CSV / TXT 能力。手动 JSON 会保留原始文件字节与消息快照为本地 Evidence；其来源身份与 WorkBuddy 原始卡片分开，不从文件声明恢复微信卡片来源事实。
 
-实体源码验收已覆盖导入后搜索、关键词命中、承诺候选确认 / 忽略、已确认表达、同来源上下文、Finder 打开对应 Evidence 目录，以及退出后重新启动的持久化。可以使用 Command+A / C / V 操作输入框。来源缺失或冲突按既有保守规则处理，不猜造。
+此前实体源码验收还覆盖关键词命中、承诺候选确认 / 忽略、同来源上下文及 Finder 打开对应 Evidence 目录；与 alpha.21 新包验收分开记录。可以使用 Command+A / C / V 操作输入框。来源缺失或冲突按既有保守规则处理，不猜造。
 
 ## 查看结果
 
@@ -55,6 +77,6 @@ alpha.20 已有 [GitHub Pre-release 档案页](https://github.com/moshangliu12-a
 
 ## 数据与卸载
 
-数据默认保存在 Electron 本地用户数据目录；Windows 通常为 `%APPDATA%\PrivateRadar\`，实际位置可在设置页打开。Windows 安装器默认卸载配置保留用户数据；升级前仍应备份。Mac 当前没有已验收的正式安装 / 卸载保证。PrivateRadar 原生微信分享入口已延期，Windows 继续通过 WorkBuddy 主动分享导入。
+数据默认保存在 Electron 本地用户数据目录；Windows 通常为 `%APPDATA%\PrivateRadar\`，实际位置可在设置页打开。Windows 安装器默认卸载配置保留用户数据；升级前仍应备份。Mac 参考候选已验证安装和重启持久化；alpha.21 新包及卸载后的保留行为不能据此视为已验收。PrivateRadar 原生微信分享入口已延期，Windows 继续通过 WorkBuddy 主动分享导入。
 
 远程 AI 与 Embedding 由用户在本机独立配置；启用后可能发送聊天证据，没有逐次确认门禁。数据库没有实现加密，详见 [隐私说明](PRIVACY.md)。问题报告应遵循 [安全说明](SECURITY.md)，不上传真实聊天、数据库或 Evidence。

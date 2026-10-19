@@ -97,7 +97,7 @@ describe('WorkBuddy 微信导入最短路径', () => {
   })
 
   it('升级只改变内容版本，不改变正式 Connector ID 或启动配置', () => {
-    expect(metadata).toMatchObject({ source: 'privateradar-workbuddy', version: '0.2.0-alpha.20' })
+    expect(metadata).toMatchObject({ source: 'privateradar-workbuddy', version: '0.2.0-alpha.21' })
     expect(mcpConfig).toContain('privateradar-workbuddy')
     expect(mcpConfig).toContain('dist/server.mjs')
     expect(mcpConfig).not.toContain('privateradar-local-spike')
@@ -109,7 +109,14 @@ describe('WorkBuddy 微信导入最短路径', () => {
     expect(packageJson.build.extraResources).toEqual([{
       from: 'integrations/workbuddy/connector',
       to: 'workbuddy-connector',
-      filter: ['connector-meta.json', 'mcp.json', 'icon.svg', 'skills/**/*', 'dist/server.mjs']
+      filter: ['connector-meta.json', 'mcp.json', 'icon.svg', 'skills/**/*', 'dist/server.mjs', 'licenses/**/*']
+    }, {
+      from: 'licenses/runtime',
+      to: 'licenses',
+      filter: ['**/*']
+    }, {
+      from: 'LICENSE',
+      to: 'licenses/PrivateRadar-LICENSE.txt'
     }])
     expect(JSON.stringify({ ...packageJson.build, files: includedFiles })).not.toMatch(/tests|fixtures|acceptance|\.zip|private-radar\.db|backup|rollback/i)
   })

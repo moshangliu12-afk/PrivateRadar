@@ -2,9 +2,9 @@
   "schema_version": 1,
   "privateradar": {
     "name": "PrivateRadar",
-    "version": "0.2.0-alpha.20",
+    "version": "0.2.0-alpha.21",
     "source_commit_before_delivery_change": "8b94bbbad38729c9a57cf64fe3d4cd6d62a9f821",
-    "source_bundle_internal_version": "0.2.0-alpha.20",
+    "source_bundle_internal_version": "0.2.0-alpha.21",
     "modified_ffmpeg_runtime": false,
     "publication_state": "LOCAL_VALIDATION_CANDIDATE"
   },
@@ -349,9 +349,9 @@
     "部分 PGO 数据、工具链和 SDK 未装入源码包",
     "不是完整 Chromium 或 Electron 构建树，不承诺官方二进制按位复现",
     "源码验证不等于最终二进制发行验收；本轮未上传任何发行资产",
-    "macOS 正式签名后的兼容动态库替换与本地重新签名仍须验收"
+    "alpha.21 安装器、DMG 与源码包须从同一最终候选提交重新生成并核验；替换实测仅为可选工程验证，不是许可证发布硬门槛"
   ],
-  "mac_signed_ffmpeg_replacement_acceptance_required": true,
+  "mac_signed_ffmpeg_replacement_acceptance_required": false,
   "reverse_engineering_restriction_conflict": false,
   "eula": "NO_SEPARATE_EULA",
   "evidence": {

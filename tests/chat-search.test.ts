@@ -1,4 +1,5 @@
-// 密钥字面量为人工虚构哨兵，仅验证敏感字段不会泄漏。
+// 手工消息与媒体名为从零构造的合成内容；演示消息由 seedDemoData 生成。
+// 日期为人工固定的测试锚点；密钥字面量为人工虚构哨兵，仅验证敏感字段不会泄漏。
 import { DatabaseSync } from 'node:sqlite'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'

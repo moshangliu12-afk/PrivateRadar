@@ -1,2 +1,5 @@
 licenses/** -text
 licenses/*-LICENSE.txt -whitespace
+
+# 项目许可证及其生成副本固定使用已验收的 LF 原始字节。
+/licenses/PrivateRadar-LICENSE.txt text eol=lf

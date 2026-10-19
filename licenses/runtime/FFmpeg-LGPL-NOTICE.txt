@@ -10,8 +10,9 @@ https://chromium.googlesource.com/chromium/third_party/ffmpeg
 
 本地交付候选包含对应的完整固定 FFmpeg fork、Electron 补丁、两平台原始参数、
 生成配置、Opus、LLVM 运行库源码、许可原文及保守构建上下文。
-正式二进制发行时应一同提供对应的源码包与 FFMPEG_SOURCE_PROVENANCE.json。
-预期包名：PrivateRadar-0.2.0-alpha.20-ffmpeg-corresponding-source.tar.xz。
+正式二进制发行时应一同提供对应源码包；包内包含 FFMPEG_SOURCE_PROVENANCE.json，
+外置同名清单仅用于内部验收，不作为额外 Release 资产。
+预期包名：PrivateRadar-0.2.0-alpha.21-ffmpeg-corresponding-source.tar.xz。
 本通知不表示这些新增资产已经上传；实际资产及校验和以对应发行页为准。
 
 官方完整目标图与最终链接收据不可用。本源码包采用保守超集交付，
@@ -19,6 +20,7 @@ https://chromium.googlesource.com/chromium/third_party/ffmpeg
 完整 LGPL 正文保留于源码包中的 ffmpeg/COPYING.LGPLv2.1。
 
 用户可以修改 LGPL 组件、替换兼容的动态 FFmpeg 库，并为调试这些修改进行逆向工程。
-替换仍受操作系统安全机制与签名行为影响。macOS 修改 App bundle 或替换 dylib
-可能需要本地重新签名；正式签名版本的替换流程尚待单独验收，本轮未验证签名行为。
+替换兼容动态库仍受操作系统安全机制影响；本发行采用未进行 Developer ID 签名、
+未公证的 macOS 分发方式。替换启动实测仅为可选工程验证，不是许可证发布硬门槛。
+B0-4 的设计及现有候选验证已闭环；alpha.21 仍须从统一最终候选提交重新生成源码包并核验。
 本通知不限制 LGPL 赋予用户的权利。项目没有单独的最终用户许可协议。

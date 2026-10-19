@@ -1,6 +1,6 @@
-# PrivateRadar alpha.20 已知问题与范围
+# PrivateRadar alpha.21 已知问题与范围
 
-本文记录 alpha.20 封板后的现存限制、已解决事项与历史环境问题。以下记录均不是当前发布阻塞项；没有覆盖的输入或环境不能据此视为已验收。当前状态入口见 [README](README.md)。
+本文记录 alpha.21 发行准备沿用的现存限制、已解决事项与历史环境问题；alpha.20 历史封板结论保留。B0-1～4 已闭环，许可证 P0 为零；alpha.21 Windows 本地安装候选已完成构建与人工验收，GitHub Release 尚未创建且未公开发布，GitHub Support 公开门禁仍开放。没有覆盖的输入或环境不能据此视为已验收，当前状态见 [README](README.md)。
 
 ## A. 现存限制与非阻塞记录
 
@@ -20,9 +20,11 @@
 
 - 正式 WorkBuddy 原始上下文入口支持一个或两个逻辑附件。逐条发送人、完整日期与时分缺失或不能可靠解析时拒绝输入，不改走旧规范消息入口，不补造时间。历史未知字段与内部兼容数据仍保留，不自动回填。
 - 指定收集集合仅支持同次双卡；不支持单卡归集、任意数量卡片、OCR 或 PDF 正文解析。
-- 真实语义检索、微信数据库直读和 macOS 不属于当前正式能力。macOS 仍在评估，原生微信分享入口已延期。
+- 真实语义检索和微信数据库直读不属于当前正式能力；原生微信分享入口继续延期。Mac 仅支持 Apple Silicon / arm64 手动 JSON，不提供 Intel x64 或 Windows WorkBuddy 正式链，也不承诺 CSV / TXT。
 - 已验收覆盖以 Windows 11 x64 和既有 WorkBuddy 链路为主，其他版本、平台和全新实体机器覆盖有限。
-- 当前安装器构建配置未启用代码签名；Windows 可能提示发布者未知。
+- Windows x64 安装器为 unsigned、非 Microsoft Store 分发，可能出现 SmartScreen / 未知发布者提示；不指导关闭系统保护。
+- Mac DMG 为 unsigned、not notarized、无 Developer ID。此前 alpha.20-derived 参考候选首次提示“PrivateRadar 已损坏，无法打开”，核验来源与 SHA256 后，仅移除 PrivateRadar.app 自身 quarantine 才成功启动；操作边界见 [使用指南](USER_GUIDE.md)。
+- 参考 Mac 核心功能实机验收为 PASS，首次安装体验为 PASS_WITH_ISSUE。alpha.21 新 DMG 尚未构建或实测，需先核验新旧运行代码与运行库差异；不直接继承实机 PASS。
 
 ## B. 已解决事项
 

@@ -114,7 +114,7 @@ describe('承诺待处理恢复与历史边界', () => {
     expect(radarCount(f.db, 'commitment_candidates')).toBe(0)
   })
   it('桌面启动仅增加异步待处理恢复，不增加通信；连接器沿用既有无启动恢复的生命周期', () => {
-    const desktop = readFileSync(resolve('src/main/index.ts'), 'utf8')
+    const desktop = readFileSync(resolve('src/main/index.ts'), 'utf8').replace(/\r\n/g, '\n')
     expect(desktop).toContain('createWindow()\n  schedulePendingKeywordRadarRuns(db)\n  schedulePendingCommitmentExtractorRuns(db)')
     expect(desktop).not.toMatch(/ipcMain\.handle\(['"]commitment/)
     expect(desktop).not.toContain('await processPendingCommitmentExtractorRuns')

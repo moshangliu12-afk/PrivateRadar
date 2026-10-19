@@ -2,11 +2,17 @@
 
 ## 当前参考入口
 
-截至 2026-10-14，Windows 完整封板版本为 `0.2.0-alpha.20`。当前源码归档身份以现有 [v0.2.0-alpha.20 annotated tag](https://github.com/moshangliu12-afk/PrivateRadar/tree/v0.2.0-alpha.20) 为准；已有 [GitHub Pre-release](https://github.com/moshangliu12-afk/PrivateRadar/releases/tag/v0.2.0-alpha.20)，未上传该版本 Windows 安装器、Skill 或 macOS 资产。
+当前本地候选版本为 `0.2.0-alpha.21`，目标标签为 `v0.2.0-alpha.21`。Windows 本地安装候选已完成 typecheck、1674 / 1674 测试、Build、NSIS 打包、人工安装及主要功能验收，隐私扫描通过；尚未提交、推送或创建该标签，GitHub Release 尚未创建，alpha.21 尚未正式公开发布。后续正式发行的 Windows EXE、Mac arm64 DMG 与对应源码包必须来自同一个最终候选提交，不能跨提交混用。
 
-Apple Silicon 源码 / 运行时验收与 Stage3A 未签名 arm64 `.app` / DMG CI 打包已通过。打包应用实体验收仍为 `NOT_RUN / BLOCKED`；Stage3C 签名 / 公证配置为 `PASS_WITH_ISSUE`，真实 Apple 凭据未核验，签名、公证和 stapling 未执行，正式 macOS 发行未就绪。Mac 当前只提供手动 JSON；Windows WorkBuddy 正式链及 CSV / TXT 能力不归入 Mac 验收范围。
+历史 Windows 完整封板版本为 `0.2.0-alpha.20`。原 [v0.2.0-alpha.20 annotated tag](https://github.com/moshangliu12-afk/PrivateRadar/tree/v0.2.0-alpha.20) 与 [GitHub Pre-release 档案页](https://github.com/moshangliu12-afk/PrivateRadar/releases/tag/v0.2.0-alpha.20)保持原历史身份，未上传该版本 Windows 安装器、Skill 或 macOS 资产；不将新候选挂入旧 Release。
 
-当前候选树已完成真实搜索案例合成替换与 Apache-2.0 落地；本地开源准备文档仍不推送。仓库保持 Private，GitHub Support 清理、公开前仓库 / 安全设置与二进制许可归属最终核验尚未完成。alpha.21 尚未启动，原生微信分享继续延期。
+Stage2C Apple Silicon 源码 / 运行时已通过；此前 alpha.20-derived unsigned 包的 CI 和核心功能实机验收为 PASS，安装与首次启动为 PASS_WITH_ISSUE。核验来源和 SHA256 后仅移除 `/Applications/PrivateRadar.app` 自身 quarantine 才成功启动；导入、Search、承诺审核、Evidence、重启和持久化通过，无崩溃、无数据丢失。这是参考运行时验收，不是 alpha.21 DMG 已实测通过；新包先做 CI / 包核验和运行差异比较，再决定是否补做最小实机测试。
+
+Windows x64 与 Mac Apple Silicon / arm64 均采用 unsigned 分发；Mac 无 Developer ID、未公证，不提供 Intel x64。签名、公证及 replacement physical smoke test 不作为当前发行门槛。Mac 仅手动 JSON，不接入 Windows WorkBuddy 正式链或承诺 CSV / TXT；原生微信分享继续延期。
+
+B0-1 / B0-2 / B0-3 / B0-4 均为 `PASS`，`P0_BINARY_LICENSE_BLOCKER_COUNT = 0`。alpha.21 仍须从统一最终候选提交重新生成三项资产并核验，对应源码包内交付 provenance，外置清单仅为内部材料；正式四项资产及校验政策见 README。
+
+候选树已完成真实搜索案例合成替换与 Apache-2.0 落地。仓库保持 Private，GitHub Support #4848368 尚未确认 server-side old-object cleanup 完成，`GITHUB_SUPPORT_PUBLIC_GATE = OPEN`、`OPEN_SOURCE_PUBLICATION_READY = NO`。alpha.21 尚未提交、推送或创建标签，GitHub Release 尚未创建，也未正式公开发布；当前本地安装候选不是已发布的 GitHub 资产。
 
 当前产品状态和边界以 [README](../README.md)、[使用指南](../USER_GUIDE.md) 和 [开发进度顶部](../DEVELOPMENT_PROGRESS.md) 为准。下方保留早期历史检查点、验收数字与当时决策；私人字段和旧提交标识已移除。历史章节中的“当前”“冻结”和旧会话提示仅适用于相应阶段，不作为当前源码身份或执行授权。
 
@@ -128,7 +134,7 @@ Apple Silicon 源码 / 运行时验收与 Stage3A 未签名 arm64 `.app` / DMG C
 - 未修改 Search、Topic、WorkBuddy / MCP、SQLite schema、原始消息、FTS、identity / fingerprint、去重或反馈结构。
 - `DAILY_VALUE_VERSION` 为 `daily-value-v2`，只负责 Value / Brief 缓存；`DAILY_ALGORITHM_VERSION` 为 `daily-candidate-v1.3-action-signals`，使旧 `v1.2` 历史 D1 candidate 自然失效并重新计算。
 - 隔离副本持久化重算：2026-09-19 为 D1 `4`、Final `2`（社保认证 `MUST_SHOW / HIGH`、周六安全提醒 `MAY_SHOW / MEDIUM`）；2026-09-20 为 D1 `5`、Final `4`（模型替换、聊天转入工具为 `MAY_SHOW / MEDIUM`；失效风险、生成失败积分损失为 `MAY_SHOW / LOW`）。
-- Windows 真实覆盖安装验收通过：167 条消息、14 个聊天批次和 167 条 FTS 保留；WorkBuddy、Topic、Search、Daily / Search 反馈正常；空白归一化历史验收案例（私人字段已移除）与“纸鲸调色”正常命中，不存在词保持 0，未发现普通闲聊明显误入 Daily。（本条查询文本为本次隐私修订从零构造的合成等价展示；保留原始验收事实及计数，不宣称原始数据为合成数据。）
+- Windows 真实覆盖安装验收通过：167 条消息、14 个聊天批次和 167 条 FTS 保留；WorkBuddy、Topic、Search、Daily / Search 反馈正常；空白归一化历史验收案例（私人字段已移除）与“合成纸鲸调色练习”（查询文本为本次隐私修订从零构造的合成等价展示；原验收事实与结论保留）正常命中，不存在词保持 0，未发现普通闲聊明显误入 Daily。（本条查询文本为本次隐私修订从零构造的合成等价展示；保留原始验收事实及计数，不宣称原始数据为合成数据。）
 - 最新安装包：`release/PrivateRadar-Setup-0.2.0-alpha.10-x64.exe`（116,725,107 字节，2026-09-21 16:00:04）。
 - alpha.10 是新的最终冻结基线。
 

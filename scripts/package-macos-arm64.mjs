@@ -154,7 +154,7 @@ async function packageMac() {
       bundleIdentifier: identifier
     })
 
-    const dmgName = `PrivateRadar-${product.version}-macOS-arm64-unsigned.dmg`
+    const dmgName = `PrivateRadar-${product.version}-macOS-arm64.dmg`
     const dmg = join(output, dmgName)
     assert.ok(statSync(dmg).isFile() && statSync(dmg).size > 0, '缺少非空 DMG')
     Object.assign(report, { DMG_ARTIFACT: 'PASS', DMG_NAME: dmgName, DMG_NONEMPTY: 'YES' })

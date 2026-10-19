@@ -2,9 +2,11 @@
 
 ## 当前项目状态
 
+当前本地候选版本为 `0.2.0-alpha.21`，目标标签为 `v0.2.0-alpha.21`。Windows 安装候选已完成 typecheck、1674 / 1674 测试、Build、NSIS 打包、人工安装及主要功能验收，隐私扫描通过；尚未提交、推送或创建该标签，GitHub Release 尚未创建，也未正式公开发布。后续正式发行的 EXE、DMG 与源码包必须来自同一最终候选提交，旧 alpha.20-derived 资产仅作参考。
+
 截至 2026-10-14，Windows 11 x64 的 `0.2.0-alpha.20` 已完成正式部署、验收与封板；GitHub 已建立 [alpha.20 Pre-release](https://github.com/moshangliu12-afk/PrivateRadar/releases/tag/v0.2.0-alpha.20)。该页面没有上传 Windows 安装器、Skill 或 macOS 资产。
 
-当前封板源码身份以现有 [v0.2.0-alpha.20 annotated tag](https://github.com/moshangliu12-afk/PrivateRadar/tree/v0.2.0-alpha.20) 为准。隐私清理后的 Git 身份已更新，历史阶段的旧提交不作为当前公开源码身份。后续 macOS 与开源准备是开发分支上的独立提交，未合并 master，未移动封板标签。
+历史 alpha.20 封板源码身份以现有 [v0.2.0-alpha.20 annotated tag](https://github.com/moshangliu12-afk/PrivateRadar/tree/v0.2.0-alpha.20) 为准。隐私清理后的 Git 身份已更新，历史阶段的旧提交不作为当前公开源码身份。后续 macOS 与开源准备是开发分支上的独立提交，未合并 master，未移动封板标签。
 
 | 已完成 Windows 版本 | 高层摘要 |
 |---|---|
@@ -12,28 +14,30 @@
 | alpha.19 | 承诺表达（已确认），只读回看用户确认的原话及来源 |
 | alpha.20 | 今日情报关注词区块，用户显式关注信号独立于“今天最重要” |
 
-Windows 正式导入链为微信 → WorkBuddy → PrivateRadar；原生微信分享入口继续延期，alpha.21 尚未启动。
+Windows 正式导入链为微信 → WorkBuddy → PrivateRadar；原生微信分享入口继续延期。alpha.21 不改变功能、schema、依赖或 Skill。
 
 ## macOS 开发阶段
 
 | 阶段 | 当前状态 |
 |---|---|
 | Stage2C-A / B：Apple Silicon 自动化与实体 M4 源码运行 | `PASS` |
-| Stage3A：unsigned arm64 `.app` / DMG CI 打包 | `PASS` |
-| Stage3B：打包应用实体安装与产品验收 | `NOT_RUN / BLOCKED`，延期 |
-| Stage3C：签名 / 公证配置实施 | `PASS_WITH_ISSUE`，仅配置与本地检查完成 |
-| 真实 Apple 凭据 | `NOT_VERIFIED` |
-| Developer ID 签名 | `NOT_EXECUTED` |
-| notarization / stapling | `NOT_EXECUTED` |
-| 正式 macOS 发行 | `NOT_READY` |
+| alpha.20-derived unsigned arm64 CI 打包 | `PASS`，参考候选 |
+| alpha.20-derived 打包应用核心功能实机验收 | `PASS`，无崩溃、无数据丢失 |
+| 参考包安装与首次启动 | `PASS_WITH_ISSUE`，需处理单个 App 自身 quarantine |
+| alpha.21 新 macOS 产物 | 尚未构建或实测；先做 CI / 包核验与运行差异比较，再决定是否补做最小实机测试 |
+| Developer ID / notarization / stapling | 当前 unsigned 策略不采用，不作为发行 blocker |
 
-Mac 当前入口仅为手动 JSON，已完成的源码验收覆盖核心浏览、搜索、关键词、承诺审核、来源上下文、Finder Evidence 与重启持久化。Windows WorkBuddy 正式链、CSV / TXT 全能力和正式 Mac 安装器均未成为 Mac 已验收能力。
+此前 Stage3C 签名配置实施记录属于历史工程材料，不作为当前用户安装或许可证发布要求。此前包的 DMG integrity、安装至 `/Applications`、synthetic JSON 导入、Search、承诺候选、确认、已确认表达、Evidence、重启及持久化均通过。这是 alpha.20-derived reference runtime acceptance，不是 alpha.21 DMG 已通过实机验收。
+
+Mac 当前入口仅为手动 JSON，不提供 Intel x64，也不接入 Windows WorkBuddy 正式链或承诺 CSV / TXT。首次“PrivateRadar 已损坏，无法打开”及核验来源、SHA256 后仅对自身 App 移除 quarantine 的实际流程见 [使用指南](USER_GUIDE.md)。
 
 ## 开源准备
 
 当前候选树的遗留真实搜索案例已替换为合成数据；项目自身已采用 Apache-2.0，npm 的 `private: true` 保留。隐私、安全、贡献、第三方基础许可说明与公开仓库 metadata 已整理为本地候选文档。
 
-仓库仍保持 Private，本轮文档与元数据不推送。GitHub Support 敏感数据服务器端清理仍待完成，公开前仓库 / 安全设置、可用私密漏洞通道与二进制第三方归属最终核验仍待后续单独处理，公开条件尚未满足。
+B0-1 / B0-2 / B0-3 / B0-4 均为 `PASS`，`P0_BINARY_LICENSE_BLOCKER_COUNT = 0`。alpha.21 新资产须重新生成并核验，不重开 B0-4；不要求 replacement physical smoke test。四项正式资产及仅覆盖前三项的 SHA256SUMS 政策见 README。
+
+仓库仍保持 Private，本阶段不推送。GitHub Support #4848368 尚未确认 server-side old-object cleanup 完成，`GITHUB_SUPPORT_PUBLIC_GATE = OPEN`、`OPEN_SOURCE_PUBLICATION_READY = NO`；即使新资产全部通过，也不能先公开。
 
 当前使用与平台边界见 [README](README.md)、[使用指南](USER_GUIDE.md)；隐私、安全、贡献与许可说明见根目录对应文档。下方早期日志只说明当时阶段，保留历史验证事实，不作当前实施授权或下一阶段计划。
 

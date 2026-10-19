@@ -85,7 +85,7 @@ describe('关键词雷达轻量待处理恢复', () => {
     expect(radarCount(f.db, 'messages')).toBe(4)
   })
   it('主程序在窗口创建后仅安排异步恢复，不增加渲染通信或公开导出', () => {
-    const source = readFileSync(resolve('src/main/index.ts'), 'utf8')
+    const source = readFileSync(resolve('src/main/index.ts'), 'utf8').replace(/\r\n/g, '\n')
     expect(source).toContain('createWindow()\n  schedulePendingKeywordRadarRuns(db)')
     expect(source).not.toMatch(/ipcMain\.handle\(['"]keyword/)
     expect(source).not.toMatch(/await processPendingKeywordRadarRuns/)

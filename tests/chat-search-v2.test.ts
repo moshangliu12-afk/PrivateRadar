@@ -1,3 +1,4 @@
+// 手工消息为从零构造的合成场景，日期为人工测试锚点；不代表真实聊天或事件。
 import { DatabaseSync } from 'node:sqlite'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { ingestWorkBuddyMessages } from '../src/main/integrations/workbuddy/ingest'

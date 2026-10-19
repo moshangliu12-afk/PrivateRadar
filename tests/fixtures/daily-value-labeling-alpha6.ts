@@ -1,9 +1,9 @@
 import type { DailyValue, ImportanceLevel } from '../../src/shared/models'
 
 /**
- * 本替换版本的正文均为从零构造的 synthetic test data。
- * 不来源于真实聊天、人工脱敏聊天或真实用户资料；不描述被替换版本的来源。
- * ID、标签、优先级与固定回归子集沿用本历史版本的测试契约。
+ * 当前版本的全部测试内容均为从零构造的 synthetic test data。
+ * 不来源于真实聊天、人工脱敏聊天或真实用户资料；此说明不描述历史版本。
+ * ID、标签、优先级及 selectedByD1 字段保留固定回归契约，后者仅标识十二条回归子集。
  */
 export interface DailyValueLabelFixture {
   sampleId: string
@@ -41,7 +41,7 @@ export const DAILY_VALUE_LABEL_FIXTURES: DailyValueLabelFixture[] = [
   { sampleId: 'DV-025', text: '🧩', selectedByD1: false, humanLabel: 'drop', desiredPriority: 'low' },
   { sampleId: 'DV-026', text: '纸风筝挪到角落。', selectedByD1: false, humanLabel: 'drop', desiredPriority: 'low' },
   { sampleId: 'DV-027', text: '虚构沙盘的计费记录异常，标记额度被扣除。', selectedByD1: true, humanLabel: 'may_show', desiredPriority: 'low' },
-  { sampleId: 'DV-028', text: '虚构折页工具发布了星纹索引功能。', selectedByD1: true, humanLabel: 'may_show', desiredPriority: 'medium' },
+  { sampleId: 'DV-028', text: '虚构折页工具现已支持星纹索引功能。', selectedByD1: true, humanLabel: 'may_show', desiredPriority: 'medium' },
   { sampleId: 'DV-029', text: '合成练习项目文档用于绘制纸环地图：https://github.com/example/synthetic-paper-ring', selectedByD1: true, humanLabel: 'may_show', desiredPriority: 'medium' },
   { sampleId: 'DV-030', text: '合成简报 2004年2月3日：虚构纸舟系统上线航线图；虚构棋盘工具发布配色功能。', selectedByD1: true, humanLabel: 'must_show', desiredPriority: 'high' },
   { sampleId: 'DV-031', text: 'https://synthetic.invalid/workshop', selectedByD1: true, humanLabel: 'drop', desiredPriority: 'low' },

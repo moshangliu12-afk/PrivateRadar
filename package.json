@@ -1,6 +1,6 @@
 {
   "name": "private-radar",
-  "version": "0.2.0-alpha.20",
+  "version": "0.2.0-alpha.21",
   "productName": "PrivateRadar",
   "private": true,
   "license": "Apache-2.0",
@@ -106,7 +106,7 @@
       "identity": null,
       "forceCodeSigning": false,
       "notarize": false,
-      "artifactName": "PrivateRadar-${version}-macOS-arm64-unsigned.${ext}"
+      "artifactName": "PrivateRadar-${version}-macOS-arm64.${ext}"
     },
     "nsis": {
       "oneClick": false,

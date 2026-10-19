@@ -91,7 +91,7 @@ function validateInventory(projectRoot = root) {
   // FFmpeg 通知仅随 App 分发；不计入 B0-2 组件或独立 Connector 清单。
   const ffmpegNotice = bytes(join(directory, 'FFmpeg-LGPL-NOTICE.txt'))
   assert.equal(sha256(Buffer.from(ffmpegNotice.toString('utf8').replaceAll('\r\n', '\n'))),
-    '190bdb8b27e88722cd9a7e27793c52259c9e99a2cba7be276d4985aff30ba855', 'FFmpeg 通知正文身份不匹配')
+    'c1cb2911e8534b22090e8c478a0d269b8590afb30f9c46938cee2717c3487d53', 'FFmpeg 通知正文身份不匹配')
   files['FFmpeg-LGPL-NOTICE.txt'] = ffmpegNotice
   files['README.txt'] = Buffer.from(readme(inventory, 'app'))
   verifyDirectory(directory, files)
