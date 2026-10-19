@@ -2,11 +2,11 @@
 
 ## 当前版本范围
 
-当前本地候选版本为 `0.2.0-alpha.21`，目标标签为 `v0.2.0-alpha.21`；Windows 本地安装候选已完成构建与人工验收，GitHub Release 尚未创建，alpha.21 尚未正式公开发布。历史 Windows 11 x64 的 `0.2.0-alpha.20` 封板与 Pre-release 档案身份保留，不将新候选挂到旧 Release。本项目不承诺所有旧版本持续维护或固定安全响应期限。
+当前版本为 `0.2.0-alpha.21`，发行标签为 `v0.2.0-alpha.21`；该 Pre-release 已提供 Windows x64、macOS Apple Silicon arm64 安装资产、FFmpeg 对应源码和 `SHA256SUMS.txt`。Windows 安装与主要功能人工验收通过，macOS CI 打包与 DMG 检查通过。历史 Windows 11 x64 的 `0.2.0-alpha.20` 封板与 Pre-release 档案身份保留，新版本使用独立 Release。本项目不承诺所有旧版本持续维护或固定安全响应期限。
 
 Windows x64 采用 unsigned、非 Microsoft Store 分发；Mac 仅 Apple Silicon / arm64，采用 unsigned、not notarized、无 Developer ID 策略，不提供 Intel x64。Developer ID 和公证不作为当前发行 blocker。此前 Mac 包的核心功能实机验收为 alpha.20-derived 参考证据，首次启动需处理该 App 自身 quarantine；不得称 alpha.21 DMG 已实测通过。校验与单 App 操作范围见 [使用指南](USER_GUIDE.md)，不指导关闭系统级保护。
 
-B0-1～4 已闭环，`P0_BINARY_LICENSE_BLOCKER_COUNT = 0`；alpha.21 后续正式发行资产仍须分别核验。仓库保持 Private，GitHub Support #4848368 尚未确认 server-side old-object cleanup 完成，`GITHUB_SUPPORT_PUBLIC_GATE = OPEN`、`OPEN_SOURCE_PUBLICATION_READY = NO`。
+B0-1～4 已闭环，`P0_BINARY_LICENSE_BLOCKER_COUNT = 0`；alpha.21 安装资产及对应源码已分别核验。FFmpeg 对应源码包绑定发行提交 `6f04bb6f8ecf4c0bfaf4c622f4191f73c759d866`，随该版本 Release 提供；`SHA256SUMS.txt` 记录 Windows、macOS 与对应源码三个资产的摘要。
 
 ## 报告时保护数据
 

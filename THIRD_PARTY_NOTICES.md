@@ -1,6 +1,6 @@
 # 第三方组件与许可清单
 
-本清单对应 alpha.21 发行准备中的 `package-lock.json` 与已安装包许可文本，记录主要产品运行组件。版本是当前锁定版本，不代表每个历史安装器的组件身份。项目自身采用 Apache-2.0；第三方组件保留各自许可、版权和通知义务。
+本清单对应 alpha.21 的 `package-lock.json` 与已核验发行包的许可文本，记录主要产品运行组件。版本是当前锁定版本，不代表每个历史安装器的组件身份。项目自身采用 Apache-2.0；第三方组件保留各自许可、版权和通知义务。
 
 | 组件 | 锁定版本 | 许可证 | 上游 |
 |---|---|---|---|
@@ -35,7 +35,7 @@
 
 独立 Connector 的 [licenses 目录](integrations/workbuddy/connector/licenses/README.txt)由同一 canonical source 确定性生成，包含当前实际内嵌的 MCP、zod 及相关依赖共 9 个运行组件。每次 `build:mcp` 都同步原文、校验摘要，并用本次构建输入检查分发范围；独立复制 Connector 时，该目录应一并保留。它不依赖主应用的另一个许可目录。
 
-## 二进制发行的后续核验
+## 二进制发行核验
 
 Electron 同时包含 Chromium、Node.js 及其他第三方组件，具有各自许可与通知。完整清单应以实际固定版本运行时与最终发行包为准，不能仅凭 npm 的 Electron MIT 字段认定全部组件许可已经交付。
 
@@ -49,7 +49,7 @@ B0_4 = PASS
 P0_BINARY_LICENSE_BLOCKER_COUNT = 0
 ```
 
-alpha.21 的 EXE、DMG 与对应源码包仍须从同一个最终候选提交重新生成并核验实际许可材料；本地复制规则或旧候选不能替代新产物验收。这不重新打开 B0-4。当前 Windows 和 Mac 均采用 unsigned 策略，Developer ID / notarization 不作为当前发行门槛；替换启动实测仅为可选工程验证，不是 LGPL 许可证发布硬要求。
+alpha.21 的 EXE、DMG 与对应源码包已从统一发行提交 `6f04bb6f8ecf4c0bfaf4c622f4191f73c759d866` 生成，并核验实际许可材料；本地复制规则或旧候选不能替代新产物验收。这不重新打开 B0-4。当前 Windows 和 Mac 均采用 unsigned 策略，Developer ID / notarization 不作为当前发行门槛；替换启动实测仅为可选工程验证，不是 LGPL 许可证发布硬要求。
 
 本文件用于项目级许可说明。Apache `NOTICE` 按实际来源通知义务另行处理，本轮没有创建根目录 NOTICE，也没有生成替代上游原通知的自定义文本。
 
@@ -66,8 +66,8 @@ PrivateRadar 未修改该动态运行库；Windows 使用 DLL，macOS 使用独�
 
 App 的 `licenses/FFmpeg-LGPL-NOTICE.txt` 由现有资源规则交付并经许可钩子核验；
 独立 Connector 不包含 FFmpeg，因此不添加此通知。
-alpha.21 计划同时交付 `PrivateRadar-0.2.0-alpha.21-ffmpeg-corresponding-source.tar.xz`，其中包含 `FFMPEG_SOURCE_PROVENANCE.json` 与 `ffmpeg/COPYING.LGPLv2.1` 完整正文；该 FFmpeg 源码包尚未生成或上传；Windows 本地安装候选已完成构建与人工验收，但 GitHub Release 尚未创建，alpha.21 尚未正式公开发布。外置同名 manifest 只作内部验收材料，不作为第五项 Release 资产。源码交付目录映射与生成要求见 [源码交付说明](scripts/ffmpeg-source-delivery/README.md)。
+alpha.21 Release 已提供 `PrivateRadar-0.2.0-alpha.21-ffmpeg-corresponding-source.tar.xz`，其中包含 `FFMPEG_SOURCE_PROVENANCE.json` 与 `ffmpeg/COPYING.LGPLv2.1` 完整正文。该源码包从发行提交 `6f04bb6f8ecf4c0bfaf4c622f4191f73c759d866` 生成并验收，SHA256 为 `4f57295a0592bffdaea3fb218d056cea03c8b772f5131de36efa8222c5191b71`。外置同名 manifest 只作内部验收材料，不作为第五项 Release 资产。源码交付目录映射与生成要求见 [源码交付说明](scripts/ffmpeg-source-delivery/README.md)。
 
-最终仅上传 Windows EXE、Mac arm64 DMG、FFmpeg 源码 tar.xz 与 `SHA256SUMS.txt`；校验文件只记录前三项，不记录自身。CI `.app.zip` 不作为正式资产。
+该 Release 的四项手工上传资产为 Windows EXE、Mac arm64 DMG、FFmpeg 源码 tar.xz 与 `SHA256SUMS.txt`；校验文件只记录前三项，不记录自身。CI `.app.zip` 不作为正式资产。
 
-用户修改、替换兼容动态库及调试修改的 LGPL 权利保留；对应源码、许可和必要材料交付义务不减免。许可证准备就绪不代表可以公开：仓库仍为 Private，GitHub Support #4848368 的服务器端旧对象清理尚待确认。
+用户修改、替换兼容动态库及调试修改的 LGPL 权利保留；对应源码、许可和必要材料交付义务不减免。

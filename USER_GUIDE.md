@@ -1,10 +1,10 @@
 # PrivateRadar alpha.21 使用指南
 
-PrivateRadar 帮你整理主动导入的聊天，并能回到原始消息查看依据。当前准备 `0.2.0-alpha.21` 预发布，目标标签为 `v0.2.0-alpha.21`；Windows 本地安装候选已完成构建与人工验收；尚未提交、推送或创建目标标签，GitHub Release 尚未创建，alpha.21 尚未正式公开发布。历史 alpha.20 的 Windows 11 x64 封板结论保留；此前 Apple Silicon unsigned 包的实机结果仅为参考，不代表 alpha.21 DMG 已通过实机验收。
+PrivateRadar 帮你整理主动导入的聊天，并能回到原始消息查看依据。当前版本为 `0.2.0-alpha.21`，[v0.2.0-alpha.21 Pre-release](https://github.com/moshangliu12-afk/PrivateRadar/releases/tag/v0.2.0-alpha.21) 已提供 Windows x64、macOS Apple Silicon arm64 安装资产、FFmpeg 对应源码和 `SHA256SUMS.txt`。Windows 安装与主要功能人工验收通过；macOS CI 打包与 DMG 检查通过，尚无 alpha.21 实体 Mac 人工运行验收记录。历史 alpha.20 的 Windows 11 x64 封板结论保留；此前 Apple Silicon unsigned 包的实机结果仅为参考。
 
 ## Windows 安装与初次体验
 
-alpha.21 已生成并通过人工验收的本地 Windows 安装候选为 `PrivateRadar-Setup-0.2.0-alpha.21-x64.exe`，仅 Windows x64，unsigned，非 Microsoft Store 分发。发布后应从对应版本发行页获取，并与 `SHA256SUMS.txt` 核对摘要，再按安装向导安装；不要使用历史版本安装器替代。当前尚无 alpha.21 正式下载资产。
+alpha.21 已作为 Release 资产提供的 Windows 安装器为 `PrivateRadar-Setup-0.2.0-alpha.21-x64.exe`，仅 Windows x64，unsigned，非 Microsoft Store 分发，已通过人工安装与主要功能验收。从对应版本发行页获取，并与 `SHA256SUMS.txt` 核对摘要，再按安装向导安装；不要使用历史版本安装器替代。
 
 Windows 可能出现 SmartScreen / 未知发布者提示。核验来源和摘要后，如果系统提供“更多信息 → 仍要运行”，可由你选择单次继续；组织策略可能禁止继续。不指导关闭 Defender 或系统级安全功能。
 
@@ -39,9 +39,9 @@ Windows 可能出现 SmartScreen / 未知发布者提示。核验来源和摘要
 
 ## macOS 安装与首次启动
 
-alpha.21 计划提供 `PrivateRadar-0.2.0-alpha.21-macOS-arm64.dmg`，仅 Apple Silicon / arm64，不提供 Intel x64。文件名不含 `unsigned`，但实际仍为 unsigned、not notarized、无 Developer ID；用户无需 Apple Developer Program。当前尚未构建或发布 alpha.21 DMG。
+alpha.21 已作为 Release 资产提供 `PrivateRadar-0.2.0-alpha.21-macOS-arm64.dmg`，仅 Apple Silicon / arm64，不提供 Intel x64。文件名不含 `unsigned`，但实际仍为 unsigned、not notarized、无 Developer ID；用户无需 Apple Developer Program。该包已通过 CI 打包与 DMG 检查，尚无 alpha.21 实体 Mac 人工运行验收记录。
 
-发布后的安装步骤：
+安装步骤：
 
 1. 从对应版本发行页取得 DMG 与 `SHA256SUMS.txt`，核验下载来源及 DMG SHA256。
 2. 打开 DMG，将 `PrivateRadar.app` 拖入 `/Applications`，再从“应用程序”打开。
@@ -55,7 +55,7 @@ xattr -dr com.apple.quarantine "/Applications/PrivateRadar.app"
 
 此前已完成的 **alpha.20-derived reference runtime acceptance** 包括 DMG integrity、安装到 `/Applications`、synthetic JSON 导入、Search、Commitment Candidate、Confirm、Confirmed、Evidence、完全退出后重启及数据持久化，均通过；无崩溃、无数据丢失。首次启动体验为 `PASS_WITH_ISSUE`，按上述单 App 操作后成功运行。不能将这些结果写成 alpha.21 DMG 已完成实机验收。
 
-alpha.21 新包需先完成 CI / 包核验及可解释的运行代码、运行库差异比较，再决定是否补做最小实机测试。源码开发方式另见 [README](README.md) 和 [贡献指南](CONTRIBUTING.md)。
+alpha.21 已完成 CI / 包核验，实体 Mac 人工运行验收与上述参考候选分开记录。源码开发方式另见 [README](README.md) 和 [贡献指南](CONTRIBUTING.md)。
 
 ## macOS 手动 JSON
 
