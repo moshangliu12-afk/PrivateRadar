@@ -38,7 +38,7 @@ Mac 当前入口仅为手动 JSON，不提供 Intel x64，也不接入 Windows W
 
 B0-1 / B0-2 / B0-3 / B0-4 均为 `PASS`，`P0_BINARY_LICENSE_BLOCKER_COUNT = 0`。alpha.22 安装资产与对应源码已从固定发行提交生成并核验，不重开 B0-4；不要求 replacement physical smoke test。alpha.22 Release 已提供四项正式资产，`SHA256SUMS.txt` 只覆盖 Windows、macOS 和对应源码三项，详见 README。
 
-仓库仍保持 Private，Public 阶段另行授权。
+仓库现已公开；当前 alpha.22 仍为 Pre-release。
 
 当前使用与平台边界见 [README](README.md)、[使用指南](USER_GUIDE.md)；隐私、安全、贡献与许可说明见根目录对应文档。下方早期日志只说明当时阶段，保留历史验证事实，不作当前实施授权或下一阶段计划。
 

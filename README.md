@@ -17,9 +17,9 @@ Local-first personal chat intelligence: turn imported chats into daily intellige
 | Windows x64 | `PrivateRadar-Setup-0.2.0-alpha.22-x64.exe` | 未签名，可能出现 SmartScreen / 未知发布者提示 |
 | macOS | `PrivateRadar-0.2.0-alpha.22-macOS-arm64.dmg` | 仅 Apple Silicon / arm64（arm64 only），unsigned（未签名）、not notarized（未公证）；不支持 Intel x64 |
 
-下载后请核对同一发行页的 `SHA256SUMS.txt`。安装与首次启动见[使用指南](./USER_GUIDE.md)。仓库目前仍为私有，下载需要仓库访问权限。
+可从对应 GitHub Pre-release 下载当前安装包，并使用 `SHA256SUMS.txt` 核对摘要。安装与首次启动见[使用指南](./USER_GUIDE.md)。
 
-**alpha.22 已提供预发布安装包、FFmpeg 对应源码和摘要清单。仓库仍保持私有。**
+**alpha.22 已提供预发布安装包、FFmpeg 对应源码和摘要清单。仓库现已公开。**
 
 ![今日情报：3 个群、20 条当日消息与 3 条重要信息](./docs/images/readme/privateradar-today.png)
 
@@ -85,7 +85,7 @@ Local-first personal chat intelligence: turn imported chats into daily intellige
 
 ## 当前状态
 
-- 当前版本为 `0.2.0-alpha.22`，已提供 [v0.2.0-alpha.22 Pre-release](https://github.com/moshangliu12-afk/PrivateRadar/releases/tag/v0.2.0-alpha.22)。发行源码及标签固定为 `a4d9174c713341243a00799c3432543aaa4e7747`；发布整合和文档收尾不改变发行资产身份。Windows 安装、启动、重启与普通导入人工验收通过；macOS arm64 DMG 已通过 GitHub Actions 构建、架构、许可及 DMG 检查，没有 alpha.22 实体 Mac 人工验证。仓库仍为 Private。
+- 当前版本为 `0.2.0-alpha.22`，已提供 [v0.2.0-alpha.22 Pre-release](https://github.com/moshangliu12-afk/PrivateRadar/releases/tag/v0.2.0-alpha.22)。发行源码及标签固定为 `a4d9174c713341243a00799c3432543aaa4e7747`；发布整合和文档收尾不改变发行资产身份。Windows 安装、启动、重启与普通导入人工验收通过；macOS arm64 DMG 已通过 GitHub Actions 构建、架构、许可及 DMG 检查，没有 alpha.22 实体 Mac 人工验证。仓库现已公开。
 - 历史版本为 [v0.2.0-alpha.21 预发布版](https://github.com/moshangliu12-afk/PrivateRadar/releases/tag/v0.2.0-alpha.21)。该历史版本 Windows x64 安装器已完成 1674 / 1674 测试、构建、隐私扫描与人工验收；macOS arm64 DMG 已通过 CI 打包与检查，尚无 alpha.21 实体 Mac 人工运行验收记录。
 - 历史完成并封板版本：[v0.2.0-alpha.20](https://github.com/moshangliu12-afk/PrivateRadar/tree/v0.2.0-alpha.20)。Windows 11 x64 的正式部署与验收结论保留，旧 annotated tag 和 Release 的历史身份不变。
 - [alpha.20 Pre-release 档案页](https://github.com/moshangliu12-afk/PrivateRadar/releases/tag/v0.2.0-alpha.20)没有上传该版本 Windows 安装器、Skill 或 macOS 资产；当前开发候选不挂到旧 Release。
@@ -137,7 +137,7 @@ Mac 仅接受 JSON，未接入 Windows WorkBuddy 正式链，也不承诺 CSV / 
 
 B0-1 / B0-2 / B0-3 / B0-4 均为 `PASS`，`P0_BINARY_LICENSE_BLOCKER_COUNT = 0`。alpha.21 已完成统一发行提交的产物与对应源码核验；alpha.22 安装资产、对应源码及许可交付已独立核验并随 Release 提供。这不重新打开 B0-4，也不要求重做 FFmpeg replacement physical smoke test。
 
-历史敏感信息清理已完成，GitHub Support 流程已结束，不再作为技术阻塞项。仓库保持 Private；alpha.22 预发布与在线资产核验已完成，仓库公开仍需单独授权。
+历史敏感信息清理已完成，GitHub Support 流程已结束，不再作为技术阻塞项。仓库现已公开；alpha.22 预发布与在线资产核验已完成，本版本仍为 Pre-release。
 
 ## 当前核心能力
 
