@@ -299,12 +299,17 @@ async function validateWorkBuddyAttachmentPath(sourcePath: string, rootPath: str
   if (info.isSymbolicLink() || (kind === 'zip' ? !info.isFile() : !info.isDirectory())) {
     throw new Error(kind === 'zip' ? '原始 ZIP 路径不是普通文件' : '原始附件路径不是普通目录')
   }
-  assertInside(canonicalRoot, await realpath(candidate))
+  const canonicalCandidate = await realpath(candidate)
+  assertInside(canonicalRoot, canonicalCandidate)
   if (kind === 'directory') {
+    // 只解析允许根的祖先别名；根内链接、大小写及 Unicode 别名仍按原安全边界拒绝。
+    if (canonicalCandidate !== join(canonicalRoot, relative(root, candidate))) {
+      throw new Error('原始附件路径包含根目录内部链接或大小写、Unicode 别名混淆')
+    }
     const lease = new WindowsPathLease()
-    try { await lease.lock(candidate, true) } finally { await lease.close() }
+    try { await lease.lock(canonicalCandidate, true) } finally { await lease.close() }
   }
-  return candidate
+  return canonicalCandidate
 }
 
 function assertInside(root: string, target: string, allowRoot = false): void {

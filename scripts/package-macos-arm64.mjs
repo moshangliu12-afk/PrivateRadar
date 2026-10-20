@@ -89,7 +89,7 @@ async function packageMac() {
   assert.equal(config.afterSign, undefined)
   assert.equal(config.mac.sign, undefined)
   assert.equal(config.publish, undefined)
-  assert.equal(require('electron-builder/package.json').version, '26.0.12')
+  assert.equal(require('electron-builder/package.json').version, '26.15.3')
   const env = unsignedEnvironment(process.env)
   const electronRuntime = ensureMacElectronRuntime(root)
   config.electronDist = electronRuntime.sourceDirectory

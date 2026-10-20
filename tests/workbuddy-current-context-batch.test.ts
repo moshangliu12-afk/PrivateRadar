@@ -95,6 +95,82 @@ function removeSources(f: Fixture) {
 }
 
 describe('当前卡片上下文到目录证据的完整批量链路', () => {
+  it.skipIf(process.platform !== 'win32').each(['普通路径', '合法祖先 Junction'])('Junction 回归：%s 保存目录证据、快照并导入消息', async (kind) => {
+    const f = fixture()
+    const alias = join(f.directory, 'workbuddy-alias')
+    if (kind === '合法祖先 Junction') {
+      symlinkSync(join(f.directory, 'user', '.workbuddy'), alias, 'junction')
+      expect((await fs.lstat(alias)).isSymbolicLink()).toBe(true)
+    }
+    const root = kind === '合法祖先 Junction' ? join(alias, 'app', 'tmp', 'chat-history') : f.options.chatHistoryRoot
+    const contexts = f.contexts.map((block, index) => ({ ...block,
+      extracted_dir_path: join(root, index === 0 ? '明确目录甲' : '明确目录乙') }))
+    for (const block of contexts) expect((await fs.lstat(block.extracted_dir_path)).isSymbolicLink()).toBe(false)
+    const canonicalPaths = await Promise.all(f.paths.map(path => fs.realpath(path)))
+    const save = vi.spyOn(directoryEvidence, 'saveDirectoryEvidence')
+    const lock = vi.spyOn(WindowsPathLease.prototype, 'lock')
+    const result = await ingestWorkBuddyCurrentContextBatch(f.db, { ...f.options, chatHistoryRoot: root }, request(contexts))
+    expect(result).toMatchObject({ status: 'success', summary: {
+      attachments_total: 2, attachments_completed: 2, imported_total: 7, failed_attachments: 0
+    } })
+    expect(count(f, 'messages')).toBe(7)
+    expect(save.mock.calls.map(args => args[3])).toEqual(canonicalPaths)
+    for (const path of canonicalPaths) expect(lock).toHaveBeenCalledWith(path, true)
+    if (kind === '合法祖先 Junction') {
+      expect(lock.mock.calls.some(([path]) => path === alias || path.startsWith(alias + sep))).toBe(false)
+    }
+    for (const [index, item] of result.items.entries()) {
+      expect(item.evidence_relative_path).toBe(`evidence/${item.item_id}/manifest.json`)
+      expect(item.snapshot_relative_path).toBe(`evidence/${item.item_id}/messages.json`)
+      const evidence = join(f.data, 'evidence', item.item_id)
+      expect(readFileSync(join(evidence, 'source', '聊天记录.txt'))).toEqual(readFileSync(join(f.paths[index], '聊天记录.txt')))
+      const snapshot = JSON.parse(readFileSync(join(evidence, 'messages.json'), 'utf8')).input
+      // 原始输入仍如实保留别名路径；实际文件读取和租约只使用已校验的物理路径。
+      expect(snapshot.current_context.extracted_dir_path).toBe(contexts[index].extracted_dir_path)
+      expect((await verifyBatchEvidence(f.db, f.options.databasePath, item.item_id)).status).toBe('available')
+    }
+  }, 120000)
+
+  it.skipIf(process.platform !== 'win32')('Junction 回归：祖先链接指向允许根外时仍以路径越界拒绝', async () => {
+    const f = fixture()
+    const outside = join(f.directory, '外部目录', '普通附件')
+    mkdirSync(outside, { recursive: true })
+    writeFileSync(join(outside, '外部.txt'), '不应读取的合成正文')
+    const link = join(f.options.chatHistoryRoot, '越界链接')
+    symlinkSync(join(f.directory, '外部目录'), link, 'junction')
+    const source = join(link, '普通附件')
+    expect((await fs.lstat(source)).isSymbolicLink()).toBe(false)
+    await expect(ingestWorkBuddyCurrentContextBatch(f.db, f.options, request([
+      { ...f.contexts[0], extracted_dir_path: source }
+    ]))).rejects.toThrow('不在允许的 WorkBuddy 聊天临时根目录内')
+    noSideEffects(f)
+  }, 30000)
+
+  it.skipIf(process.platform !== 'win32')('Junction 回归：附件内部重解析点仍拒绝，不保存快照或导入消息', async () => {
+    const f = fixture()
+    const outside = join(f.directory, '外部目录')
+    mkdirSync(outside)
+    writeFileSync(join(outside, '外部.txt'), '不应读取的合成正文')
+    symlinkSync(outside, join(f.paths[0], '内部链接'), 'junction')
+    const result = await ingestWorkBuddyCurrentContextBatch(f.db, f.options, request([f.contexts[0]]))
+    expect(result.status).toBe('failed')
+    expect(result.items[0]).toMatchObject({ outcome: 'failed_zero_write', imported: 0, snapshot_relative_path: null })
+    expect(result.items[0].error_summary).toMatch(/链接|重解析点/)
+    expect(count(f, 'messages')).toBe(0)
+    expect(count(f, 'import_jobs')).toBe(0)
+  }, 30000)
+
+  it.skipIf(process.platform !== 'win32')('Junction 回归：真实目录名大小写别名仍在入口拒绝', async () => {
+    const f = fixture()
+    const actual = join(f.options.chatHistoryRoot, 'CaseAttachment')
+    mkdirSync(actual)
+    writeFileSync(join(actual, '正文.txt'), '合成证据')
+    await expect(ingestWorkBuddyCurrentContextBatch(f.db, f.options, request([
+      { ...f.contexts[0], extracted_dir_path: join(f.options.chatHistoryRoot, 'caseattachment') }
+    ]))).rejects.toThrow()
+    noSideEffects(f)
+  }, 30000)
+
   it.skipIf(process.platform !== 'win32')('四份序列化中图片记录边界空行不同，仍按原首份正文归集两项并完整保留媒体证据', async () => {
     const f = fixture()
     const collection = createCollection(f.db, '序列化空行隔离归集')

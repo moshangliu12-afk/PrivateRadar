@@ -1,0 +1,38 @@
+name: 持续集成
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: 检出代码并保留原始换行
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # 版本 7.0.1
+        env:
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: core.autocrlf
+          GIT_CONFIG_VALUE_0: "false"
+        with:
+          persist-credentials: false
+      - name: 设置项目已验证的 Node 版本
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # 版本 7.1.0
+        with:
+          node-version: "24.14.0"
+          package-manager-cache: false
+      - name: 按锁文件安装依赖
+        run: npm ci
+      - name: 类型检查
+        run: npm run typecheck
+      - name: 运行完整测试
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+        run: npm test -- --maxWorkers=2 --testTimeout=30000
+      - name: 构建应用代码与连接器资源
+        run: npm run build

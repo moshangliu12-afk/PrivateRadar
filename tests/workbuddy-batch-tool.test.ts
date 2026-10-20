@@ -1,21 +1,25 @@
 import { sharedCoreFixture, sharedCoreItems, ingestSharedCore, sharedRows, sharedCount } from './shared-core-fixture'
 import { createHash } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Client } from '@modelcontextprotocol/client'
 import { InMemoryTransport } from '@modelcontextprotocol/server'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { initializeDatabase } from '../src/main/schema'
 import { createWorkBuddyMcpServer } from '../src/main/integrations/workbuddy/tool'
 import { ingestWorkBuddyBatch } from '../src/main/integrations/workbuddy/batch-tool'
 import { workBuddyBatchIngestSchema } from '../src/main/integrations/workbuddy/validation'
+import * as evidence from '../src/main/batch-import/evidence'
+
+vi.mock('../src/main/batch-import/evidence', async (original) => ({ ...await original<typeof evidence>() }))
 
 const databases: DatabaseSync[] = []
 const directories: string[] = []
 
 afterEach(() => {
+  vi.restoreAllMocks()
   while (databases.length) databases.pop()!.close()
   while (directories.length) rmSync(directories.pop()!, { recursive: true, force: true })
 })
@@ -64,6 +68,28 @@ function count(db: DatabaseSync, table: 'batch_import_sessions' | 'batch_import_
 }
 
 describe('alpha.15 WorkBuddy 双附件批量 Tool', () => {
+  it.skipIf(process.platform !== 'win32')('Junction 回归：legacy ZIP 通过合法根目录祖先别名后保存真实路径', async () => {
+    const f = fixture()
+    const alias = join(f.directory, 'workbuddy-alias')
+    symlinkSync(join(f.directory, 'user', '.workbuddy'), alias, 'junction')
+    const root = join(alias, 'app', 'tmp', 'chat-history')
+    const save = vi.spyOn(evidence, 'saveOriginalZip')
+    const result = await ingestWorkBuddyBatch(f.db, { ...f.options, chatHistoryRoot: root }, { attachments: [
+      attachment(join(root, '第一张聊天卡.zip'), '甲', 1), attachment(join(root, '第二张聊天卡.zip'), '乙', 1)
+    ] })
+    expect(result).toMatchObject({ status: 'success', summary: { imported_total: 2 } })
+    expect(f.db.prepare('SELECT source_hint FROM batch_import_items ORDER BY ordinal').all()).toEqual([
+      { source_hint: '当前卡片 甲' }, { source_hint: '当前卡片 乙' }
+    ])
+    for (const [index, item] of result.items.entries()) {
+      const evidence = join(f.directory, 'data', item.evidence_relative_path!)
+      expect(readFileSync(evidence)).toEqual(readFileSync(index === 0 ? f.firstZip : f.secondZip))
+      const snapshot = JSON.parse(readFileSync(join(f.directory, 'data', item.snapshot_relative_path!), 'utf8'))
+      expect(snapshot.input.messages).toHaveLength(1)
+    }
+    expect(save.mock.calls.map(args => args[3])).toEqual([realpathSync(f.firstZip), realpathSync(f.secondZip)])
+  })
+
   it.skipIf(process.platform !== 'win32')('legacy handler 内部调用一次写入 3 + 6，两个附件分别有证据、身份和任务', async () => {
     const f = fixture()
     const output = await ingestWorkBuddyBatch(f.db, f.options, {

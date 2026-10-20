@@ -8,6 +8,7 @@ type EnumerationPackager = {
   config: typeof product.build
   appInfo: { type: string }
   debugLogger: { isEnabled: boolean }
+  getWorkspaceRoot: () => Promise<string>
 }
 const { FileMatcher, getNodeModuleFileMatcher, excludedExts } = require('app-builder-lib/out/fileMatcher') as {
   FileMatcher: new (from: string, to: string, expand: (pattern: string) => string, patterns: string[]) => unknown
@@ -29,7 +30,8 @@ async function enumerateZod(files: string[]): Promise<string[]> {
   const packager: EnumerationPackager = {
     config: { ...product.build, files },
     appInfo: { type: product.type },
-    debugLogger: { isEnabled: false }
+    debugLogger: { isEnabled: false },
+    getWorkspaceRoot: async () => root
   }
   const dependencyMatcher = getNodeModuleFileMatcher(root, destination, (pattern) => pattern, {}, packager)
   const matcher = new FileMatcher(zodRoot, join(destination, 'node_modules', 'zod'), (pattern) => pattern, dependencyMatcher.patterns)

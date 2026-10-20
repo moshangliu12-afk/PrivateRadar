@@ -158,7 +158,7 @@ async function packageSignedMac() {
   // 在 Windows 或错误架构上拒绝执行，尚不读取任何 Apple 凭据。
   assert.equal(process.platform, 'darwin', 'MACOS_REQUIRED')
   assert.equal(process.arch, 'arm64', 'ARM64_REQUIRED')
-  assert.equal(require('electron-builder/package.json').version, '26.0.12', 'BUILDER_VERSION_MISMATCH')
+  assert.equal(require('electron-builder/package.json').version, '26.15.3', 'BUILDER_VERSION_MISMATCH')
   assert.equal(require('@electron/notarize/package.json').version, '2.5.0', 'NOTARIZE_VERSION_MISMATCH')
   const presence = credentialPresence(process.env)
   for (const [name, present] of Object.entries(presence)) console.log(`${name}: ${present ? '存在' : '不存在'}`)
