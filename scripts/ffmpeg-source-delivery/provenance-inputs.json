@@ -2,9 +2,9 @@
   "schema_version": 1,
   "privateradar": {
     "name": "PrivateRadar",
-    "version": "0.2.0-alpha.21",
+    "version": "0.2.0-alpha.22",
     "source_commit_before_delivery_change": "8b94bbbad38729c9a57cf64fe3d4cd6d62a9f821",
-    "source_bundle_internal_version": "0.2.0-alpha.21",
+    "source_bundle_internal_version": "0.2.0-alpha.22",
     "modified_ffmpeg_runtime": false,
     "publication_state": "LOCAL_VALIDATION_CANDIDATE"
   },

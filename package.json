@@ -1,6 +1,6 @@
 {
   "name": "private-radar",
-  "version": "0.2.0-alpha.21",
+  "version": "0.2.0-alpha.22",
   "productName": "PrivateRadar",
   "private": true,
   "license": "Apache-2.0",
@@ -44,7 +44,7 @@
     "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^5.0.2",
     "electron": "^44.3.0",
-    "electron-builder": "^26.0.12",
+    "electron-builder": "26.15.3",
     "electron-vite": "^4.0.0",
     "typescript": "^5.9.2",
     "vite": "^7.1.4",
