@@ -2,7 +2,7 @@
 
 ## 当前项目状态
 
-当前版本为 `0.2.0-alpha.21`，[v0.2.0-alpha.21 Pre-release](https://github.com/moshangliu12-afk/PrivateRadar/releases/tag/v0.2.0-alpha.21) 已提供 Windows x64、macOS Apple Silicon arm64 安装资产、FFmpeg 对应源码和 `SHA256SUMS.txt`。Windows 安装器已完成 typecheck、1674 / 1674 测试、Build、NSIS 打包、人工安装及主要功能验收，隐私扫描通过；macOS CI 打包与 DMG 检查通过，尚无 alpha.21 实体 Mac 人工运行验收记录。EXE、DMG 与对应源码包均绑定发行提交 `6f04bb6f8ecf4c0bfaf4c622f4191f73c759d866`；旧 alpha.20-derived 资产仅作参考。
+当前版本为 `0.2.0-alpha.22`，[v0.2.0-alpha.22 Pre-release](https://github.com/moshangliu12-afk/PrivateRadar/releases/tag/v0.2.0-alpha.22) 已提供 Windows x64、macOS Apple Silicon arm64、FFmpeg 对应源码和 `SHA256SUMS.txt`。发行源码与标签固定为 `a4d9174c713341243a00799c3432543aaa4e7747`，已通过正常 merge 整合进入 master；产品树与发行源码一致，文档收尾不移动标签。Windows 安装、启动、重启与普通导入人工验收已继承，104 个 payload 文件逐项一致；macOS CI / DMG 检查通过，没有本版实体 Mac 人工验证。线上完整测试 78/78 文件、1680/1680 用例及构建通过。
 
 截至 2026-10-14，Windows 11 x64 的 `0.2.0-alpha.20` 已完成正式部署、验收与封板；GitHub 已建立 [alpha.20 Pre-release](https://github.com/moshangliu12-afk/PrivateRadar/releases/tag/v0.2.0-alpha.20)。该页面没有上传 Windows 安装器、Skill 或 macOS 资产。
 
@@ -24,7 +24,8 @@ Windows 正式导入链为微信 → WorkBuddy → PrivateRadar；原生微信�
 | alpha.20-derived unsigned arm64 CI 打包 | `PASS`，参考候选 |
 | alpha.20-derived 打包应用核心功能实机验收 | `PASS`，无崩溃、无数据丢失 |
 | 参考包安装与首次启动 | `PASS_WITH_ISSUE`，需处理单个 App 自身 quarantine |
-| alpha.21 新 macOS 产物 | `PASS`，arm64 未签名 DMG 的 CI 打包与包检查通过，已提供 Release 资产；尚无实体 Mac 人工运行验收记录 |
+| alpha.22 macOS 产物 | `PASS`，arm64 unsigned、not notarized，CI / DMG 检查通过；无本版实体 Mac 人工验证 |
+| alpha.21 历史 macOS 产物 | `PASS`，arm64 未签名 DMG 的 CI 打包与包检查通过，已提供 Release 资产；尚无实体 Mac 人工运行验收记录 |
 | Developer ID / notarization / stapling | 当前 unsigned 策略不采用，不作为发行 blocker |
 
 此前 Stage3C 签名配置实施记录属于历史工程材料，不作为当前用户安装或许可证发布要求。此前包的 DMG integrity、安装至 `/Applications`、synthetic JSON 导入、Search、承诺候选、确认、已确认表达、Evidence、重启及持久化均通过。这是 alpha.20-derived reference runtime acceptance，不是 alpha.21 DMG 已通过实机验收。
@@ -35,7 +36,9 @@ Mac 当前入口仅为手动 JSON，不提供 Intel x64，也不接入 Windows W
 
 发行源码中的遗留真实搜索案例已替换为合成数据；项目自身已采用 Apache-2.0，npm 的 `private: true` 保留。隐私、安全、贡献、第三方基础许可说明与仓库 metadata 已整理。
 
-B0-1 / B0-2 / B0-3 / B0-4 均为 `PASS`，`P0_BINARY_LICENSE_BLOCKER_COUNT = 0`。alpha.21 安装资产与对应源码已从统一发行提交生成并核验，不重开 B0-4；不要求 replacement physical smoke test。Release 已提供四项正式资产，`SHA256SUMS.txt` 只覆盖 Windows、macOS 和对应源码三项，详见 README。
+B0-1 / B0-2 / B0-3 / B0-4 均为 `PASS`，`P0_BINARY_LICENSE_BLOCKER_COUNT = 0`。alpha.22 安装资产与对应源码已从固定发行提交生成并核验，不重开 B0-4；不要求 replacement physical smoke test。alpha.22 Release 已提供四项正式资产，`SHA256SUMS.txt` 只覆盖 Windows、macOS 和对应源码三项，详见 README。
+
+仓库仍保持 Private，Public 阶段另行授权。
 
 当前使用与平台边界见 [README](README.md)、[使用指南](USER_GUIDE.md)；隐私、安全、贡献与许可说明见根目录对应文档。下方早期日志只说明当时阶段，保留历史验证事实，不作当前实施授权或下一阶段计划。
 

@@ -8,18 +8,18 @@ Local-first personal chat intelligence: turn imported chats into daily intellige
 
 ## 下载与安装
 
-**[下载当前版本：v0.2.0-alpha.21（预发布）](https://github.com/moshangliu12-afk/PrivateRadar/releases/tag/v0.2.0-alpha.21)**
+**[下载当前版本：v0.2.0-alpha.22（预发布）](https://github.com/moshangliu12-afk/PrivateRadar/releases/tag/v0.2.0-alpha.22)**
 
 在发行页的附件列表中，选择适合你设备的安装包：
 
 | 平台 | 安装包 | 安装前须知 |
 |---|---|---|
-| Windows x64 | `PrivateRadar-Setup-0.2.0-alpha.21-x64.exe` | 未签名，可能出现 SmartScreen / 未知发布者提示 |
-| macOS | `PrivateRadar-0.2.0-alpha.21-macOS-arm64.dmg` | 仅 Apple Silicon / arm64（arm64 only），unsigned（未签名）、not notarized（未公证）；不支持 Intel x64 |
+| Windows x64 | `PrivateRadar-Setup-0.2.0-alpha.22-x64.exe` | 未签名，可能出现 SmartScreen / 未知发布者提示 |
+| macOS | `PrivateRadar-0.2.0-alpha.22-macOS-arm64.dmg` | 仅 Apple Silicon / arm64（arm64 only），unsigned（未签名）、not notarized（未公证）；不支持 Intel x64 |
 
 下载后请核对同一发行页的 `SHA256SUMS.txt`。安装与首次启动见[使用指南](./USER_GUIDE.md)。仓库目前仍为私有，下载需要仓库访问权限。
 
-**alpha.22 目前为本地候选，尚未发布到 GitHub Release。**
+**alpha.22 已提供预发布安装包、FFmpeg 对应源码和摘要清单。仓库仍保持私有。**
 
 ![今日情报：3 个群、20 条当日消息与 3 条重要信息](./docs/images/readme/privateradar-today.png)
 
@@ -85,15 +85,26 @@ Local-first personal chat intelligence: turn imported chats into daily intellige
 
 ## 当前状态
 
-- 当前本地封版版本为 `0.2.0-alpha.22`，正式发行源码提交为 `a4d9174c713341243a00799c3432543aaa4e7747`。WorkBuddy 合法祖先 Junction 导入修复、安全回归、真实导入与重启持久化验证已通过；最终 Windows 安装器及 FFmpeg 对应源码已准备，正在进行远程发布整合，尚未创建 alpha.22 标签或 Release，仓库仍为 Private。
-- 当前已发布版本为 [v0.2.0-alpha.21 预发布版](https://github.com/moshangliu12-afk/PrivateRadar/releases/tag/v0.2.0-alpha.21)。该历史版本 Windows x64 安装器已完成 1674 / 1674 测试、构建、隐私扫描与人工验收；macOS arm64 DMG 已通过 CI 打包与检查，尚无 alpha.21 实体 Mac 人工运行验收记录。
+- 当前版本为 `0.2.0-alpha.22`，已提供 [v0.2.0-alpha.22 Pre-release](https://github.com/moshangliu12-afk/PrivateRadar/releases/tag/v0.2.0-alpha.22)。发行源码及标签固定为 `a4d9174c713341243a00799c3432543aaa4e7747`；发布整合和文档收尾不改变发行资产身份。Windows 安装、启动、重启与普通导入人工验收通过；macOS arm64 DMG 已通过 GitHub Actions 构建、架构、许可及 DMG 检查，没有 alpha.22 实体 Mac 人工验证。仓库仍为 Private。
+- 历史版本为 [v0.2.0-alpha.21 预发布版](https://github.com/moshangliu12-afk/PrivateRadar/releases/tag/v0.2.0-alpha.21)。该历史版本 Windows x64 安装器已完成 1674 / 1674 测试、构建、隐私扫描与人工验收；macOS arm64 DMG 已通过 CI 打包与检查，尚无 alpha.21 实体 Mac 人工运行验收记录。
 - 历史完成并封板版本：[v0.2.0-alpha.20](https://github.com/moshangliu12-afk/PrivateRadar/tree/v0.2.0-alpha.20)。Windows 11 x64 的正式部署与验收结论保留，旧 annotated tag 和 Release 的历史身份不变。
 - [alpha.20 Pre-release 档案页](https://github.com/moshangliu12-afk/PrivateRadar/releases/tag/v0.2.0-alpha.20)没有上传该版本 Windows 安装器、Skill 或 macOS 资产；当前开发候选不挂到旧 Release。
 - Windows 正式导入链：微信 → WorkBuddy → PrivateRadar。macOS 仅提供手动 JSON 导入；PrivateRadar 自己的原生微信分享入口继续延期。
 
+## alpha.22 发行资产
+
+| 文件 | 平台与范围 |
+|---|---|
+| `PrivateRadar-Setup-0.2.0-alpha.22-x64.exe` | Windows x64，unsigned，人工验收通过 |
+| `PrivateRadar-0.2.0-alpha.22-macOS-arm64.dmg` | Apple Silicon / arm64 only，unsigned、not notarized；CI / DMG 检查通过，无实体 Mac 人工验证 |
+| `PrivateRadar-0.2.0-alpha.22-ffmpeg-corresponding-source.tar.xz` | 两平台共用的对应源码、许可与包内 provenance |
+| `SHA256SUMS.txt` | 仅记录以上三个正式下载文件，不记录自身或发布说明 |
+
+以上资产均绑定发行源码提交 `a4d9174c713341243a00799c3432543aaa4e7747`，下载与摘要见 [alpha.22 发行页](https://github.com/moshangliu12-afk/PrivateRadar/releases/tag/v0.2.0-alpha.22)。诊断报告、`.app.zip` 与外置 provenance 不作为正式发行资产。
+
 <a id="alpha21-发行资产计划"></a>
 
-## alpha.21 发行资产
+## 历史 alpha.21 发行资产
 
 | 文件 | 平台与范围 |
 |---|---|
@@ -114,18 +125,19 @@ Windows 可能出现 SmartScreen / 未知发布者提示；核验来源和摘要
 | alpha.20-derived unsigned arm64 CI 打包 | `PASS`，仅作为已验收参考候选 |
 | alpha.20-derived 打包应用核心功能实机验收 | `PASS` |
 | alpha.20-derived 实体安装与首次启动 | `PASS_WITH_ISSUE`，首次启动需处理该 App 自身 quarantine |
-| alpha.21 新 DMG / CI | `PASS`，arm64 未签名 DMG 已作为 Release 资产提供；尚无实体 Mac 人工运行验收记录 |
+| alpha.22 DMG / CI | `PASS`，固定发行提交的 arm64 未签名 DMG 已提供；无实体 Mac 人工验证 |
+| alpha.21 历史 DMG / CI | `PASS`，arm64 未签名 DMG 已作为 Release 资产提供；尚无实体 Mac 人工运行验收记录 |
 | Developer ID / notarization / stapling | 当前 unsigned 策略不采用，不作为发行 blocker |
 
 此前参考候选已核验 DMG SHA256、安装至 `/Applications`，synthetic JSON 导入、Search、承诺候选、确认、已确认表达、Evidence、退出重启及持久化均通过，无崩溃、无数据丢失。这是 **alpha.20-derived reference runtime acceptance**，不是 alpha.21 DMG 的实机验收。
 
 参考候选首次启动曾提示“PrivateRadar 已损坏，无法打开”。用户核验下载来源和 SHA256 后，仅执行 `xattr -dr com.apple.quarantine "/Applications/PrivateRadar.app"` 移除该 App 自身 quarantine，随后启动成功。具体操作及边界见使用指南；不修改其他 App 或系统级安全策略。
 
-Mac 仅接受 JSON，未接入 Windows WorkBuddy 正式链，也不承诺 CSV / TXT 能力。alpha.21 已完成 CI / DMG 检查；实体 Mac 人工运行验收与参考候选分开记录。macOS 安装包已提供不表示 WorkBuddy Connector 已支持 macOS；alpha.22 新产物仍须独立核验，不无证据继承参考候选的实机 PASS。
+Mac 仅接受 JSON，未接入 Windows WorkBuddy 正式链，也不承诺 CSV / TXT 能力。alpha.21 已完成 CI / DMG 检查；实体 Mac 人工运行验收与参考候选分开记录。macOS 安装包已提供不表示 WorkBuddy Connector 已支持 macOS；alpha.22 已完成独立 CI / DMG 核验，不继承参考候选的实机 PASS。
 
-B0-1 / B0-2 / B0-3 / B0-4 均为 `PASS`，`P0_BINARY_LICENSE_BLOCKER_COUNT = 0`。alpha.21 已完成统一发行提交的产物与对应源码核验；alpha.22 对应源码已生成，最终产物及许可交付继续独立核验。这不重新打开 B0-4，也不要求重做 FFmpeg replacement physical smoke test。
+B0-1 / B0-2 / B0-3 / B0-4 均为 `PASS`，`P0_BINARY_LICENSE_BLOCKER_COUNT = 0`。alpha.21 已完成统一发行提交的产物与对应源码核验；alpha.22 安装资产、对应源码及许可交付已独立核验并随 Release 提供。这不重新打开 B0-4，也不要求重做 FFmpeg replacement physical smoke test。
 
-历史敏感信息清理已完成，GitHub Support 流程已结束，不再作为技术阻塞项。仓库保持 Private；后续先完成 alpha.22 正式发行与发布核验，再单独取得公开授权。
+历史敏感信息清理已完成，GitHub Support 流程已结束，不再作为技术阻塞项。仓库保持 Private；alpha.22 预发布与在线资产核验已完成，仓库公开仍需单独授权。
 
 ## 当前核心能力
 
@@ -164,9 +176,9 @@ npm run typecheck
 npm run build
 ```
 
-alpha.22 最终 Windows 安装器已通过与人工验收包的 104 个 payload 文件逐项摘要比较，继承安装、启动、重启和普通导入验收；FFmpeg 对应源码已生成，macOS 最终 DMG 待本轮自动构建和静态核验。实体 M4 Mac 源码运行和此前 unsigned 包的实机测试仅为历史参考证据，不代替 alpha.22 实机验收。当前锁定 Electron 44.3.0，Electron 二进制安装需要其安装脚本成功执行，排查步骤见贡献指南。源码开发自检不能代替最终安装包验收。
+alpha.22 最终 Windows 安装器已通过与人工验收包的 104 个 payload 文件逐项摘要比较，继承安装、启动、重启和普通导入验收；FFmpeg 对应源码已生成，macOS 最终 DMG 已通过本轮自动构建和静态核验，没有实体 Mac 人工验证。实体 M4 Mac 源码运行和此前 unsigned 包的实机测试仅为历史参考证据，不代替 alpha.22 实机验收。当前锁定 Electron 44.3.0，Electron 二进制安装需要其安装脚本成功执行，排查步骤见贡献指南。源码开发自检不能代替最终安装包验收。
 
-Windows x64 安装器构建命令为 `npm run dist:win`，输出到 `release/`；该命令用于本地构建，已验收安装器见 alpha.21 Release。
+Windows x64 安装器构建命令为 `npm run dist:win`，输出到 `release/`；该命令用于本地构建，已验收安装器见当前 alpha.22 Release。
 
 ## 当前目录
 
@@ -202,4 +214,4 @@ PrivateRadar/
 
 ## 许可证
 
-项目自身采用 [Apache-2.0](./LICENSE)。第三方组件保留各自许可证与通知要求。B0-1～4 已闭环；alpha.21 对应源码与许可材料已核验，alpha.22 对应源码已生成并绑定固定发行提交，最终发行资产继续独立核验，见 [第三方许可清单](./THIRD_PARTY_NOTICES.md)。FFmpeg 对应源码采用保守超集交付，不承诺按位复现官方二进制。
+项目自身采用 [Apache-2.0](./LICENSE)。第三方组件保留各自许可证与通知要求。B0-1～4 已闭环；alpha.21 对应源码与许可材料已核验，alpha.22 对应源码及最终发行资产已绑定固定发行提交并独立核验，见 [第三方许可清单](./THIRD_PARTY_NOTICES.md)。FFmpeg 对应源码采用保守超集交付，不承诺按位复现官方二进制。

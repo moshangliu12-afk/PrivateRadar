@@ -1,10 +1,10 @@
-# PrivateRadar alpha.21 使用指南
+# PrivateRadar alpha.22 使用指南
 
-PrivateRadar 帮你整理主动导入的聊天，并能回到原始消息查看依据。当前版本为 `0.2.0-alpha.21`，[v0.2.0-alpha.21 Pre-release](https://github.com/moshangliu12-afk/PrivateRadar/releases/tag/v0.2.0-alpha.21) 已提供 Windows x64、macOS Apple Silicon arm64 安装资产、FFmpeg 对应源码和 `SHA256SUMS.txt`。Windows 安装与主要功能人工验收通过；macOS CI 打包与 DMG 检查通过，尚无 alpha.21 实体 Mac 人工运行验收记录。历史 alpha.20 的 Windows 11 x64 封板结论保留；此前 Apple Silicon unsigned 包的实机结果仅为参考。
+PrivateRadar 帮你整理主动导入的聊天，并能回到原始消息查看依据。当前版本为 `0.2.0-alpha.22`，[v0.2.0-alpha.22 Pre-release](https://github.com/moshangliu12-afk/PrivateRadar/releases/tag/v0.2.0-alpha.22) 已提供 Windows x64、macOS Apple Silicon arm64 安装资产、FFmpeg 对应源码和 `SHA256SUMS.txt`，统一绑定发行源码提交 `a4d9174c713341243a00799c3432543aaa4e7747`。Windows 安装、启动、重启和普通导入人工验收通过；macOS CI 打包与 DMG 检查通过，没有 alpha.22 实体 Mac 人工验证。历史版本及参考候选结论单独保留，不代替本版验收。
 
 ## Windows 安装与初次体验
 
-alpha.21 已作为 Release 资产提供的 Windows 安装器为 `PrivateRadar-Setup-0.2.0-alpha.21-x64.exe`，仅 Windows x64，unsigned，非 Microsoft Store 分发，已通过人工安装与主要功能验收。从对应版本发行页获取，并与 `SHA256SUMS.txt` 核对摘要，再按安装向导安装；不要使用历史版本安装器替代。
+alpha.22 Windows 安装器为 `PrivateRadar-Setup-0.2.0-alpha.22-x64.exe`，仅 Windows x64，unsigned，非 Microsoft Store 分发。最终 payload 与人工验收版本的 104 个文件逐项一致，安装、启动、重启和普通导入结论已继承。从当前发行页获取并核对 `SHA256SUMS.txt`，再按向导安装。
 
 Windows 可能出现 SmartScreen / 未知发布者提示。核验来源和摘要后，如果系统提供“更多信息 → 仍要运行”，可由你选择单次继续；组织策略可能禁止继续。不指导关闭 Defender 或系统级安全功能。
 
@@ -39,7 +39,7 @@ Windows 可能出现 SmartScreen / 未知发布者提示。核验来源和摘要
 
 ## macOS 安装与首次启动
 
-alpha.21 已作为 Release 资产提供 `PrivateRadar-0.2.0-alpha.21-macOS-arm64.dmg`，仅 Apple Silicon / arm64，不提供 Intel x64。文件名不含 `unsigned`，但实际仍为 unsigned、not notarized、无 Developer ID；用户无需 Apple Developer Program。该包已通过 CI 打包与 DMG 检查，尚无 alpha.21 实体 Mac 人工运行验收记录。
+alpha.22 已提供 `PrivateRadar-0.2.0-alpha.22-macOS-arm64.dmg`，仅 Apple Silicon / arm64，不提供 Intel x64。实际为 unsigned、not notarized、无 Developer ID；用户无需 Apple Developer Program。该包已通过 GitHub Actions 构建、架构、许可及 DMG 检查，没有 alpha.22 实体 Mac 人工验证。
 
 安装步骤：
 
@@ -53,9 +53,9 @@ xattr -dr com.apple.quarantine "/Applications/PrivateRadar.app"
 
 该命令仅移除 `/Applications/PrivateRadar.app` 自身的 quarantine 属性，不修复损坏的下载文件。不要扩大到其他路径或其他 App，不关闭 Gatekeeper、SIP，也不降低系统级安全策略。若摘要不符，先停止，不执行该操作。终端无需安装 Node.js 或开发工具。
 
-此前已完成的 **alpha.20-derived reference runtime acceptance** 包括 DMG integrity、安装到 `/Applications`、synthetic JSON 导入、Search、Commitment Candidate、Confirm、Confirmed、Evidence、完全退出后重启及数据持久化，均通过；无崩溃、无数据丢失。首次启动体验为 `PASS_WITH_ISSUE`，按上述单 App 操作后成功运行。不能将这些结果写成 alpha.21 DMG 已完成实机验收。
+此前已完成的 **alpha.20-derived reference runtime acceptance** 包括 DMG integrity、安装到 `/Applications`、synthetic JSON 导入、Search、Commitment Candidate、Confirm、Confirmed、Evidence、完全退出后重启及数据持久化，均通过；无崩溃、无数据丢失。首次启动体验为 `PASS_WITH_ISSUE`，按上述单 App 操作后成功运行。不能将这些历史参考结果写成 alpha.22 DMG 已完成实机验收。
 
-alpha.21 已完成 CI / 包核验，实体 Mac 人工运行验收与上述参考候选分开记录。源码开发方式另见 [README](README.md) 和 [贡献指南](CONTRIBUTING.md)。
+alpha.22 已完成 CI / 包核验，实体 Mac 人工验证本轮未执行，与上述历史参考候选分开记录。源码开发方式另见 [README](README.md) 和 [贡献指南](CONTRIBUTING.md)。
 
 ## macOS 手动 JSON
 

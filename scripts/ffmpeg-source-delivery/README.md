@@ -1,7 +1,7 @@
 # FFmpeg 保守源码交付
 
-当前交付目标为 `0.2.0-alpha.21`。B0-4 的对应源码设计和现有候选验证已闭环；
-旧 alpha.20 源码包仅保留为历史验收参考，alpha.21 必须从统一最终候选提交重新生成并核验。
+当前 alpha.22 对应源码已随 `v0.2.0-alpha.22` Pre-release 交付，绑定固定发行源码提交 `a4d9174c713341243a00799c3432543aaa4e7747`。B0-4 的对应源码设计已闭环；
+历史 alpha.20 / alpha.21 源码包仅保留各自发行及验收身份，不代替本版交付。本文的后续状态更新不修改已发布归档，正式发行身份以归档内 provenance 为准。
 
 使用 Python 3.12 或更新版本的标准库执行 `scripts/prepare-ffmpeg-corresponding-source.py`，
 指定仓库外的 `--cache` 和尚不存在的 `--output` 目录。
@@ -29,7 +29,7 @@ FFmpeg patch 队列仅含 `link_with_loader_path.patch`；构建上下文的 Chr
 
 包内 manifest 不写自身及整个 archive 的摘要，避免循环；外置同名 manifest
 包含完整归档清单（含包内 manifest）、压缩后大小和最终 SHA-256。
-正式源码交付资产仅为 `PrivateRadar-0.2.0-alpha.21-ffmpeg-corresponding-source.tar.xz`，
+本版正式源码交付资产仅为 `PrivateRadar-0.2.0-alpha.22-ffmpeg-corresponding-source.tar.xz`，
 包内交付 `FFMPEG_SOURCE_PROVENANCE.json`。外置 manifest 只作内部验收材料，
 不作为第五项 Release 资产；最终公开摘要记录于 `SHA256SUMS.txt`。
 固定排序、Git 权限、零时间与所有者；压缩工具版本改变仍可能改变压缩字节，
