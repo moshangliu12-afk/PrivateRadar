@@ -212,6 +212,15 @@ PrivateRadar/
 
 历史与设计记录：[历史检查点](./docs/PROJECT_CHECKPOINT.md)、[alpha.15 候选发布说明](./ALPHA_RELEASE_NOTES.md)及[历史检查表](./ALPHA_RELEASE_CHECKLIST.md)保留当时状态；D1 / D2 / E1 设计、研究与专项验收数字也是阶段记录，不代表当前待办或最新验收结果。当前版本与发布状态以本页“当前状态”为准。
 
+## 联系
+
+如果你有使用反馈、合作建议或其他问题，可以通过以下方式联系：
+
+- GitHub Issues：适合 Bug、功能建议和公开讨论
+- Email：[alenshao1@proton.me](mailto:alenshao1@proton.me)
+
+安全漏洞请优先使用 GitHub Private Vulnerability Reporting 私下提交。
+
 ## 许可证
 
 项目自身采用 [Apache-2.0](./LICENSE)。第三方组件保留各自许可证与通知要求。B0-1～4 已闭环；alpha.21 对应源码与许可材料已核验，alpha.22 对应源码及最终发行资产已绑定固定发行提交并独立核验，见 [第三方许可清单](./THIRD_PARTY_NOTICES.md)。FFmpeg 对应源码采用保守超集交付，不承诺按位复现官方二进制。
