@@ -1,31 +1,68 @@
 # PrivateRadar
 
-Local-first personal chat intelligence: turn imported chats into daily intelligence, topic radar, searchable Q&A, and reviewable commitment candidates.
+Local-first chat intelligence for WeChat and other imported conversations.
 
-整理主动导入的聊天，查看今日情报、检索原文，并人工审核承诺候选。
+把微信聊天记录和其他主动导入的聊天数据，沉淀成属于你自己的、可搜索、可追溯的本地聊天情报库。
+
+PrivateRadar 会保留聊天原文、来源和上下文，让你以后仍能搜索历史消息、回到原文核对，并在需要时重新搜索、核对和分析同一份数据。
 
 [![许可证 Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue)](./LICENSE) ![Windows x64](https://img.shields.io/badge/Windows-x64-blue) ![macOS arm64](https://img.shields.io/badge/macOS-arm64-lightgrey)
 
-## 下载与安装
+**当前支持的聊天入口**
+
+Windows 正式验证链路：**微信 → WorkBuddy → PrivateRadar**；同时支持 **JSON / CSV / TXT 文件导入**。
+
+macOS 当前仅支持手动 JSON 导入，未接入 Windows WorkBuddy 正式链，也不承诺 CSV / TXT 能力。安装与验收范围见下文及[使用指南](./USER_GUIDE.md)。
 
 **[下载当前版本：v0.2.0-alpha.22（预发布）](https://github.com/moshangliu12-afk/PrivateRadar/releases/tag/v0.2.0-alpha.22)**
 
-在发行页的附件列表中，选择适合你设备的安装包：
-
-| 平台 | 安装包 | 安装前须知 |
-|---|---|---|
-| Windows x64 | `PrivateRadar-Setup-0.2.0-alpha.22-x64.exe` | 未签名，可能出现 SmartScreen / 未知发布者提示 |
-| macOS | `PrivateRadar-0.2.0-alpha.22-macOS-arm64.dmg` | 仅 Apple Silicon / arm64（arm64 only），unsigned（未签名）、not notarized（未公证）；不支持 Intel x64 |
-
-可从对应 GitHub Pre-release 下载当前安装包，并使用 `SHA256SUMS.txt` 核对摘要。安装与首次启动见[使用指南](./USER_GUIDE.md)。
-
-**alpha.22 已提供预发布安装包、FFmpeg 对应源码和摘要清单。仓库现已公开。**
+安装包选择与未签名提示见[下载与安装](#下载与安装)。
 
 ![今日情报：3 个群、20 条当日消息与 3 条重要信息](./docs/images/readme/privateradar-today.png)
 
 从当天聊天中，找到值得优先关注的信息。
 
 *截图来自 alpha.22 本地候选，聊天内容均为虚构演示数据。*
+
+## 为什么 PrivateRadar
+
+把一批聊天直接交给 AI / Agent，适合“帮我看这批聊天，然后告诉我重点”。
+
+PrivateRadar 更关注聊天保留下来之后怎么用：以后再搜索历史、回看原消息，或者围绕新的问题重新查找和核对。你可以回到原消息及来源上下文核对依据（Evidence），把分析判断和原始依据分开查看。
+
+## 当前如何工作
+
+Windows 当前正式链路：
+
+```text
+微信聊天记录
+↓
+WorkBuddy
+↓
+PrivateRadar
+↓
+本地保存、搜索与来源依据
+↓
+今日情报 / 话题雷达 / 问我的聊天 / 关键词雷达 / 承诺候选
+```
+
+文件也可以直接导入：
+
+```text
+Windows：JSON / CSV / TXT → PrivateRadar
+macOS：JSON → PrivateRadar
+```
+
+## PrivateRadar 和直接把聊天交给 Agent 有什么不同？
+
+两种方式用途不同。直接把聊天交给 Agent，更适合根据当前指令快速整理、总结和定制汇报；PrivateRadar 更关注聊天数据长期保留后的搜索、来源核对、上下文回看和重复利用。
+
+| 维度 | PrivateRadar | 直接把聊天交给 Agent |
+| --- | --- | --- |
+| 主要用途 | 长期保存、搜索、追溯和复用聊天信息 | 根据当前指令整理、总结或汇报一批聊天 |
+| 历史搜索与复用 | 原生基于已导入聊天数据 | 取决于具体产品的上下文、记忆和存储机制 |
+| 原文与来源上下文 | 可以回到原消息及来源上下文核对 | 取决于具体 Agent 和工作流 |
+| 自定义汇报 | 当前不是核心能力 | 通常更适合按当前指令定制结果 |
 
 ## 能做什么
 
@@ -80,6 +117,19 @@ Local-first personal chat intelligence: turn imported chats into daily intellige
 ![更多来自虚构协作群和读书群的承诺候选](./docs/images/readme/privateradar-commitments-more.png)
 
 </details>
+
+## 下载与安装
+
+在发行页的附件列表中，选择适合你设备的安装包：
+
+| 平台 | 安装包 | 安装前须知 |
+|---|---|---|
+| Windows x64 | `PrivateRadar-Setup-0.2.0-alpha.22-x64.exe` | 未签名，可能出现 SmartScreen / 未知发布者提示 |
+| macOS | `PrivateRadar-0.2.0-alpha.22-macOS-arm64.dmg` | 仅 Apple Silicon / arm64（arm64 only），unsigned（未签名）、not notarized（未公证）；不支持 Intel x64 |
+
+可从对应 GitHub Pre-release 下载当前安装包，并使用 `SHA256SUMS.txt` 核对摘要。安装与首次启动见[使用指南](./USER_GUIDE.md)。
+
+**alpha.22 已提供预发布安装包、FFmpeg 对应源码和摘要清单。仓库现已公开。**
 
 ---
 
