@@ -14,6 +14,8 @@ import { logKeywordRadarFailure } from '../../keyword-radar/processor'
 import { schedulePendingCommitmentExtractorRuns } from '../../commitment/recovery'
 import { logCommitmentFailure } from '../../commitment/processor'
 import { gateWorkBuddyBatchCurrentInput, WorkBuddyCurrentInputError } from '../../import/workbuddy-current-input'
+import { assertNoWorkBuddyDescendantReparse, assertWorkBuddyCanonicalStructure, diagnoseWorkBuddyPathMismatch,
+  resolveTrustedWorkBuddyRoot, WorkBuddyPathValidationError, workBuddySourcePathPolicy, type TrustedWorkBuddyRoot } from './source-path-policy'
 import { workBuddyBatchIngestSchema, workBuddyBatchResultSchema, workBuddyCurrentContextBatchSchema,
   workBuddyIngestSchema, type WorkBuddyIngestInput, type WorkBuddyBatchIngestInput, type WorkBuddyBatchResult } from './validation'
 
@@ -122,25 +124,47 @@ export async function prepareWorkBuddyCurrentContextBatch(
     }
   }
   const prepared: PreparedBatchAttachment[] = []
-  for (const attachment of normalized.logical_attachments) {
-    const sourcePath = await validateWorkBuddyAttachmentPath(attachment.extracted_dir_path, chatHistoryRoot(options), 'directory')
-    const snapshot = {
-      messages: attachment.messages,
-      parser: { grammar_version: attachment.grammar_version, timezone_interpretation: attachment.timezone_interpretation },
-      current_context: {
-        file: attachment.file, extracted_dir_path: attachment.extracted_dir_path,
-        message_count: attachment.message_count, transcript: attachment.transcript,
-        first_sender: attachment.first_sender, first_message_at: attachment.first_message_at,
-        truncated: attachment.truncated, context_indexes: attachment.context_indexes,
-        raw_context_count: normalized.raw_context_count
+  const userHome = homedir()
+  let trustedRoot: TrustedWorkBuddyRoot | undefined
+  let sourceLease: WindowsPathLease | undefined
+  try {
+    for (const attachment of normalized.logical_attachments) {
+      // 显式隔离根继续只允许该根；正式入口按当前主目录选择新旧布局。
+      const policy = options.chatHistoryRoot !== undefined
+        ? { root: options.chatHistoryRoot }
+        : workBuddySourcePathPolicy(attachment.extracted_dir_path, userHome)
+      if ('logicalRoot' in policy) {
+        trustedRoot ??= await resolveTrustedWorkBuddyRoot(userHome)
+        sourceLease ??= new WindowsPathLease()
+      }
+      const sourcePath = await validateWorkBuddyAttachmentPath(attachment.extracted_dir_path, policy.root, 'directory', trustedRoot, sourceLease)
+      const snapshot = {
+        messages: attachment.messages,
+        parser: { grammar_version: attachment.grammar_version, timezone_interpretation: attachment.timezone_interpretation },
+        current_context: {
+          file: attachment.file, extracted_dir_path: attachment.extracted_dir_path,
+          message_count: attachment.message_count, transcript: attachment.transcript,
+          first_sender: attachment.first_sender, first_message_at: attachment.first_message_at,
+          truncated: attachment.truncated, context_indexes: attachment.context_indexes,
+          raw_context_count: normalized.raw_context_count
+        }
+      }
+      // 只验证，不使用会 trim 的返回值替换 Parser 原始结果。
+      workBuddyIngestSchema.parse(snapshot)
+      prepared.push({ sourceKind: 'directory', sourcePath, displayName: attachment.file,
+        sourceHint: attachment.extracted_dir_path, input: snapshot })
+    }
+    if (trustedRoot !== undefined) {
+      // 会话零写入门禁前再次使用原生句柄核验根；后续只读取已持有租约的物理来源。
+      const current = await resolveTrustedWorkBuddyRoot(userHome)
+      if (current.canonicalRoot !== trustedRoot.canonicalRoot) {
+        throw new WorkBuddyPathValidationError('ROOT_CANONICAL_CHANGED', '准备期间 WorkBuddy 根的最终目标发生变化')
       }
     }
-    // 只验证，不使用会 trim 的返回值替换 Parser 原始结果。
-    workBuddyIngestSchema.parse(snapshot)
-    prepared.push({ sourceKind: 'directory', sourcePath, displayName: attachment.file,
-      sourceHint: attachment.extracted_dir_path, input: snapshot })
+    return await prepareBatchAttachments(db, options, prepared, input.collection_id)
+  } finally {
+    await sourceLease?.close()
   }
-  return prepareBatchAttachments(db, options, prepared, input.collection_id)
 }
 
 export async function ingestWorkBuddyCurrentContextBatch(
@@ -275,18 +299,23 @@ function chatHistoryRoot(options: WorkBuddyBatchToolOptions): string {
   return options.chatHistoryRoot ?? join(homedir(), '.workbuddy', 'app', 'tmp', 'chat-history')
 }
 
-async function validateWorkBuddyAttachmentPath(sourcePath: string, rootPath: string, kind: 'zip' | 'directory'): Promise<string> {
+async function validateWorkBuddyAttachmentPath(
+  sourcePath: string, rootPath: string, kind: 'zip' | 'directory',
+  trustedRoot?: TrustedWorkBuddyRoot, sourceLease?: WindowsPathLease
+): Promise<string> {
   if (!isAbsolute(sourcePath) || sourcePath.split(/[\\/]+/).includes('..')) {
     throw new Error('原始附件必须是允许临时目录内、不含目录穿越的绝对路径')
   }
   if (kind === 'zip' && !sourcePath.toLowerCase().endsWith('.zip')) throw new Error('原始聊天附件必须是 ZIP 文件')
   if (kind === 'directory') { safeAbsolutePath(sourcePath); safeAbsolutePath(rootPath) }
+  if (trustedRoot !== undefined) await assertNoWorkBuddyDescendantReparse(trustedRoot, resolve(sourcePath))
   const root = resolve(rootPath)
   const rootInfo = await stat(root)
   if (!rootInfo.isDirectory()) throw new Error('WorkBuddy 聊天临时根路径不是目录')
   const candidate = resolve(sourcePath)
   assertInside(root, candidate)
   const canonicalRoot = await realpath(root)
+  if (trustedRoot !== undefined) assertWorkBuddyCanonicalStructure(trustedRoot, root, canonicalRoot)
   let info: Awaited<ReturnType<typeof lstat>>
   try {
     info = await lstat(candidate)
@@ -300,14 +329,22 @@ async function validateWorkBuddyAttachmentPath(sourcePath: string, rootPath: str
     throw new Error(kind === 'zip' ? '原始 ZIP 路径不是普通文件' : '原始附件路径不是普通目录')
   }
   const canonicalCandidate = await realpath(candidate)
+  if (trustedRoot !== undefined) assertWorkBuddyCanonicalStructure(trustedRoot, candidate, canonicalCandidate)
   assertInside(canonicalRoot, canonicalCandidate)
   if (kind === 'directory') {
     // 只解析允许根的祖先别名；根内链接、大小写及 Unicode 别名仍按原安全边界拒绝。
     if (canonicalCandidate !== join(canonicalRoot, relative(root, candidate))) {
-      throw new Error('原始附件路径包含根目录内部链接或大小写、Unicode 别名混淆')
+      throw await diagnoseWorkBuddyPathMismatch(
+        join(canonicalRoot, relative(root, candidate)), canonicalCandidate, root, candidate)
     }
-    const lease = new WindowsPathLease()
-    try { await lease.lock(canonicalCandidate, true) } finally { await lease.close() }
+    const lease = sourceLease ?? new WindowsPathLease()
+    try { await lease.lock(canonicalCandidate, true) }
+    catch (error) {
+      if (trustedRoot !== undefined && error instanceof Error && error.message.includes('拒绝重解析点')) {
+        throw new WorkBuddyPathValidationError('DESCENDANT_REPARSE_REJECTED', '来源物理路径的原生句柄发现重解析点')
+      }
+      throw error
+    } finally { if (sourceLease === undefined) await lease.close() }
   }
   return canonicalCandidate
 }

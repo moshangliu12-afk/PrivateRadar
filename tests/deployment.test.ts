@@ -227,6 +227,22 @@ describe('Windows 安装与 WorkBuddy 连接组件', () => {
     expect(upgraded.registrationChanged).toBe(false)
   })
 
+  it.skipIf(process.platform !== 'win32')('同版本修复完整载荷仍会重新部署，配置和官方技能保持原样', () => {
+    const { root, payload, data } = fixture()
+    const userHome = join(root, 'user')
+    const first = prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.22', new Date(), userHome)
+    acknowledgeConnectorTrust(data)
+    const config = readFileSync(first.registrationPath, 'utf8')
+    const skill = readFileSync(first.skillDeployment.targetPath, 'utf8')
+    const corrected = 'export const syntheticPathPolicy = 1\n'
+    writeFileSync(join(payload, 'dist', 'server.mjs'), corrected)
+    const updated = prepareWorkBuddyConnector(payload, data, '0.2.0-alpha.22', new Date(), userHome)
+    expect(readFileSync(join(updated.connectorPath, 'dist', 'server.mjs'), 'utf8')).toBe(corrected)
+    expect(updated).toMatchObject({ requiresTrust: false, registrationChanged: false })
+    expect(readFileSync(updated.registrationPath, 'utf8')).toBe(config)
+    expect(readFileSync(updated.skillDeployment.targetPath, 'utf8')).toBe(skill)
+  })
+
   it.skipIf(process.platform !== 'win32')('连接配置哈希真正变化时要求重新信任', () => {
     const { root, payload, data } = fixture()
     const userHome = join(root, 'user')
