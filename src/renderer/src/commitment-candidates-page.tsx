@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { ConversationName } from './conversation-labels'
 import type { CommitmentCandidateContext, CommitmentCandidateReview, CommitmentCandidateView, CommitmentDesktopApi, CommitmentOccurrenceView, CommitmentResult } from '../../shared/commitment'
 
 const safeErrors: Record<string, string> = {
@@ -34,7 +35,7 @@ function chatTime(entry: CommitmentOccurrenceView): string {
   return new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(entry.chatTimestamp))
 }
 export function CommitmentOccurrence({ entry }: { entry: CommitmentOccurrenceView }): React.JSX.Element {
-  return <div className="commitment-occurrence"><span>{entry.senderName?.trim() ? entry.senderName : '发送人未知'}</span><span>{chatTime(entry)}</span><span>{entry.conversationName?.trim() ? entry.conversationName : '会话未知'}</span></div>
+  return <div className="commitment-occurrence"><span>{entry.senderName?.trim() ? entry.senderName : '发送人未知'}</span><span>{chatTime(entry)}</span><span><ConversationName value={entry} evidence /></span></div>
 }
 export function CommitmentContext({ context }: { context: CommitmentCandidateContext }): React.JSX.Element {
   return <ol className="commitment-context" aria-label="同一附件及会话中的上下文">

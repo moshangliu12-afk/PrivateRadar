@@ -1,3 +1,5 @@
+import type { ConversationNameInput } from './conversation-labels'
+
 export interface StandardMessage {
   messageId: string
   platform: string
@@ -93,7 +95,7 @@ export interface DailyValueAssessment {
   whyItMatters: string
 }
 
-export interface EvidenceMessage {
+export interface EvidenceMessage extends ConversationNameInput {
   messageId: string
   conversationId: string
   conversationName: string
@@ -291,6 +293,7 @@ export interface QueryUnderstanding {
   isNaturalLanguage: boolean
   conversationIds: string[]
   conversationNames: string[]
+  conversationAliases?: string[]
   senderIds: string[]
   senderNames: string[]
   entityKeys: string[]
@@ -300,7 +303,7 @@ export interface QueryUnderstanding {
   searchTerms: string[]
 }
 
-export interface ChatSearchResult {
+export interface ChatSearchResult extends ConversationNameInput {
   messageId: string
   conversationId: string
   conversationName: string

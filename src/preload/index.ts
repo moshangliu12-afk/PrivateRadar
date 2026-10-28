@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { ConversationLabelApi } from '../shared/conversation-labels'
 import type { CollectionDesktopApi } from '../shared/collections'
 import type { KeywordRadarDesktopApi } from '../shared/keyword-radar'
 import type { TodayKeywordInterestApi } from '../shared/today-keyword-interest'
@@ -6,6 +7,10 @@ import type { CommitmentDesktopApi } from '../shared/commitment'
 import type { CandidateEvidence, ChatQueryResponse, ConnectorSetupResult, DailyBriefItem, DashboardSummary, FeedbackExportResult, FeedbackState, FirstUseStatus, ImportResult, MessageContext, TopicEvidence, TopicRadarSummary } from '../shared/models'
 
 contextBridge.exposeInMainWorld('privateRadar', {
+  conversationLabels: {
+    listConversations: () => ipcRenderer.invoke('conversation-labels:list'),
+    setConversationLabel: (id: string, label: string | null) => ipcRenderer.invoke('conversation-labels:set', id, label)
+  } satisfies ConversationLabelApi,
   ...({
     getTodayKeywordInterest: () => ipcRenderer.invoke('dashboard:keyword-interest')
   } satisfies TodayKeywordInterestApi),

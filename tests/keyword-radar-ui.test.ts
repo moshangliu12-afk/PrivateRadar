@@ -38,7 +38,7 @@ describe('关键词雷达展示契约', () => {
   })
   it('unknown sender/time/conversation 明确展示，不拿发现时间补聊天时间', () => {
     const html = renderToStaticMarkup(createElement(KeywordHitCard, { hit: { ...hit, senderName: null, chatTimestamp: null, conversationName: null }, api }))
-    for (const text of ['发送人未知', '聊天时间未知', '会话未知']) expect(html).toContain(text)
+    for (const text of ['发送人未知', '聊天时间未知', '未知会话']) expect(html).toContain(text)
   })
   it('未登记 Evidence 禁用导航，不宣称可用', () => {
     const html = renderToStaticMarkup(createElement(KeywordHitCard, { hit: { ...hit, source: { ...hit.source, evidenceRecorded: false } }, api }))

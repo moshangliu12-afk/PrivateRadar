@@ -1,7 +1,8 @@
+import type { ConversationNameInput } from './conversation-labels'
 export type CommitmentCandidateStatus = 'pending' | 'confirmed' | 'ignored'
 export type CommitmentResult<T> = { ok: true; value: T } | { ok: false; error: { code: string; message: string } }
 
-export interface CommitmentOccurrenceView {
+export interface CommitmentOccurrenceView extends ConversationNameInput {
   batchItemId: string; sourcePosition: number; messageId: string; body: string
   senderName: string | null; chatTimestamp: string | null; timestampSource: string | null
   conversationName: string | null

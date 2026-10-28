@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { ConversationName } from './conversation-labels'
 import type { KeywordGroupView, KeywordHitContext, KeywordHitView, KeywordOccurrenceView, KeywordRadarDesktopApi, KeywordRadarResult, KeywordRadarStatus } from '../../shared/keyword-radar'
 
 const safeErrors: Record<string, string> = {
@@ -24,7 +25,7 @@ export function KeywordOccurrence({ entry }: { entry: KeywordOccurrenceView }): 
   return <div className="keyword-occurrence">
     <span>{entry.senderName ?? '发送人未知'}</span>
     <span>{timeLabel(entry.chatTimestamp, '聊天时间未知')}</span>
-    <span>{entry.conversationName ?? '会话未知'}</span>
+    <span><ConversationName value={entry} evidence /></span>
   </div>
 }
 export function KeywordContext({ context }: { context: KeywordHitContext }): React.JSX.Element {

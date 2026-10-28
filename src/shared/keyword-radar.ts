@@ -1,10 +1,11 @@
+import type { ConversationNameInput } from './conversation-labels'
 export type KeywordRadarResult<T> = { ok: true; value: T } | { ok: false; error: { code: string; message: string } }
 export interface KeywordTermView { id: string; term: string; enabled: boolean }
 export interface KeywordGroupView {
   id: string; name: string; enabled: boolean; archivedAt: string | null; terms: KeywordTermView[]
 }
 export interface KeywordRadarStatus { pending: number; failed: number }
-export interface KeywordOccurrenceView {
+export interface KeywordOccurrenceView extends ConversationNameInput {
   batchItemId: string; sourcePosition: number; messageId: string; body: string
   senderName: string | null; chatTimestamp: string | null; timestampSource: string | null
   conversationName: string | null

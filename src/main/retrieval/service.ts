@@ -9,6 +9,7 @@ import { runDailyIntelligence } from '../intelligence/daily/repository'
 import { runTopicRadar } from '../intelligence/topics/repository'
 import { hybridSearch } from './hybrid-search'
 import { understandQuery } from './query-understanding'
+import { conversationNameProjector } from '../conversation-labels'
 
 const MAX_AI_EVIDENCE = 40
 const MAX_AI_TEXT_LENGTH = 360
@@ -32,6 +33,9 @@ export async function askChat(db: DatabaseSync, question: string, options: AskCh
   const understanding = understandQuery(db, normalizedQuestion, anchorDate, question)
   const embeddingProvider = options.embeddingProvider === undefined ? resolveEmbeddingProvider() : options.embeddingProvider
   const retrieval = await hybridSearch(db, normalizedQuestion, understanding, embeddingProvider, question)
+  const projectName = conversationNameProjector(db)
+  retrieval.results = retrieval.results.map(projectName)
+  retrieval.unverifiedTimeResults = retrieval.unverifiedTimeResults.map(projectName)
   const allResults = [...retrieval.results, ...retrieval.unverifiedTimeResults]
   const sourceMessageIds = allResults.map((item) => item.messageId)
   const telemetryBase = {
@@ -191,7 +195,7 @@ export function getMessageContext(db: DatabaseSync, messageId: string, radius = 
     FROM messages WHERE conversation_id = ? AND (timestamp > ? OR (timestamp = ? AND id > ?))
     ORDER BY timestamp, id LIMIT ?
   `).all(source.conversation_id, source.timestamp, source.timestamp, source.id, radius) as unknown as ContextRow[]
-  return { sourceMessageId: messageId, messages: [...before.reverse(), source, ...after].map((row) => contextMessage(row, messageId)) }
+  return { sourceMessageId: messageId, messages: [...before.reverse(), source, ...after].map((row) => contextMessage(row, messageId)).map(conversationNameProjector(db)) }
 }
 
 function parseAnswer(raw: string): string {

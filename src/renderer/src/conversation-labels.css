@@ -1,0 +1,13 @@
+.conversation-name { appearance: none; background: transparent; border: 0; padding: 0; color: inherit; font: inherit; text-align: inherit; text-decoration: underline dotted; text-underline-offset: 3px; cursor: pointer; }
+.conversation-name:focus-visible { outline: 2px solid var(--lime-ink, #4c6527); outline-offset: 3px; }
+.conversation-name-origin { margin-left: 8px; color: var(--muted, #73796f); font-size: 11px; }
+.conversation-label-backdrop { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 24px; background: #1e302455; }
+.conversation-label-editor { width: min(460px, 100%); padding: 28px; border-radius: var(--radius-md, 18px); background: var(--card, #fffefa); color: var(--ink, #202521); box-shadow: var(--shadow); }
+.conversation-label-editor h2 { margin: 0 0 16px; font-size: 20px; }
+.conversation-label-editor p { font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.conversation-label-editor label { display: grid; gap: 8px; font-size: 14px; }
+.conversation-label-editor input { box-sizing: border-box; width: 100%; padding: 10px 12px; border: 1px solid var(--line-strong, #dadacc); border-radius: 8px; font: inherit; }
+.conversation-label-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+.conversation-label-actions button { padding: 8px 12px; border: 1px solid var(--line-strong, #dadacc); border-radius: 8px; background: var(--card, #fffefa); color: var(--ink, #202521); cursor: pointer; }
+.conversation-label-actions button[type=submit] { color: var(--lime-ink, #4c6527); background: var(--lime, #c2df76); border-color: var(--lime, #c2df76); }
+.conversation-label-actions button:disabled { opacity: .55; cursor: default; }

@@ -27,11 +27,13 @@ export function getTodayKeywordInterest(db: DatabaseSync, now = new Date()): Tod
   const rows = db.prepare(`SELECT h.id AS hit_id,h.group_id,h.matched_terms_snapshot,t.id AS active_term_id,
     s.batch_item_id,s.source_position,s.message_id,s.source_sender_name,s.source_timestamp,
     s.source_timestamp_source,s.source_conversation_name,m.content,
+    m.conversation_id,conv.name AS current_conversation_name,conv.user_conversation_label,
     i.attachment_name,i.ordinal,i.evidence_source_kind,i.evidence_status,i.evidence_relative_path
     FROM keyword_hits h
     JOIN keyword_groups g ON g.id=h.group_id AND g.enabled=1 AND g.archived_at IS NULL
     JOIN batch_item_message_sources s ON s.batch_item_id=h.batch_item_id AND s.source_position=h.source_position
     LEFT JOIN messages m ON m.id=s.message_id
+    LEFT JOIN conversations conv ON conv.id=m.conversation_id
     JOIN batch_import_items i ON i.id=h.batch_item_id
     JOIN json_each(h.matched_terms_snapshot,'$.terms') matched
     JOIN keyword_terms t ON t.id=json_extract(matched.value,'$.term_id') AND t.group_id=h.group_id AND t.enabled=1

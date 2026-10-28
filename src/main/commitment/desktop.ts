@@ -31,10 +31,11 @@ interface CandidateRow extends OccurrenceRow {
 const candidateSelect = `SELECT c.id,c.status,c.reviewed_at,c.reason_code,c.rule_id,c.rule_version,
   s.batch_item_id,s.source_position,s.message_id,s.source_sender_name,s.source_timestamp,
   s.source_timestamp_source,s.source_conversation_name,m.content,
+  m.conversation_id,conv.name AS current_conversation_name,conv.user_conversation_label,
   i.attachment_name,i.ordinal,i.evidence_source_kind,i.evidence_status,i.evidence_relative_path
   FROM commitment_candidates c JOIN batch_item_message_sources s
     ON s.batch_item_id=c.batch_item_id AND s.source_position=c.source_position
-  LEFT JOIN messages m ON m.id=s.message_id JOIN batch_import_items i ON i.id=s.batch_item_id`
+  LEFT JOIN messages m ON m.id=s.message_id LEFT JOIN conversations conv ON conv.id=m.conversation_id JOIN batch_import_items i ON i.id=s.batch_item_id`
 function getCandidateOccurrence(db: DatabaseSync, id: unknown): CandidateRow {
   const row = db.prepare(candidateSelect + ' WHERE c.id=?').get(idSchema.parse(id)) as unknown as CandidateRow | undefined
   if (!row) throw new CommitmentDesktopError('CANDIDATE_UNAVAILABLE')

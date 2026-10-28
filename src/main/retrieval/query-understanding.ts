@@ -1,14 +1,15 @@
 import type { DatabaseSync } from 'node:sqlite'
 import type { QueryDateRange, QueryUnderstanding } from '../../shared/models'
+import { resolveDisplayConversationName } from '../../shared/conversation-labels'
 import { DEFAULT_DAILY_CONFIG } from '../intelligence/daily/config'
 import { extractEntityKeys } from '../intelligence/daily/similarity'
 import { rankSearchTerms, type RankedSearchTerm, type SearchTermSource } from './term-ranking'
 
-interface NamedRow { id: string; name: string }
+interface NamedRow { id: string; name: string; user_conversation_label: string | null }
 interface SenderRow { id: string; name: string }
 
 export function understandQuery(db: DatabaseSync, question: string, anchorDate: string, originalQuery = question): QueryUnderstanding {
-  const conversations = db.prepare('SELECT id, name FROM conversations ORDER BY length(name) DESC, name').all() as unknown as NamedRow[]
+  const conversations = db.prepare('SELECT id, name, user_conversation_label FROM conversations ORDER BY length(name) DESC, name').all() as unknown as NamedRow[]
   const senders = db.prepare(`
     SELECT sender_id AS id, MAX(sender_name) AS name
     FROM messages
@@ -17,13 +18,15 @@ export function understandQuery(db: DatabaseSync, question: string, anchorDate: 
     GROUP BY sender_id
     ORDER BY length(name) DESC, name
   `).all() as unknown as SenderRow[]
-  const matchedConversations = conversations.filter((item) => matchesConversation(question, item.name))
+  const matchedConversations = conversations.filter((item) => matchesConversation(question, item.name) ||
+    Boolean(item.user_conversation_label && matchesConversation(question, item.user_conversation_label)))
+  const conversationAliases = matchedConversations.flatMap(item => [item.name, item.user_conversation_label ?? '']).filter(Boolean)
   const matchedSenders = senders.filter((item) => isUsableName(item.name) && question.includes(item.name))
   const dateRange = parseDateRange(question, anchorDate)
   const timeIntent = inferTimeIntent(question, dateRange)
   const personIntent = /谁在|谁提到|谁发|谁分享|谁推荐|哪个人|哪位/.test(question) ? 'who' : 'none'
   const contentQuestion = stripParsedExplicitDates(question, dateRange)
-  const strippedQuestion = stripQuestionShell(contentQuestion, [...matchedConversations, ...matchedSenders].map((item) => item.name))
+  const strippedQuestion = stripQuestionShell(contentQuestion, [...conversationAliases, ...matchedSenders.map(item => item.name)])
   const entityKeys = extractQueryEntityKeys(contentQuestion)
   const hasQuestionShell = /[？?]|什么|哪些|怎么|如何|有没有|请问/.test(question)
   const isQuestion = strippedQuestion !== question || hasQuestionShell
@@ -45,7 +48,8 @@ export function understandQuery(db: DatabaseSync, question: string, anchorDate: 
     isNaturalLanguage: isQuestion
       || expansion.eventTerms.length > 0 || expansion.coreTopics.includes('消防安全') || expansion.coreTopics.includes('故障'),
     conversationIds: matchedConversations.map((item) => item.id),
-    conversationNames: matchedConversations.map((item) => item.name),
+    conversationNames: matchedConversations.map(item => resolveDisplayConversationName({ sourceConversationName: item.name, userConversationLabel: item.user_conversation_label })),
+    ...(matchedConversations.some(item => item.user_conversation_label) ? { conversationAliases } : {}),
     senderIds: matchedSenders.map((item) => item.id),
     senderNames: matchedSenders.map((item) => item.name),
     entityKeys,
@@ -59,7 +63,7 @@ export function understandQuery(db: DatabaseSync, question: string, anchorDate: 
 // 只复用已有纯生成阶段，不查询数据库，也不替换调用者提供的词集合。
 export function planSearchTerms(question: string, understanding: QueryUnderstanding, originalQuery = question): RankedSearchTerm[] {
   const content = stripParsedExplicitDates(question, understanding.dateRange)
-  const stripped = stripQuestionShell(content, [...understanding.conversationNames, ...understanding.senderNames])
+  const stripped = stripQuestionShell(content, [...(understanding.conversationAliases ?? understanding.conversationNames), ...understanding.senderNames])
   const generated = generateTermSources(stripped, understanding.entityKeys, understanding.dateRange,
     /[？?]|什么|哪些|怎么|如何|有没有|请问/.test(question))
   const primary = new Set(understanding.searchTerms)

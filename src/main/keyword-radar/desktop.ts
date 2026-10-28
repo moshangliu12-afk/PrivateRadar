@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite'
+import { resolveDisplayConversationName } from '../../shared/conversation-labels'
 import { z } from 'zod'
 import type { KeywordGroupView, KeywordHitContext, KeywordHitSource, KeywordHitView, KeywordOccurrenceView,
   KeywordRadarResult, KeywordRadarStatus, KeywordRetryResult } from '../../shared/keyword-radar'
@@ -68,6 +69,7 @@ export interface OccurrenceRow {
   batch_item_id: string; source_position: number; message_id: string; content: string | null
   source_sender_name: string | null; source_timestamp: string | null; source_timestamp_source: string | null
   source_conversation_name: string | null
+  conversation_id?: string; current_conversation_name?: string | null; user_conversation_label?: string | null
 }
 function chatTime(value: string | null, source: string | null): string | null {
   if (!value || !source || !isReliableTimestampSource(source)) return null
@@ -81,7 +83,10 @@ function chatTime(value: string | null, source: string | null): string | null {
 }
 export function occurrence(row: OccurrenceRow): KeywordOccurrenceView {
   if (typeof row.content !== 'string') throw new KeywordRadarDesktopError('HIT_UNAVAILABLE')
+  const source = row.current_conversation_name === undefined ? row.source_conversation_name : row.current_conversation_name
+  const names = { sourceConversationName: source?.trim() ? source : null, userConversationLabel: row.user_conversation_label ?? null }
   return { batchItemId: row.batch_item_id, sourcePosition: row.source_position, messageId: row.message_id, body: row.content,
+    conversationId: row.conversation_id, ...names, displayConversationName: resolveDisplayConversationName(names),
     senderName: row.source_sender_name?.trim() ? row.source_sender_name : null,
     chatTimestamp: chatTime(row.source_timestamp, row.source_timestamp_source), timestampSource: row.source_timestamp_source,
     conversationName: row.source_conversation_name?.trim() ? row.source_conversation_name : null }
@@ -95,10 +100,11 @@ interface HitRow extends OccurrenceRow {
 const hitSelect = `SELECT h.id,h.group_id,h.group_name_snapshot,h.matched_terms_snapshot,h.matched_at,
   s.batch_item_id,s.source_position,s.message_id,s.source_sender_name,s.source_timestamp,
   s.source_timestamp_source,s.source_conversation_name,s.source_conversation_name_source,m.content,
+  m.conversation_id,conv.name AS current_conversation_name,conv.user_conversation_label,
   i.attachment_name,i.ordinal,i.evidence_source_kind,i.evidence_status,i.evidence_relative_path
   FROM keyword_hits h JOIN batch_item_message_sources s
     ON s.batch_item_id=h.batch_item_id AND s.source_position=h.source_position
-  LEFT JOIN messages m ON m.id=s.message_id JOIN batch_import_items i ON i.id=h.batch_item_id`
+  LEFT JOIN messages m ON m.id=s.message_id LEFT JOIN conversations conv ON conv.id=m.conversation_id JOIN batch_import_items i ON i.id=h.batch_item_id`
 function sourceView(row: HitRow): KeywordHitSource {
   return { batchItemId: row.batch_item_id, attachmentName: row.attachment_name, ordinal: row.ordinal,
     evidenceKind: row.evidence_source_kind, evidenceStatus: row.evidence_status, evidenceRecorded: row.evidence_relative_path !== null }
@@ -138,8 +144,8 @@ export function readItemOccurrenceContext(
     restriction = conversationName?.trim() ? ' AND s.source_conversation_name=?' : ' AND s.source_position=?'
     arguments_.push(conversationName?.trim() ? conversationName : sourcePosition)
   }
-  const rows = db.prepare(`SELECT s.*,m.content FROM batch_item_message_sources s
-    LEFT JOIN messages m ON m.id=s.message_id WHERE s.batch_item_id=?${restriction} ORDER BY s.source_position`)
+  const rows = db.prepare(`SELECT s.*,m.content,m.conversation_id,conv.name AS current_conversation_name,conv.user_conversation_label FROM batch_item_message_sources s
+    LEFT JOIN messages m ON m.id=s.message_id LEFT JOIN conversations conv ON conv.id=m.conversation_id WHERE s.batch_item_id=?${restriction} ORDER BY s.source_position`)
     .all(...arguments_) as unknown as OccurrenceRow[]
   const index = rows.findIndex(row => row.source_position === sourcePosition)
   if (index < 0) throw new KeywordRadarDesktopError('HIT_UNAVAILABLE')

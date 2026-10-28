@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { ConversationName } from './conversation-labels'
 import type {
   CandidateEvidence,
   ChatQueryResponse,
@@ -72,6 +73,10 @@ export function App(): React.JSX.Element {
       .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : '无法读取本地数据'))
       .finally(() => setBootstrapped(true))
   }, [])
+
+  useEffect(() => {
+    if (firstUse) window.dispatchEvent?.(new Event('privateradar-conversations-updated'))
+  }, [firstUse?.dataStatus?.latestAttempt?.completedAt, firstUse?.latestImport?.jobId])
 
   useEffect(() => {
     if (!summary || summary.items.length === 0) {
@@ -956,7 +961,7 @@ export function SearchPage({
                 {response.results.map((result) => (
                   <div className="search-result-wrap" key={result.messageId}>
                     <article className="search-result-card">
-                      <div className="search-result-meta"><strong>{displayMetadata(result.senderName, '发送人未提供')}</strong><span>{displayMetadata(result.conversationName, '群名未提供')}</span><span>{formatDateTime(result.timestamp)}</span><b>{result.relevanceScore.toFixed(3)}</b></div>
+                      <div className="search-result-meta"><strong>{displayMetadata(result.senderName, '发送人未提供')}</strong><span><ConversationName value={result} /></span><span>{formatDateTime(result.timestamp)}</span><b>{result.relevanceScore.toFixed(3)}</b></div>
                       <p>{result.content}</p>
                       {result.links.length > 0 && <div className="result-links">{result.links.map((link) => <span key={link}>{link}</span>)}</div>}
                       <div className="search-result-footer">
@@ -974,7 +979,7 @@ export function SearchPage({
                   {response.unverifiedTimeResults.map((result) => (
                     <div className="search-result-wrap" key={result.messageId}>
                       <article className="search-result-card">
-                        <div className="search-result-meta"><strong>{displayMetadata(result.senderName, '发送人未提供')}</strong><span>{displayMetadata(result.conversationName, '群名未提供')}</span><span>原始时间未提供</span><b>{result.relevanceScore.toFixed(3)}</b></div>
+                        <div className="search-result-meta"><strong>{displayMetadata(result.senderName, '发送人未提供')}</strong><span><ConversationName value={result} /></span><span>原始时间未提供</span><b>{result.relevanceScore.toFixed(3)}</b></div>
                         <p>{result.content}</p>
                         {result.links.length > 0 && <div className="result-links">{result.links.map((link) => <span key={link}>{link}</span>)}</div>}
                         <div className="search-result-footer">
@@ -1033,7 +1038,7 @@ function MessageContextPanel({ context }: { context: MessageContext | null }): R
       <div className="evidence-title">原始消息与前后文</div>
       {context.messages.map((message) => (
         <div className={message.isSource ? 'evidence-message source' : 'evidence-message'} key={message.messageId}>
-          <div><strong>{displayMetadata(message.senderName, '发送人未提供')}</strong><span>{displayMetadata(message.conversationName, '群名未提供')} · {formatTime(message.timestamp)}</span></div>
+          <div><strong>{displayMetadata(message.senderName, '发送人未提供')}</strong><span><ConversationName value={message} evidence /> · {formatTime(message.timestamp)}</span></div>
           <p>{message.content}</p>
         </div>
       ))}
@@ -1062,7 +1067,7 @@ function TopicEvidencePanel({ evidence }: { evidence: TopicEvidence | null }): R
       <div className="evidence-title">今日话题原始依据</div>
       {evidence.messages.map((message) => (
         <div className="evidence-message source" key={message.messageId}>
-          <div><strong>{displayMetadata(message.senderName, '发送人未提供')}</strong><span>{displayMetadata(message.conversationName, '群名未提供')} · {formatTime(message.timestamp)}</span></div>
+          <div><strong>{displayMetadata(message.senderName, '发送人未提供')}</strong><span><ConversationName value={message} evidence /> · {formatTime(message.timestamp)}</span></div>
           <p>{message.content}</p>
         </div>
       ))}
@@ -1086,7 +1091,7 @@ function EvidencePanel({ evidence }: { evidence: CandidateEvidence | null }): Re
         <div className="evidence-group" key={group.sourceMessageId}>
           {group.messages.map((item) => (
             <div className={item.isSource ? 'evidence-message source' : 'evidence-message'} key={`${group.sourceMessageId}-${item.messageId}`}>
-              <div><strong>{displayMetadata(item.senderName, '发送人未提供')}</strong><span>{displayMetadata(item.conversationName, '群名未提供')} · {formatTime(item.timestamp)}</span></div>
+              <div><strong>{displayMetadata(item.senderName, '发送人未提供')}</strong><span><ConversationName value={item} evidence /> · {formatTime(item.timestamp)}</span></div>
               <p>{item.content}</p>
             </div>
           ))}

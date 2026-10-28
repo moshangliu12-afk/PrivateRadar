@@ -3,12 +3,14 @@ import type { CollectionDesktopApi } from '../../shared/collections'
 import type { KeywordRadarDesktopApi } from '../../shared/keyword-radar'
 import type { TodayKeywordInterestApi } from '../../shared/today-keyword-interest'
 import type { CommitmentDesktopApi } from '../../shared/commitment'
+import type { ConversationLabelApi } from '../../shared/conversation-labels'
 
 declare global {
   interface Window {
     privateRadar: CollectionDesktopApi & TodayKeywordInterestApi & {
       keywordRadar: KeywordRadarDesktopApi
       commitmentCandidates: CommitmentDesktopApi
+      conversationLabels: ConversationLabelApi
       getDashboardSummary: (date?: string) => Promise<DashboardSummary>
       refreshDashboard: (date?: string) => Promise<DashboardSummary>
       regenerateDashboard: (date?: string) => Promise<DashboardSummary>

@@ -233,7 +233,7 @@ describe('界面刷新：私有检索真实表现', () => {
     expect(html).toContain('以下相关聊天未提供原始时间，无法确认是否发生在组件测试时间范围。')
     expect(html).toContain('原始时间未提供')
     expect(html).toContain('发送人未提供')
-    expect(html).toContain('群名未提供')
+    expect(html).toContain('未知会话')
     expect(html).toContain('搜索组件专用证据文字')
   })
 

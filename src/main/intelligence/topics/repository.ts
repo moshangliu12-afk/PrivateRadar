@@ -1,5 +1,6 @@
 import { reliableTimestampSql } from '../../time-semantics'
 import type { DatabaseSync } from 'node:sqlite'
+import { conversationNameProjector } from '../../conversation-labels'
 import type { DailyCandidate, EvidenceMessage, TopicEvidence, TopicRadarItem, TopicRadarSummary } from '../../../shared/models'
 import { loadMessagesForDate, runDailyIntelligence } from '../daily/repository'
 import { buildTopicRadar, classifyTopicRadarItems, MINIMUM_TREND_HISTORY_DAYS, TOPIC_ALGORITHM_VERSION } from './pipeline'
@@ -90,7 +91,7 @@ export function getTopicEvidence(db: DatabaseSync, topicId: string, date: string
       timestamp: row.timestamp,
       content: row.content,
       isSource: true
-    }))
+    })).map(conversationNameProjector(db))
   }
 }
 

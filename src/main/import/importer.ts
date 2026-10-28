@@ -116,6 +116,15 @@ export function importChatContent(
       const statements = prepareStatements(db)
       const cacheStarted = performance.now()
       const caches = prepareCaches(db)
+      const incomingConversations = new Map<string, Set<string>>()
+      for (const item of normalized) {
+        const previous = findExisting(caches, item, manualJson ? true : options.useLegacyFingerprintDedup ?? true)
+        if (!previous || !item.message.conversationName) continue
+        const identities = incomingConversations.get(previous.conversation_id) ?? new Set<string>()
+        identities.add(item.message.conversationId)
+        incomingConversations.set(previous.conversation_id, identities)
+      }
+      for (const [id, identities] of incomingConversations) if (identities.size > 1) caches.ambiguousConversations.add(id)
       dedupeMs += performance.now() - cacheStarted
       for (const item of normalized) {
         const dedupeStarted = performance.now()
@@ -131,6 +140,13 @@ export function importChatContent(
           if (options.batchItemId && existing.content !== item.message.content) {
             if (manualJson) throw new SourceContentConflictError(item.message.sourcePosition, false)
             throw new Error('SOURCE_IDENTITY_CONFLICT: 来源身份与正文不一致')
+          }
+          // 同一会话的真实来源名称可更新；从不触及用户标签和已保存的来源快照。
+          if (!caches.ambiguousConversations.has(existing.conversation_id) &&
+              (item.message.conversationId === existing.conversation_id || item.message.sourceBatchId === existing.source_batch_id) && item.message.conversationName &&
+              ['source_native', 'user_supplied'].includes(item.message.conversationNameSource) &&
+              provenanceRank(item.message.conversationNameSource) >= provenanceRank(existing.conversation_name_source)) {
+            statements.insertConversation.run(existing.conversation_id, item.message.platform, item.message.conversationName, startedAt)
           }
           // 强身份跨附件复用只增加来源，不补全或覆盖已有 canonical 的字段。
           if (manualJson || crossItemSource) {
@@ -286,6 +302,7 @@ interface ImportCaches {
   identities: Map<string, ExistingMessage>
   fingerprints: Map<string, ExistingMessage>
   conversations: Set<string>
+  ambiguousConversations: Set<string>
   participants: Set<string>
 }
 
@@ -356,6 +373,7 @@ function prepareCaches(db: DatabaseSync): ImportCaches {
     identities: new Map(messages.flatMap((row) => row.stable_identity ? [[row.stable_identity, row] as const] : [])),
     fingerprints: new Map(messages.map((row) => [row.fingerprint, row])),
     conversations: new Set(conversations.map((row) => row.id)),
+    ambiguousConversations: new Set(),
     participants: new Set(participants.map((row) => participantKey(row.platform, row.id)))
   }
 }
@@ -418,7 +436,7 @@ function enrichExistingMessage(
   let enriched = false
 
   if (shouldReplace(existing.conversation_name, existing.conversation_name_source, incoming.conversationName, incoming.conversationNameSource)) {
-    existing.conversation_id = incoming.conversationId
+    // 补全名称不更换已有会话身份，用户标签和消息关系继续指向原会话。
     existing.conversation_name = incoming.conversationName
     existing.conversation_name_source = incoming.conversationNameSource
     enriched = true
@@ -492,7 +510,7 @@ function ensureReferences(
 ): void {
   const conversationId = existing?.conversation_id ?? message.conversationId
   const conversationName = existing?.conversation_name ?? message.conversationName
-  if (!caches.conversations.has(conversationId) || (Boolean(existing) && Boolean(conversationName))) {
+  if ((!caches.conversations.has(conversationId) || Boolean(conversationName)) && !caches.ambiguousConversations.has(conversationId)) {
     statements.insertConversation.run(conversationId, message.platform, conversationName, createdAt)
     caches.conversations.add(conversationId)
   }

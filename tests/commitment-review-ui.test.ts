@@ -102,7 +102,7 @@ describe('承诺候选最小展示契约', () => {
   })
   it('发送人、会话未知明确提示，附加创建时间不能冒充聊天时间', () => {
     const html = renderCard({ senderName: null, conversationName: ' ', chatTimestamp: null, ...{ createdAt: '2099-01-01T12:00:00Z' } })
-    for (const text of ['发送人未知', '会话未知', '聊天时间未知']) expect(html).toContain(text)
+    for (const text of ['发送人未知', '未知会话', '聊天时间未知']) expect(html).toContain(text)
     expect(html).not.toContain('2099')
   })
   it.each([

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { isReliableTimestampSource, reliableTimestampSql } from '../../time-semantics'
 import type { DatabaseSync } from 'node:sqlite'
+import { conversationNameProjector } from '../../conversation-labels'
 import type { CandidateEvidence, DailyCandidate, EvidenceMessage } from '../../../shared/models'
 import { assessDailyValue } from './daily-value'
 import { buildDailyCandidates, DAILY_ALGORITHM_VERSION } from './pipeline'
@@ -136,6 +137,7 @@ export function getCandidateEvidence(db: DatabaseSync, candidateId: string, radi
   `).all(candidateId) as Array<{ message_id: string }>
   const sourceIds = new Set(sourceRows.map((row) => row.message_id))
   const groups: CandidateEvidence['groups'] = []
+  const projectName = conversationNameProjector(db)
 
   for (const sourceRow of sourceRows) {
     const source = loadMessageById(db, sourceRow.message_id)
@@ -171,7 +173,7 @@ export function getCandidateEvidence(db: DatabaseSync, candidateId: string, radi
       informationSignalScore: candidate.importanceScore,
       informationSignals: candidate.reasonCodes
     },
-    groups
+    groups: groups.map(group => ({ ...group, messages: group.messages.map(projectName) }))
   }
 }
 

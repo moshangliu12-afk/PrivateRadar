@@ -338,6 +338,8 @@ export function initializeDatabase(db: DatabaseSync): void {
       ON messages(source_batch_id);
   `)
   migrateBatchImportSchema(db)
+  // 沿用按列检测的增量迁移，不重建消息表或全文索引。
+  ensureConversationLabel(db)
 }
 
 function migrateImportBatchTimes(db: DatabaseSync): void {
@@ -441,6 +443,16 @@ function ensureNullableMessageMetadata(db: DatabaseSync): void {
     COMMIT;
     PRAGMA foreign_keys = ON;
   `)
+}
+
+function ensureConversationLabel(db: DatabaseSync): void {
+  if (db.prepare('PRAGMA table_info(conversations)').all().some(column => column.name === 'user_conversation_label')) return
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    // App 与 Connector 同时打开旧库时，在写锁内再次检查。
+    ensureColumn(db, 'conversations', 'user_conversation_label', 'TEXT')
+    db.exec('COMMIT')
+  } catch (error) { db.exec('ROLLBACK'); throw error }
 }
 
 function ensureColumn(db: DatabaseSync, table: string, column: string, definition: string): void {

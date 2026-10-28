@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { openDatabase, getDashboardSummary, getTopicRadarSummary, validateDashboardDateKey } from './database'
 import { importChatFile } from './import/importer'
+import { registerConversationLabelIpc } from './conversation-labels'
 import { macEditMenu, manualImportDialogOptions } from './desktop-platform'
 import { configureMacEvidenceRoot } from './batch-import/mac-json-evidence'
 import { getCandidateEvidence } from './intelligence/daily/repository'
@@ -90,6 +91,7 @@ app.whenReady().then(() => {
   }
   const databasePath = join(dataDir, 'private-radar.db')
   const db = openDatabase(databasePath, process.env.PRIVATE_RADAR_SEED_DEMO === 'true')
+  registerConversationLabelIpc(ipcMain, db)
   registerCollectionIpc(ipcMain, db)
   registerTodayKeywordInterestIpc(ipcMain, db)
   registerKeywordRadarIpc(ipcMain, db, hitId => openKeywordHitEvidence(db, databasePath, hitId, path => shell.openPath(path)))
