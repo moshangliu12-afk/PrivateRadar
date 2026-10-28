@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "scope": "app",
-  "auditDate": "2026-10-14",
+  "auditDate": "2026-10-27",
   "description": "B0-2 固定 MCP、内嵌依赖及 Connector 许可；不表示全部二进制许可工作已经完成。",
   "packages": [
     {
@@ -22,10 +22,10 @@
     },
     {
       "name": "zod",
-      "version": "4.6.3",
-      "url": "https://registry.npmjs.org/zod/4.6.3",
-      "resolved": "https://registry.npmjs.org/zod/-/zod-4.6.3.tgz",
-      "integrity": "sha512-qTMC0QXIpf4iH+G0rCJl6ZjKiFpqAU9++JDN8tqts3KP58MWeJU/in9tDccsHqlOolCIrBKsiPXR8vCLhe4QhA==",
+      "version": "4.6.6",
+      "url": "https://registry.npmjs.org/zod/4.6.6",
+      "resolved": "https://registry.npmjs.org/zod/-/zod-4.6.6.tgz",
+      "integrity": "sha512-4UmzQUF5fxvfcYHlbjBmejU+w+hbDnWFx4aS8kBx7nPBHcO2SqPbpAG8snbdg+Xse4pRefR98hgjFgIMCI/UhA==",
       "licensePath": "package/LICENSE"
     }
   ],
@@ -156,7 +156,7 @@
     },
     {
       "name": "zod",
-      "version": "4.6.3",
+      "version": "4.6.6",
       "classification": "MIT",
       "distribution": "运行代码",
       "connector": true,
@@ -166,9 +166,9 @@
         "Copyright (c) 2025 Colin McDonnell"
       ],
       "source": {
-        "url": "https://registry.npmjs.org/zod/4.6.3",
-        "resolved": "https://registry.npmjs.org/zod/-/zod-4.6.3.tgz",
-        "integrity": "sha512-qTMC0QXIpf4iH+G0rCJl6ZjKiFpqAU9++JDN8tqts3KP58MWeJU/in9tDccsHqlOolCIrBKsiPXR8vCLhe4QhA==",
+        "url": "https://registry.npmjs.org/zod/4.6.6",
+        "resolved": "https://registry.npmjs.org/zod/-/zod-4.6.6.tgz",
+        "integrity": "sha512-4UmzQUF5fxvfcYHlbjBmejU+w+hbDnWFx4aS8kBx7nPBHcO2SqPbpAG8snbdg+Xse4pRefR98hgjFgIMCI/UhA==",
         "licensePath": "package/LICENSE"
       },
       "evidence": {

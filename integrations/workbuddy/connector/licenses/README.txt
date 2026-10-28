@@ -8,7 +8,7 @@ json-schema-typed 仅为 App 随附的类型及源码映射资料，不计作 Co
 
 @modelcontextprotocol/core 2.0.0 | 实际 LICENSE：Apache-2.0／MIT 按贡献授权；普通文档 CC-BY-4.0；不能仅按 MIT 字段判断 | MCP-SDK-LICENSE.txt | 运行代码
 @modelcontextprotocol/server 2.0.0 | 实际 LICENSE：Apache-2.0／MIT 按贡献授权；普通文档 CC-BY-4.0；不能仅按 MIT 字段判断 | MCP-SDK-LICENSE.txt | 运行代码
-zod 4.6.3 | MIT | zod-LICENSE.txt | 运行代码
+zod 4.6.6 | MIT | zod-LICENSE.txt | 运行代码
 content-type 1.0.5 | MIT | content-type-LICENSE.txt | 运行代码
 ajv 8.18.0 | MIT | ajv-LICENSE.txt | 运行代码
 ajv-formats 3.0.1 | MIT | ajv-formats-LICENSE.txt | 运行代码
