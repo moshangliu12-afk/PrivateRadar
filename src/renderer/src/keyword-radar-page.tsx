@@ -94,6 +94,10 @@ function KeywordGroupCard({ group, api, changed, onRescanComplete }: { group: Ke
   }
   return <article className={`keyword-group${!group.enabled || group.archivedAt ? ' is-disabled' : ''}`} data-group-id={group.id}>
     <header><h3>{group.name}</h3><span>{group.archivedAt ? '已归档' : group.enabled ? '已启用' : '已停用'}</span></header>
+    {!group.archivedAt && <div className="keyword-rule-stats" aria-label="规则命中统计" title="统计全部已有命中；同一消息的多个来源只计一次。">
+      <span>历史命中：<strong>{group.stats?.historicalMatchCount ?? 0}</strong> 条</span>
+      <span>最近发现：{timeLabel(group.stats?.latestDiscoveryAt ?? null, '暂无')}</span>
+    </div>}
     <div className="keyword-terms">{group.terms.length ? group.terms.map(term => <span className={`keyword-chip${term.enabled ? '' : ' is-disabled'}`} key={term.id}>
       <span>{term.term}</span>{!group.archivedAt && <button type="button" disabled={busy} aria-label={`${term.enabled ? '停用' : '启用'}关键词 ${term.term}`} aria-pressed={term.enabled}
         onClick={() => void act(() => api.setTermEnabled(term.id, !term.enabled))}>{term.enabled ? '停用' : '启用'}</button>}

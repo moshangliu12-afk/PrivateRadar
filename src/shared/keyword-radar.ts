@@ -2,8 +2,13 @@ import type { ConversationNameInput } from './conversation-labels'
 import type { HistoricalRescanApi } from './historical-keyword-rescan'
 export type KeywordRadarResult<T> = { ok: true; value: T } | { ok: false; error: { code: string; message: string } }
 export interface KeywordTermView { id: string; term: string; enabled: boolean }
+export interface KeywordRuleCardStats {
+  historicalMatchCount: number
+  latestDiscoveryAt: string | null
+}
 export interface KeywordGroupView {
   id: string; name: string; enabled: boolean; archivedAt: string | null; terms: KeywordTermView[]
+  stats?: KeywordRuleCardStats
 }
 export interface KeywordRadarStatus { pending: number; failed: number }
 export interface KeywordOccurrenceView extends ConversationNameInput {

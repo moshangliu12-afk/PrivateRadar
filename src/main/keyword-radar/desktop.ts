@@ -36,8 +36,25 @@ export async function safeKeywordRadarAction<T>(action: () => T | Promise<T>): P
   }
 }
 export function listDesktopKeywordGroups(db: DatabaseSync): KeywordGroupView[] {
-  const rows = db.prepare(`SELECT g.id,g.name,g.enabled,g.archived_at,
+  // 统计全部持久有效命中；同一消息的多个真实来源合计一次，不受最近 100 条展示限制。
+  const rows = db.prepare(`WITH visible_hits AS (
+    SELECT h.group_id,s.message_id,h.matched_at FROM keyword_hits h
+    JOIN batch_item_message_sources s ON s.batch_item_id=h.batch_item_id AND s.source_position=h.source_position
+    UNION ALL
+    SELECT c.group_id,c.message_id,c.matched_at FROM keyword_rescan_coverage c
+    JOIN keyword_rescans r ON r.id=c.run_id JOIN messages m ON m.id=c.message_id
+    JOIN conversations conv ON conv.id=m.conversation_id
+    WHERE c.batch_item_id IS NULL AND c.matched_terms_snapshot IS NOT NULL
+      AND NOT EXISTS(SELECT 1 FROM keyword_hits h JOIN batch_item_message_sources s
+        ON s.batch_item_id=h.batch_item_id AND s.source_position=h.source_position
+        WHERE h.group_id=c.group_id AND s.message_id=c.message_id)
+  ), rule_stats AS (
+    SELECT h.group_id,COUNT(DISTINCT h.message_id) AS hit_count,MAX(h.matched_at) AS latest_discovery_at
+    FROM visible_hits h JOIN keyword_groups g ON g.id=h.group_id AND g.archived_at IS NULL
+    GROUP BY h.group_id
+  ) SELECT g.id,g.name,g.enabled,g.archived_at,stats.hit_count,stats.latest_discovery_at,
     t.id AS term_id,t.term,t.enabled AS term_enabled FROM keyword_groups g
+    LEFT JOIN rule_stats stats ON stats.group_id=g.id
     LEFT JOIN keyword_terms t ON t.group_id=g.id ORDER BY g.created_at,g.id,t.created_at,t.id`).all()
   const groups: KeywordGroupView[] = []
   for (const row of rows) {
@@ -45,6 +62,9 @@ export function listDesktopKeywordGroups(db: DatabaseSync): KeywordGroupView[] {
     if (group?.id !== row.id) {
       group = { id: String(row.id), name: String(row.name), enabled: Boolean(row.enabled),
         archivedAt: row.archived_at as string | null, terms: [] }
+      if (row.archived_at === null) group.stats = {
+        historicalMatchCount: Number(row.hit_count ?? 0), latestDiscoveryAt: row.latest_discovery_at as string | null
+      }
       groups.push(group)
     }
     if (row.term_id !== null) group.terms.push({ id: String(row.term_id), term: String(row.term), enabled: Boolean(row.term_enabled) })
