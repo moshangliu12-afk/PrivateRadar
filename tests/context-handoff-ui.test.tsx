@@ -70,21 +70,74 @@ function setup(initial = ['消息一']) {
   return { api: supplied, remove, clear, change(next: string[]) { ids = next; revision++ }, unmount() { state.cleanup.forEach(action => action()) },
     render: () => render(state, () => ContextHandoffPanel({ api: supplied, ids, getRevision: () => revision, onRemove: remove, onClear: clear })) }
 }
-async function loadPreview(h: ReturnType<typeof setup>) { button(h.render(), '生成预览').onClick(); await flush(); return h.render() }
+async function loadPreview(h: ReturnType<typeof setup>) { button(h.render(), '查看整理结果').onClick(); await flush(); return h.render() }
 
 describe('AI 上下文临时选择与页面入口', () => {
   it('单会话与Search跨入口按消息编号去重，入口显示选择数量', () => {
     const supplied = api(), state = frame()
     const provider = () => render(state, () => ContextHandoffProvider({ api: supplied, children: createElement('span') })) as ReactElement<any>
     let tree = provider(); hooks.context = tree.props.value
-    button(AddContextButton({ messageId: '同一消息' }), '加入 AI 上下文').onClick()
+    button(AddContextButton({ messageId: '同一消息' }), '加入分析材料').onClick()
     tree = provider(); hooks.context = tree.props.value
-    expect(button(AddContextButton({ messageId: '同一消息' }), '已加入 AI 上下文').disabled).toBe(true)
+    const selected = button(AddContextButton({ messageId: '同一消息' }), '已加入 · 点击移除')
+    expect(selected.disabled).not.toBe(true)
+    expect(selected['aria-pressed']).toBe(true)
     tree.props.value.add('同一消息'); tree.props.value.add('另一会话消息')
     tree = provider(); hooks.context = tree.props.value
     expect(tree.props.value.ids).toEqual(['同一消息', '另一会话消息'])
-    expect(renderToStaticMarkup(ContextHandoffEntry()!)).toContain('AI 上下文（2）')
+    expect(renderToStaticMarkup(ContextHandoffEntry()!)).toContain('整理聊天给 AI 分析（2）')
     expect(supplied.preview).not.toHaveBeenCalled()
+  })
+  it('入口、标题、操作及说明统一使用分析材料文案，保留导出与统计', () => {
+    const supplied = api(), state = frame()
+    const provider = () => render(state, () => ContextHandoffProvider({ api: supplied, children: createElement('span') })) as ReactElement<any>
+    let tree = provider(); hooks.context = tree.props.value
+    expect(renderToStaticMarkup(ContextHandoffEntry()!)).toContain('整理聊天给 AI 分析（0）')
+    ContextHandoffEntry()!.props.onClick()
+    tree = provider(); hooks.context = tree.props.value
+    const html = renderToStaticMarkup(tree)
+    for (const label of ['准备分析的聊天记录', '加入分析材料', '查看整理结果', '复制给 AI', '清空全部消息', '导出 Markdown', '导出 JSON', '不会自动发送给 AI']) expect(html).toContain(label)
+    expect(html).not.toMatch(/AI 上下文|生成预览|复制 Markdown/)
+  })
+  it('再次点击已加入按钮直接移除，同一消息的跨页面按钮和计数同步恢复', () => {
+    const supplied = api(), state = frame()
+    const provider = () => render(state, () => ContextHandoffProvider({ api: supplied, children: createElement('span') })) as ReactElement<any>
+    let tree = provider(); hooks.context = tree.props.value
+    const firstClick = button(AddContextButton({ messageId: '会话甲消息' }), '加入分析材料').onClick
+    firstClick(); firstClick()
+    tree = provider(); hooks.context = tree.props.value
+    expect(tree.props.value.ids).toEqual(['会话甲消息'])
+    expect(button(AddContextButton({ messageId: '会话甲消息' }), '已加入 · 点击移除')['aria-pressed']).toBe(true)
+    button(AddContextButton({ messageId: '会话乙消息' }), '加入分析材料').onClick()
+    tree = provider(); hooks.context = tree.props.value
+    expect(renderToStaticMarkup(ContextHandoffEntry()!)).toContain('整理聊天给 AI 分析（2）')
+    button(AddContextButton({ messageId: '会话甲消息' }), '已加入 · 点击移除').onClick()
+    tree = provider(); hooks.context = tree.props.value
+    expect(tree.props.value.ids).toEqual(['会话乙消息'])
+    expect(button(AddContextButton({ messageId: '会话甲消息' }), '加入分析材料')['aria-pressed']).toBe(false)
+    expect(renderToStaticMarkup(ContextHandoffEntry()!)).toContain('整理聊天给 AI 分析（1）')
+    button(AddContextButton({ messageId: '会话甲消息' }), '加入分析材料').onClick()
+    tree = provider(); hooks.context = tree.props.value
+    expect(tree.props.value.ids).toEqual(['会话乙消息', '会话甲消息'])
+    expect(supplied.preview).not.toHaveBeenCalled()
+    expect(supplied.export).not.toHaveBeenCalled()
+  })
+  it('清单移除与全部清空均复用同一选择状态，页面按钮立即恢复未加入', () => {
+    const state = frame(), supplied = api()
+    const provider = () => render(state, () => ContextHandoffProvider({ api: supplied, children: createElement('span') })) as ReactElement<any>
+    let tree = provider(); tree.props.value.add('甲'); tree.props.value.add('乙'); tree.props.value.open()
+    tree = provider(); hooks.context = tree.props.value
+    const panel = elements(tree).find(element => element.type === ContextHandoffPanel)!
+    panel.props.onRemove('甲')
+    tree = provider(); hooks.context = tree.props.value
+    expect(tree.props.value.ids).toEqual(['乙'])
+    expect(button(AddContextButton({ messageId: '甲' }), '加入分析材料')['aria-pressed']).toBe(false)
+    const nextPanel = elements(tree).find(element => element.type === ContextHandoffPanel)!
+    nextPanel.props.onClear()
+    tree = provider(); hooks.context = tree.props.value
+    expect(tree.props.value.ids).toEqual([])
+    expect(button(AddContextButton({ messageId: '乙' }), '加入分析材料')['aria-pressed']).toBe(false)
+    expect(renderToStaticMarkup(ContextHandoffEntry()!)).toContain('整理聊天给 AI 分析（0）')
   })
   it('200条上限明确拒绝继续加入，不删除或总结已选正文', () => {
     const state = frame(), supplied = api()
@@ -114,11 +167,11 @@ describe('AI 上下文托盘与预览', () => {
     const h = setup(['消息一', '消息二']); let tree = await loadPreview(h)
     button(tree, '移除消息 消息一').onClick(); tree = h.render()
     expect(h.remove).toHaveBeenCalledExactlyOnceWith('消息一')
-    expect(renderToStaticMarkup(tree)).not.toContain('Markdown 预览')
-    expect(button(tree, '复制 Markdown').disabled).toBe(true)
-    button(tree, '清空全部').onClick(); tree = h.render()
+    expect(renderToStaticMarkup(tree)).not.toContain('整理结果（Markdown）')
+    expect(button(tree, '复制给 AI').disabled).toBe(true)
+    button(tree, '清空全部消息').onClick(); tree = h.render()
     expect(h.clear).toHaveBeenCalledOnce()
-    expect(button(tree, '生成预览').disabled).toBe(true)
+    expect(button(tree, '查看整理结果').disabled).toBe(true)
   })
   it('预览请求仅传真实编号，名称与发送人来自主进程快照；正文按纯文本展示', async () => {
     const h = setup(), tree = await loadPreview(h)
@@ -132,25 +185,25 @@ describe('AI 上下文托盘与预览', () => {
     const html = renderToStaticMarkup(await loadPreview(h))
     expect(html).toContain('1 条关联证据')
     expect(html).toContain((20001).toLocaleString())
-    expect(html).toContain('当前上下文较长')
+    expect(html).toContain('当前分析材料较长')
     expect(html).toContain('所有已选内容均完整保留')
     expect(html).toContain('完整正文😀')
   })
   it('一键复制Markdown走本地专用API并给出成功反馈', async () => {
     const h = setup(); let tree = await loadPreview(h)
-    button(tree, '复制 Markdown').onClick(); await flush(); tree = h.render()
+    button(tree, '复制给 AI').onClick(); await flush(); tree = h.render()
     expect(h.api.copyMarkdown).toHaveBeenCalledExactlyOnceWith({ message_ids: ['消息一'] })
-    expect(renderToStaticMarkup(tree)).toContain('已复制 AI 上下文')
+    expect(renderToStaticMarkup(tree)).toContain('已复制分析材料，可粘贴给 AI')
   })
   it('剪贴板失败明确显示错误，未预览时不允许复制或导出', async () => {
     const h = setup()
-    expect(button(h.render(), '复制 Markdown').disabled).toBe(true)
+    expect(button(h.render(), '复制给 AI').disabled).toBe(true)
     expect(button(h.render(), '导出 JSON').disabled).toBe(true)
     let tree = await loadPreview(h)
     vi.mocked(h.api.copyMarkdown).mockResolvedValueOnce({ ok: false, error: { code: 'EXPORT_IO_ERROR', message: '系统剪贴板不可用' } })
-    button(tree, '复制 Markdown').onClick(); await flush(); tree = h.render()
+    button(tree, '复制给 AI').onClick(); await flush(); tree = h.render()
     expect(renderToStaticMarkup(tree)).toContain('系统剪贴板不可用')
-    expect(renderToStaticMarkup(tree)).not.toContain('已复制 AI 上下文')
+    expect(renderToStaticMarkup(tree)).not.toContain('已复制分析材料，可粘贴给 AI')
   })
   it.each(['markdown', 'json'] as const)('复用目录选择后导出%s，展示位置并可打开输出', async format => {
     const h = setup(); let tree = await loadPreview(h)
@@ -158,7 +211,7 @@ describe('AI 上下文托盘与预览', () => {
     button(tree, format === 'markdown' ? '导出 Markdown' : '导出 JSON').onClick(); await flush(); tree = h.render()
     expect(h.api.export).toHaveBeenCalledExactlyOnceWith({ message_ids: ['消息一'] }, format)
     const html = renderToStaticMarkup(tree)
-    expect(html).toContain('AI 上下文导出成功')
+    expect(html).toContain('分析材料导出成功')
     expect(html).toContain('D:\\上下文输出\\PrivateRadar\\上下文')
     button(tree, '打开导出目录').onClick(); await flush()
     expect(h.api.openOutput).toHaveBeenCalledOnce()
@@ -172,7 +225,7 @@ describe('AI 上下文托盘与预览', () => {
     expect(renderToStaticMarkup(tree)).toContain('D:\\上下文输出')
     vi.mocked(h.api.export).mockResolvedValueOnce(ok({ status: 'unchanged', directory: 'D:\\已有结果', messageCount: 1, excludedUnknownTimeCount: 0 }))
     button(tree, '导出 Markdown').onClick(); await flush(); tree = h.render()
-    expect(renderToStaticMarkup(tree)).toContain('已有相同且完整的上下文')
+    expect(renderToStaticMarkup(tree)).toContain('已有相同且完整的分析材料')
   })
   it('导出取消与错误明确反馈，重复点击不会开启第二次任务', async () => {
     const h = setup(); let tree = await loadPreview(h)
@@ -192,38 +245,48 @@ describe('AI 上下文托盘与预览', () => {
   it('加入或移除消息后，延迟返回的旧预览不能覆盖当前选择', async () => {
     const h = setup(); let finish!: (result: MarkdownExportResult<ContextPreview>) => void
     vi.mocked(h.api.preview).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
-    button(h.render(), '生成预览').onClick()
+    button(h.render(), '查看整理结果').onClick()
     h.change(['消息二']); h.render()
     finish(ok(preview())); await flush()
     const tree = h.render()
-    expect(renderToStaticMarkup(tree)).not.toContain('Markdown 预览')
-    expect(button(tree, '复制 Markdown').disabled).toBe(true)
+    expect(renderToStaticMarkup(tree)).not.toContain('整理结果（Markdown）')
+    expect(button(tree, '复制给 AI').disabled).toBe(true)
     expect(renderToStaticMarkup(tree)).toContain('已选消息 1')
   })
   it.each(['copy', 'export'])('新增消息后旧%s成功反馈和旧预览立即失效', async operation => {
     const h = setup(); let tree = await loadPreview(h)
     if (operation === 'copy') {
-      button(tree, '复制 Markdown').onClick(); await flush(); tree = h.render()
-      expect(renderToStaticMarkup(tree)).toContain('已复制 AI 上下文')
+      button(tree, '复制给 AI').onClick(); await flush(); tree = h.render()
+      expect(renderToStaticMarkup(tree)).toContain('已复制分析材料，可粘贴给 AI')
     } else {
       button(tree, '选择输出目录').onClick(); await flush(); tree = h.render()
       button(tree, '导出 Markdown').onClick(); await flush(); tree = h.render()
-      expect(renderToStaticMarkup(tree)).toContain('AI 上下文导出成功')
+      expect(renderToStaticMarkup(tree)).toContain('分析材料导出成功')
     }
     h.change(['消息一', '消息二']); tree = h.render()
     const html = renderToStaticMarkup(tree)
-    expect(html).not.toContain('已复制 AI 上下文')
-    expect(html).not.toContain('AI 上下文导出成功')
-    expect(html).not.toContain('Markdown 预览')
+    expect(html).not.toContain('已复制分析材料，可粘贴给 AI')
+    expect(html).not.toContain('分析材料导出成功')
+    expect(html).not.toContain('整理结果（Markdown）')
     expect(html).not.toContain('打开导出目录')
-    expect(button(tree, '复制 Markdown').disabled).toBe(true)
-    expect(html).toContain('生成预览后可查看所选消息的来源与正文')
+    expect(button(tree, '复制给 AI').disabled).toBe(true)
+    expect(html).toContain('点击“查看整理结果”可查看所选消息的来源与正文')
+  })
+  it('从页面按钮移除后重新加入同一消息，不恢复移除前的预览或成功反馈', async () => {
+    const h = setup(); let tree = await loadPreview(h)
+    button(tree, '复制给 AI').onClick(); await flush(); tree = h.render()
+    expect(renderToStaticMarkup(tree)).toContain('已复制分析材料，可粘贴给 AI')
+    h.change([]); h.change(['消息一']); tree = h.render()
+    const html = renderToStaticMarkup(tree)
+    expect(html).not.toContain('整理结果（Markdown）')
+    expect(html).not.toContain('已复制分析材料，可粘贴给 AI')
+    expect(button(tree, '复制给 AI').disabled).toBe(true)
   })
   it('清空进行中的预览使旧响应失效，退出托盘不再更新状态', async () => {
     const h = setup(); let finish!: (result: MarkdownExportResult<ContextPreview>) => void
     vi.mocked(h.api.preview).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
-    let tree = h.render(); button(tree, '生成预览').onClick(); tree = h.render()
-    button(tree, '清空全部').onClick(); h.unmount(); finish(ok(preview())); await flush()
+    let tree = h.render(); button(tree, '查看整理结果').onClick(); tree = h.render()
+    button(tree, '清空全部消息').onClick(); h.unmount(); finish(ok(preview())); await flush()
     expect(h.clear).toHaveBeenCalledOnce()
     expect(renderToStaticMarkup(h.render())).not.toContain('完整正文😀')
   })

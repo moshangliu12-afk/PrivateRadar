@@ -16,3 +16,10 @@
 .obsidian-export-controls { display: grid; gap: 12px; padding-top: 16px; border-top: 1px solid var(--line); }
 .obsidian-export-controls h3, .obsidian-export-controls p { margin: 0; }
 .obsidian-export-controls p, .obsidian-export-result p { font-size: 13px; line-height: 1.7; }
+.markdown-export-file-controls, .markdown-export-conversation-picker { display: grid; gap: 12px; }
+.markdown-export-file-controls h3, .markdown-export-file-controls p, .markdown-export-selection-summary { margin: 0; }
+.markdown-export-file-controls p, .markdown-export-selection-summary { font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+.markdown-export-file-controls { border-top: 1px solid var(--line); padding-top: 16px; }
+.markdown-export-conversation-options { padding: 12px; border: 1px solid var(--line); border-radius: 8px; max-height: 220px; overflow: auto; }
+.markdown-export-conversation-options > [role=group] { display: grid; gap: 10px; }
+.markdown-export-form .markdown-export-conversation-option { display: flex; align-items: center; gap: 8px; cursor: pointer; }
