@@ -85,7 +85,11 @@ export function ConversationName({ value, evidence = false }: { value: Conversat
   const original = value.conversationName?.trim() || null
   const sourceChanged = evidence && value.conversationName !== undefined && original !== (source?.trim() || null)
   return <>{state.edit && value.conversationId
-    ? <button className="conversation-name" type="button" aria-label={`修改会话显示名称：${display}`} title={title} onClick={() => state.edit?.(value)}>{display}</button>
+    ? <button className="conversation-name" type="button" aria-label={`修改会话名称：${display}`} aria-haspopup="dialog" title="修改会话名称" onClick={() => state.edit?.(value)}>
+      {display}<svg className="conversation-name-edit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+        <path d="m15 5 4 4M4 20l4.5-1 12-12a2.8 2.8 0 0 0-4-4l-12 12L4 20Z" />
+      </svg>
+    </button>
     : <span title={title}>{display}</span>}
     {evidence && current.userConversationLabel && <small className="conversation-name-origin">用户自定义名称；来源：{source?.trim() ? source : '未知会话'}</small>}
     {sourceChanged && <small className="conversation-name-origin">原始记录会话名称：{original ?? '未提供'}</small>}

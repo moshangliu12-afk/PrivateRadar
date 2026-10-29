@@ -1,5 +1,7 @@
-.conversation-name { appearance: none; background: transparent; border: 0; padding: 0; color: inherit; font: inherit; text-align: inherit; text-decoration: underline dotted; text-underline-offset: 3px; cursor: pointer; }
-.conversation-name:focus-visible { outline: 2px solid var(--lime-ink, #4c6527); outline-offset: 3px; }
+.conversation-name { appearance: none; display: inline-flex; align-items: center; gap: 4px; max-width: 100%; vertical-align: baseline; background: transparent; border: 1px solid transparent; border-radius: 5px; padding: 1px 3px; color: inherit; font: inherit; text-align: inherit; text-decoration: underline dotted; text-underline-offset: 3px; cursor: pointer; }
+.conversation-name-edit-icon { width: 13px; height: 13px; flex: 0 0 13px; color: var(--lime-ink, #4c6527); }
+.conversation-name:hover, .conversation-name:focus-visible { background: var(--lime-2, #d7eaaa); border-color: var(--lime, #c2df76); color: var(--lime-ink, #4c6527); text-decoration-style: solid; }
+.conversation-name:focus-visible { outline: 2px solid var(--lime-ink, #4c6527); outline-offset: 2px; }
 .conversation-name-origin { margin-left: 8px; color: var(--muted, #73796f); font-size: 11px; }
 .conversation-label-backdrop { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 24px; background: #1e302455; }
 .conversation-label-editor { width: min(460px, 100%); padding: 28px; border-radius: var(--radius-md, 18px); background: var(--card, #fffefa); color: var(--ink, #202521); box-shadow: var(--shadow); }

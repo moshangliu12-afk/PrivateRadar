@@ -3,18 +3,19 @@ import type { ReactElement, ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ConversationName, ConversationLabelEditor, ConversationLabelProvider } from '../src/renderer/src/conversation-labels'
-import type { ConversationLabelApi, ConversationLabelView } from '../src/shared/conversation-labels'
+import type { ConversationLabelApi, ConversationLabelView, ConversationNameInput } from '../src/shared/conversation-labels'
 import { DatabaseSync } from 'node:sqlite'
 import { initializeDatabase } from '../src/main/schema'
 import { listConversations, setConversationLabel } from '../src/main/conversation-labels'
 
-interface Frame { slots: any[]; cursor: number; effects: Array<() => void | (() => void)> }
+interface Frame { slots: any[]; cursor: number; effects: Array<() => void | (() => void)>; context?: { names: Map<string, ConversationLabelView>; edit: (value: ConversationNameInput) => void } }
 const hooks = vi.hoisted(() => ({ active: null as Frame | null }))
 const electron = vi.hoisted(() => ({ invoke: vi.fn(), exposeInMainWorld: vi.fn() }))
 vi.mock('electron', () => ({ contextBridge: { exposeInMainWorld: electron.exposeInMainWorld }, ipcRenderer: { invoke: electron.invoke } }))
 vi.mock('react', async importOriginal => {
   const actual = await importOriginal<typeof import('react')>()
   return { ...actual,
+    useContext<T>(context: import('react').Context<T>): T { return hooks.active?.context ? hooks.active.context as T : actual.useContext(context) },
     useState(initial: unknown) {
       if (!hooks.active) return actual.useState(initial)
       const f = hooks.active, at = f.cursor++
@@ -49,6 +50,20 @@ async function flush() { for (let n = 0; n < 6; n++) await Promise.resolve() }
 const view: ConversationLabelView = { conversationId: '会话一', sourceConversationName: '微信群123', userConversationLabel: 'PrivateRadar 项目组', displayConversationName: 'PrivateRadar 项目组' }
 
 describe('会话名称编辑与全局展示', () => {
+  it('未知会话仍有铅笔、明确修改提示和可点击的编辑入口', () => {
+    const h = host(), edit = vi.fn(), value = { conversationId: '未知来源会话', sourceConversationName: null, userConversationLabel: null }
+    h.frame.context = { names: new Map(), edit }
+    const tree = h.render(ConversationName, { value }), button = elements(tree).find(element => element.type === 'button')!
+    expect(button.props.title).toBe('修改会话名称')
+    expect(button.props['aria-label']).toBe('修改会话名称：未知会话')
+    expect(button.props['aria-haspopup']).toBe('dialog')
+    const icon = elements(button).find(element => element.type === 'svg')!
+    expect(icon.props.className).toBe('conversation-name-edit-icon')
+    expect(icon.props['aria-hidden']).toBe('true')
+    expect(renderToStaticMarkup(tree)).toContain('未知会话<svg')
+    button.props.onClick()
+    expect(edit).toHaveBeenCalledExactlyOnceWith(value)
+  })
   it('Evidence 显示用户名称，并明确保留来源说明；内容自动转义', () => {
     const html = renderToStaticMarkup(createElement(ConversationName, { value: { ...view, userConversationLabel: '<项目组>' }, evidence: true }))
     expect(html).toContain('&lt;项目组&gt;'); expect(html).toContain('用户自定义名称；来源：'); expect(html).toContain('微信群123')
@@ -104,7 +119,7 @@ describe('会话名称编辑与全局展示', () => {
       tree = h.render(ConversationLabelProvider, props)
       await elements(tree).find(e => e.type === ConversationLabelEditor)!.props.onSave('项目显示名')
       tree = h.render(ConversationLabelProvider, props)
-      expect(renderToStaticMarkup(tree)).toMatch(/>项目显示名<\/button>/)
+      expect(renderToStaticMarkup(tree)).toMatch(/>项目显示名<svg/)
       expect(renderToStaticMarkup(tree)).toContain('原始记录会话名称：历史来源名')
       tree.props.value.edit({ conversationId: '会话一' }); tree = h.render(ConversationLabelProvider, props)
       await elements(tree).find(e => e.type === ConversationLabelEditor)!.props.onSave(null)
