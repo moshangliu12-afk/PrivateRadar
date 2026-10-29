@@ -6,9 +6,10 @@ import { basename, dirname, join, resolve, sep } from 'node:path'
 import { WindowsPathLease, safeAbsolutePath } from '../batch-import/windows-path-lease'
 import { listConversations } from '../conversation-labels'
 import { EXPORT_LIMITS } from '../../shared/markdown-export'
-import type { ExportSelectionRequest, MarkdownExportConversation, MarkdownExportOutcome, MarkdownExportResult } from '../../shared/markdown-export'
+import type { ExportFormat, ExportSelectionRequest, FormattedExportRequest, MarkdownExportConversation, MarkdownExportOutcome, MarkdownExportResult } from '../../shared/markdown-export'
 import { buildCanonicalExportSnapshot, ExportSelectionError } from './chat-selection'
-import { canonicalJson, createMarkdownExport, sha256 } from './chat-markdown'
+import { canonicalJson, sha256 } from './chat-markdown'
+import { createExportFiles, storedExportProjection, validateExportFormat } from './chat-formats'
 
 const fail = (message: string): never => { throw new ExportSelectionError('EXPORT_PATH_UNSAFE', message) }
 const inside = (parent: string, target: string) => target.toLowerCase() === parent.toLowerCase() || target.toLowerCase().startsWith(parent.toLowerCase().replace(/[\\/]+$/, '') + sep)
@@ -54,7 +55,7 @@ public static class PrivateRadarExportPublish {
 `
 
 async function nativeOperation(op: 'volume' | 'move', source: string, destination?: string): Promise<{ ok: boolean; code: number }> {
-  if (process.platform !== 'win32' || !process.env.SystemRoot) throw new ExportSelectionError('EXPORT_UNSUPPORTED', '此版本的安全 Markdown 导出仅支持 Windows 本地 NTFS 目录。')
+  if (process.platform !== 'win32' || !process.env.SystemRoot) throw new ExportSelectionError('EXPORT_UNSUPPORTED', '此版本的安全聊天导出仅支持 Windows 本地 NTFS 目录。')
   return new Promise((accept, reject) => {
     const child = spawn(join(process.env.SystemRoot!, 'System32/WindowsPowerShell/v1.0/powershell.exe'),
       ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(NATIVE_SCRIPT, 'utf16le').toString('base64')], { windowsHide: true, stdio: 'pipe' })
@@ -81,6 +82,7 @@ async function nativeOperation(op: 'volume' | 'move', source: string, destinatio
 }
 
 interface ExportOptions {
+  format?: ExportFormat
   signal?: AbortSignal
   /** 只供主进程工程测试注入中断，不暴露给 IPC。 */
   beforePublish?: (stage: string, destination: string) => Promise<void>
@@ -100,14 +102,15 @@ async function cleanStage(stage: string, root: string): Promise<void> {
     const stat = await fs.lstat(stage)
     if (!stat.isDirectory() || stat.isSymbolicLink()) return
     const names = await fs.readdir(stage)
-    if (names.some(name => !['聊天.md', 'export.json'].includes(name))) return
+    if (names.some(name => !['聊天.md', '聊天.json', '聊天.txt', 'export.json'].includes(name))) return
     for (const name of names) await fs.unlink(join(stage, name))
     await fs.rmdir(stage)
   } catch { /* 失败时保留无法安全清理的临时目录，不触碰用户既有内容。 */ }
 }
 
 /** 只读取主进程给出的原数据库路径；文件系统只写用户选择的导出根。 */
-export async function exportMarkdown(databasePath: string, outputDirectory: string, request: ExportSelectionRequest, appVersion: string, options: ExportOptions = {}): Promise<MarkdownExportOutcome> {
+export async function exportChat(databasePath: string, outputDirectory: string, request: ExportSelectionRequest, appVersion: string, options: ExportOptions = {}): Promise<MarkdownExportOutcome> {
+  const format = validateExportFormat(options.format)
   const started = performance.now()
   const guard = () => {
     if (options.signal?.aborted) throw new ExportSelectionError('EXPORT_CANCELLED', '导出已取消，未覆盖已有文件。')
@@ -116,7 +119,7 @@ export async function exportMarkdown(databasePath: string, outputDirectory: stri
   guard()
   const snapshot = await buildCanonicalExportSnapshot(databasePath, request, { signal: options.signal })
   if (!snapshot.messages.length) return { status: 'empty', directory: null, messageCount: 0, excludedUnknownTimeCount: snapshot.selection.excluded_unknown_time_count }
-  const rendered = createMarkdownExport(snapshot, appVersion)
+  const rendered = createExportFiles(snapshot, appVersion, format)
   const selected = safeAbsolutePath(outputDirectory), dataRoot = resolve(dirname(databasePath))
   if (inside(dataRoot, selected)) fail('不能把原数据目录作为导出目录，请选择其他本地目录。')
   const lease = new WindowsPathLease()
@@ -152,17 +155,18 @@ export async function exportMarkdown(databasePath: string, outputDirectory: stri
         let matched = false, identityConflict = false
         try {
           await lease.lock(destination, true)
-          const manifestPath = join(destination, 'export.json'), markdownPath = join(destination, '聊天.md')
-          await lease.lock(manifestPath, false); await lease.lock(markdownPath, false)
+          const manifestPath = join(destination, 'export.json'), contentPath = join(destination, rendered.filename)
+          await lease.lock(manifestPath, false); await lease.lock(contentPath, false)
           const bytes = await lease.readFile(manifestPath, EXPORT_LIMITS.max_manifest_bytes)
           const saved = JSON.parse(bytes.toString('utf8'))
           identityConflict = typeof saved.conversation?.id === 'string' && saved.conversation.id !== snapshot.conversation_id
-          const projection = Object.fromEntries(['policy', 'conversation', 'selection', 'messages', 'sources', 'evidence', 'attachments'].map(key => [key, saved[key]]))
-          matched = saved.schema_version === 1 && saved.export_version === 'markdown-v1' && saved.selection_digest === rendered.selectionDigest
-            && canonicalJson(projection) === canonicalJson(rendered.projection) && sha256(canonicalJson(projection)) === saved.selection_digest
-            && saved.markdown?.path === '聊天.md' && Number.isSafeInteger(saved.markdown?.bytes)
-            && saved.markdown.bytes === (await fs.stat(markdownPath)).size && /^[a-f0-9]{64}$/.test(saved.markdown?.sha256)
-            && await lease.hashFile(markdownPath) === saved.markdown.sha256
+          const projection = storedExportProjection(saved, format)
+          const output = saved.output ?? (format === 'markdown' ? saved.markdown : undefined)
+          matched = saved.schema_version === 1 && saved.export_version === rendered.exportVersion && (saved.export_format ?? 'markdown') === format && saved.selection_digest === rendered.selectionDigest
+            && canonicalJson(projection) === canonicalJson(rendered.digestProjection) && sha256(canonicalJson(projection)) === saved.selection_digest
+            && output?.path === rendered.filename && Number.isSafeInteger(output?.bytes)
+            && output.bytes === (await fs.stat(contentPath)).size && /^[a-f0-9]{64}$/.test(output?.sha256)
+            && await lease.hashFile(contentPath) === output.sha256
         } catch { /* 缺失、修改或损坏的旧导出均保留，发布到新版本目录。 */ }
         finally { await lease.releaseTree(destination) }
         if (matched) return { status: 'unchanged', directory: destination, messageCount: snapshot.messages.length, excludedUnknownTimeCount: snapshot.selection.excluded_unknown_time_count }
@@ -171,13 +175,13 @@ export async function exportMarkdown(databasePath: string, outputDirectory: stri
       }
       stage = await fs.mkdtemp(join(root, '.privateradar-export-'))
       const write = options.writeStagedFile ?? writeComplete
-      await write(join(stage, '聊天.md'), rendered.markdown); guard()
+      await write(join(stage, rendered.filename), rendered.content); guard()
       await write(join(stage, 'export.json'), rendered.manifest); guard()
       await options.beforePublish?.(stage, destination)
       guard(); lease.assertHealthy()
       const stageStat = await fs.lstat(stage)
-      if (!stageStat.isDirectory() || stageStat.isSymbolicLink() || (await fs.readdir(stage)).sort().join('|') !== ['export.json', '聊天.md'].join('|')) fail('临时导出目录发生变化，未发布。')
-      for (const [filename, bytes] of [['聊天.md', rendered.markdown], ['export.json', rendered.manifest]] as const) {
+      if (!stageStat.isDirectory() || stageStat.isSymbolicLink() || (await fs.readdir(stage)).sort().join('|') !== ['export.json', rendered.filename].sort().join('|')) fail('临时导出目录发生变化，未发布。')
+      for (const [filename, bytes] of [[rendered.filename, rendered.content], ['export.json', rendered.manifest]] as const) {
         const file = join(stage, filename), stat = await fs.lstat(file)
         if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size !== bytes.length || sha256(await fs.readFile(file)) !== sha256(bytes)) {
           throw new ExportSelectionError('EXPORT_IO_ERROR', '临时导出内容校验失败，未发布或覆盖任何文件。')
@@ -198,6 +202,9 @@ export async function exportMarkdown(databasePath: string, outputDirectory: stri
     try { if (stage) await cleanStage(stage, root) } finally { await lease.close() }
   }
 }
+
+/** 保留已验收 Markdown 的旧入口与默认行为。 */
+export const exportMarkdown = exportChat
 
 interface ExportIpc { handle: (channel: string, listener: (event: unknown, ...args: any[]) => unknown) => unknown }
 export function registerMarkdownExportIpc(ipc: ExportIpc, db: DatabaseSync, databasePath: string, appVersion: string, desktop: {
@@ -220,12 +227,12 @@ export function registerMarkdownExportIpc(ipc: ExportIpc, db: DatabaseSync, data
     if (selected) directory = safeAbsolutePath(selected)
     return selected
   }))
-  ipc.handle('markdown-export:start', (_event, request: ExportSelectionRequest) => safe(async () => {
+  ipc.handle('markdown-export:start', (_event, request: FormattedExportRequest) => safe(async () => {
     if (current) throw new ExportSelectionError('EXPORT_BUSY', '已有导出正在进行。')
     if (!directory) throw new ExportSelectionError('INVALID_SELECTION', '请先选择输出目录。')
     const controller = current = new AbortController()
     try {
-      const result = await exportMarkdown(databasePath, directory, request, appVersion, { signal: controller.signal })
+      const result = await exportChat(databasePath, directory, request, appVersion, { signal: controller.signal, format: request?.format })
       output = result.directory
       return result
     } catch (error) {

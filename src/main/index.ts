@@ -95,7 +95,7 @@ app.whenReady().then(() => {
   registerConversationLabelIpc(ipcMain, db)
   registerMarkdownExportIpc(ipcMain, db, databasePath, app.getVersion(), {
     chooseDirectory: async () => {
-      const chosen = await dialog.showOpenDialog(mainWindow!, { title: '选择 Markdown 导出目录', properties: ['openDirectory', 'createDirectory'] })
+      const chosen = await dialog.showOpenDialog(mainWindow!, { title: '选择聊天导出目录', properties: ['openDirectory', 'createDirectory'] })
       return chosen.canceled ? null : chosen.filePaths[0] ?? null
     },
     openDirectory: directory => shell.openPath(directory)

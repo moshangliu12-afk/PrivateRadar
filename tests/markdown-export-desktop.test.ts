@@ -48,6 +48,8 @@ describe('导出桌面通信边界', () => {
     const request = { conversation_id: '会话', range: { type: 'conversation' as const, start_date: null, end_date: null } }
     await api.listConversations(); await api.chooseDirectory(); await api.start(request); await api.cancel(); await api.openOutput()
     expect(electron.invoke.mock.calls).toEqual([['markdown-export:conversations'], ['markdown-export:choose-directory'], ['markdown-export:start', request], ['markdown-export:cancel'], ['markdown-export:open-output']])
+    await api.start({ ...request, format: 'json' }); await api.start({ ...request, format: 'txt' })
+    expect(electron.invoke.mock.calls.slice(-2)).toEqual([['markdown-export:start', { ...request, format: 'json' }], ['markdown-export:start', { ...request, format: 'txt' }]])
   })
   it.skipIf(process.platform !== 'win32')('桌面完整成功链只打开刚刚生成的结果目录，不接受调用方替换路径', async () => {
     const f = setup(); await f.call('choose-directory')

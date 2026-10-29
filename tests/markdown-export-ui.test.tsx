@@ -43,10 +43,10 @@ function setup() {
   const render = () => { frame.cursor = 0; hooks.active = frame; try { return MarkdownExportPanel({ api }) } finally { hooks.active = null } }
   return { api, render }
 }
-describe('轻量 Markdown 导出界面', () => {
-  it('明确入口、单会话选择、目录选择和成功输出；不引入格式或任务中心', async () => {
+describe('轻量聊天导出界面', () => {
+  it('明确入口、单会话选择、目录选择和成功输出；不引入复杂页面或任务中心', async () => {
     const h = setup(); let tree = h.render()
-    button(tree, '导出 Markdown').onClick(); await flush(); tree = h.render()
+    button(tree, '导出聊天').onClick(); await flush(); tree = h.render()
     expect(renderToStaticMarkup(tree)).toContain('用户标签 · 3 条消息')
     expect(button(tree, '开始导出').disabled).toBe(true)
     button(tree, '选择输出目录').onClick(); await flush(); tree = h.render()
@@ -55,11 +55,11 @@ describe('轻量 Markdown 导出界面', () => {
     expect(h.api.start).toHaveBeenCalledWith({ conversation_id: '真实会话编号', range: { type: 'conversation', start_date: null, end_date: null } })
     expect(renderToStaticMarkup(tree)).toContain('导出成功，共 3 条消息')
     button(tree, '打开导出目录').onClick(); await flush(); expect(h.api.openOutput).toHaveBeenCalledOnce()
-    expect(renderToStaticMarkup(tree)).not.toMatch(/JSON 导出|PDF|任务中心|模板设置/)
+    expect(renderToStaticMarkup(tree)).not.toMatch(/PDF|任务中心|模板设置/)
   })
   it('取消目录选择不执行导出，失败保留选择并明确提示，重复点击不会并发提交', async () => {
     const h = setup(); let tree = h.render()
-    button(tree, '导出 Markdown').onClick(); await flush(); tree = h.render()
+    button(tree, '导出聊天').onClick(); await flush(); tree = h.render()
     vi.mocked(h.api.chooseDirectory).mockResolvedValueOnce(ok(null))
     button(tree, '选择输出目录').onClick(); await flush(); tree = h.render()
     expect(renderToStaticMarkup(tree)).toContain('已取消选择目录')
@@ -75,14 +75,14 @@ describe('轻量 Markdown 导出界面', () => {
   it('运行中可请求取消，完成后显示取消结果', async () => {
     const h = setup(); let finish!: (result: MarkdownExportResult<MarkdownExportOutcome>) => void
     vi.mocked(h.api.start).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
-    let tree = h.render(); button(tree, '导出 Markdown').onClick(); await flush(); tree = h.render()
+    let tree = h.render(); button(tree, '导出聊天').onClick(); await flush(); tree = h.render()
     button(tree, '选择输出目录').onClick(); await flush(); tree = h.render(); button(tree, '开始导出').onClick(); tree = h.render()
     button(tree, '取消导出').onClick(); await flush(); expect(h.api.cancel).toHaveBeenCalledOnce()
     finish(ok({ status: 'cancelled', directory: null, messageCount: 0, excludedUnknownTimeCount: 0 })); await flush(); tree = h.render()
     expect(renderToStaticMarkup(tree)).toContain('导出已取消，未覆盖已有文件')
   })
   it('日期范围复用已有选择语义，缺失或倒序日期禁用提交', async () => {
-    const h = setup(); let tree = h.render(); button(tree, '导出 Markdown').onClick(); await flush(); tree = h.render()
+    const h = setup(); let tree = h.render(); button(tree, '导出聊天').onClick(); await flush(); tree = h.render()
     button(tree, '选择输出目录').onClick(); await flush(); tree = h.render()
     elements(tree).find(element => element.props.type === 'checkbox')!.props.onChange({ target: { checked: true } }); tree = h.render()
     expect(button(tree, '开始导出').disabled).toBe(true)
@@ -90,5 +90,17 @@ describe('轻量 Markdown 导出界面', () => {
     dates[0].props.onChange({ target: { value: '2026-10-01' } }); dates[1].props.onChange({ target: { value: '2026-10-02' } }); tree = h.render()
     button(tree, '开始导出').onClick(); await flush()
     expect(h.api.start).toHaveBeenCalledWith({ conversation_id: '真实会话编号', range: { type: 'date_range', start_date: '2026-10-01', end_date: '2026-10-02' } })
+  })
+  it.each(['json', 'txt'] as const)('格式选择明确、默认 Markdown，选择 %s 后沿用现有开始与目录流程', async format => {
+    const h = setup(); let tree = h.render(); button(tree, '导出聊天').onClick(); await flush(); tree = h.render()
+    const selector = elements(tree).find(element => element.type === 'select' && element.props['aria-label'] === '导出格式')!
+    expect(selector.props.value).toBe('markdown')
+    const html = renderToStaticMarkup(tree)
+    for (const name of ['Markdown', 'JSON', 'TXT', '适合 Obsidian']) expect(html).toContain(name)
+    selector.props.onChange({ target: { value: format } }); tree = h.render()
+    expect(renderToStaticMarkup(tree)).toContain(format === 'json' ? '适合备份、脚本、AI 和程序处理' : '适合普通文本阅读与复制')
+    button(tree, '选择输出目录').onClick(); await flush(); tree = h.render()
+    button(tree, '开始导出').onClick(); await flush()
+    expect(h.api.start).toHaveBeenCalledWith({ format, conversation_id: '真实会话编号', range: { type: 'conversation', start_date: null, end_date: null } })
   })
 })

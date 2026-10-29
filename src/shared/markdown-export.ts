@@ -34,6 +34,9 @@ export interface ExportSelectionRequest {
   readonly range: ExportRange
 }
 
+export type ExportFormat = 'markdown' | 'json' | 'txt'
+export interface FormattedExportRequest extends ExportSelectionRequest { readonly format?: ExportFormat }
+
 export interface CapturedExportSelection extends ExportSelectionRequest {
   readonly timezone: string
   readonly captured_at: string
@@ -158,7 +161,7 @@ export type MarkdownExportResult<T> = { ok: true; value: T } | { ok: false; erro
 export interface MarkdownExportApi {
   listConversations: () => Promise<MarkdownExportResult<MarkdownExportConversation[]>>
   chooseDirectory: () => Promise<MarkdownExportResult<string | null>>
-  start: (request: ExportSelectionRequest) => Promise<MarkdownExportResult<MarkdownExportOutcome>>
+  start: (request: FormattedExportRequest) => Promise<MarkdownExportResult<MarkdownExportOutcome>>
   cancel: () => Promise<MarkdownExportResult<null>>
   openOutput: () => Promise<MarkdownExportResult<null>>
 }
