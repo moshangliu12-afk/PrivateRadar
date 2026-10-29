@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { ConversationLabelApi } from '../shared/conversation-labels'
 import type { MarkdownExportApi } from '../shared/markdown-export'
+import type { ObsidianExportApi } from '../shared/obsidian-export'
 import type { CollectionDesktopApi } from '../shared/collections'
 import type { KeywordRadarDesktopApi } from '../shared/keyword-radar'
 import type { TodayKeywordInterestApi } from '../shared/today-keyword-interest'
@@ -8,6 +9,13 @@ import type { CommitmentDesktopApi } from '../shared/commitment'
 import type { CandidateEvidence, ChatQueryResponse, ConnectorSetupResult, DailyBriefItem, DashboardSummary, FeedbackExportResult, FeedbackState, FirstUseStatus, ImportResult, MessageContext, TopicEvidence, TopicRadarSummary } from '../shared/models'
 
 contextBridge.exposeInMainWorld('privateRadar', {
+  obsidianExport: {
+    settings: () => ipcRenderer.invoke('obsidian-export:settings'),
+    chooseVault: () => ipcRenderer.invoke('obsidian-export:choose-vault'),
+    start: request => ipcRenderer.invoke('obsidian-export:start', request),
+    cancel: () => ipcRenderer.invoke('obsidian-export:cancel'),
+    openOutput: () => ipcRenderer.invoke('obsidian-export:open-output')
+  } satisfies ObsidianExportApi,
   markdownExport: {
     listConversations: () => ipcRenderer.invoke('markdown-export:conversations'),
     chooseDirectory: () => ipcRenderer.invoke('markdown-export:choose-directory'),

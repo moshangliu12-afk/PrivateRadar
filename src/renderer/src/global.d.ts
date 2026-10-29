@@ -5,6 +5,7 @@ import type { TodayKeywordInterestApi } from '../../shared/today-keyword-interes
 import type { CommitmentDesktopApi } from '../../shared/commitment'
 import type { ConversationLabelApi } from '../../shared/conversation-labels'
 import type { MarkdownExportApi } from '../../shared/markdown-export'
+import type { ObsidianExportApi } from '../../shared/obsidian-export'
 
 declare global {
   interface Window {
@@ -13,6 +14,7 @@ declare global {
       commitmentCandidates: CommitmentDesktopApi
       conversationLabels: ConversationLabelApi
       markdownExport: MarkdownExportApi
+      obsidianExport: ObsidianExportApi
       getDashboardSummary: (date?: string) => Promise<DashboardSummary>
       refreshDashboard: (date?: string) => Promise<DashboardSummary>
       regenerateDashboard: (date?: string) => Promise<DashboardSummary>

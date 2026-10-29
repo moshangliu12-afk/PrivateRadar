@@ -91,7 +91,7 @@ interface ExportOptions {
 async function exists(path: string): Promise<boolean> {
   try { await fs.lstat(path); return true } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false; throw error }
 }
-async function writeComplete(path: string, bytes: Buffer): Promise<void> {
+export async function writeComplete(path: string, bytes: Buffer): Promise<void> {
   const file = await fs.open(path, 'wx')
   try { await file.writeFile(bytes); await file.sync() } finally { await file.close() }
   if (sha256(await fs.readFile(path)) !== sha256(bytes)) throw new ExportSelectionError('EXPORT_IO_ERROR', '临时文件校验未通过，未发布导出。')

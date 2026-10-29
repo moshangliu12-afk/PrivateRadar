@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import type { ExportFormat, MarkdownExportApi, MarkdownExportConversation, MarkdownExportOutcome, MarkdownExportResult } from '../../shared/markdown-export'
+import type { ObsidianExportApi, ObsidianExportOutcome, ObsidianVaultSettings } from '../../shared/obsidian-export'
 import { UiIcon } from './ui-components'
 import './markdown-export-panel.css'
 
@@ -9,8 +10,9 @@ async function unwrap<T>(request: Promise<MarkdownExportResult<T>>): Promise<T> 
   return result.value
 }
 
-export function MarkdownExportPanel({ api: supplied }: { api?: MarkdownExportApi }): React.JSX.Element {
+export function MarkdownExportPanel({ api: supplied, vaultApi: suppliedVault }: { api?: MarkdownExportApi; vaultApi?: ObsidianExportApi }): React.JSX.Element {
   const api = supplied ?? (typeof window === 'undefined' ? undefined : window.privateRadar?.markdownExport)
+  const vaultApi = suppliedVault ?? (typeof window === 'undefined' ? undefined : window.privateRadar?.obsidianExport)
   const [open, setOpen] = useState(false)
   const [conversations, setConversations] = useState<MarkdownExportConversation[]>([])
   const [conversationId, setConversationId] = useState('')
@@ -21,7 +23,10 @@ export function MarkdownExportPanel({ api: supplied }: { api?: MarkdownExportApi
   const [loading, setLoading] = useState(false), [busy, setBusy] = useState(false)
   const [error, setError] = useState(''), [notice, setNotice] = useState('')
   const [result, setResult] = useState<MarkdownExportOutcome | null>(null)
+  const [vault, setVault] = useState<ObsidianVaultSettings>({ path: null, supported: false })
+  const [vaultResult, setVaultResult] = useState<ObsidianExportOutcome | null>(null)
   const locked = useRef(false)
+  const active = useRef<'normal' | 'obsidian'>('normal')
   async function load(): Promise<void> {
     if (!api) return
     setLoading(true); setError('')
@@ -29,6 +34,7 @@ export function MarkdownExportPanel({ api: supplied }: { api?: MarkdownExportApi
       const values = await unwrap(api.listConversations())
       setConversations(values)
       setConversationId(current => values.some(value => value.conversationId === current) ? current : values[0]?.conversationId ?? '')
+      if (vaultApi) setVault(await unwrap(vaultApi.settings()))
     } catch (reason) { setError(reason instanceof Error ? reason.message : '会话列表读取失败，请重试。') }
     finally { setLoading(false) }
   }
@@ -43,7 +49,8 @@ export function MarkdownExportPanel({ api: supplied }: { api?: MarkdownExportApi
   }
   async function start(): Promise<void> {
     if (!api || locked.current) return
-    locked.current = true; setBusy(true); setError(''); setNotice(''); setResult(null)
+    active.current = 'normal'
+    locked.current = true; setBusy(true); setError(''); setNotice(''); setResult(null); setVaultResult(null)
     try {
       const value = await unwrap(api.start({ ...(format === 'markdown' ? {} : { format }), conversation_id: conversationId, range: dateRange
         ? { type: 'date_range', start_date: startDate, end_date: endDate }
@@ -52,9 +59,30 @@ export function MarkdownExportPanel({ api: supplied }: { api?: MarkdownExportApi
     } catch (reason) { setError(reason instanceof Error ? reason.message : '导出失败，原数据和已有文件未被覆盖。') }
     finally { locked.current = false; setBusy(false) }
   }
+  async function chooseVault(): Promise<void> {
+    if (!vaultApi || locked.current) return
+    locked.current = true; setLoading(true); setError(''); setNotice('')
+    try {
+      const path = await unwrap(vaultApi.chooseVault())
+      if (path) { setVault({ path, supported: true }); setVaultResult(null) }
+      else setNotice('已取消选择 Vault，保留原目录。')
+    } catch (reason) { setError(reason instanceof Error ? reason.message : '无法选择 Obsidian Vault。') }
+    finally { locked.current = false; setLoading(false) }
+  }
+  async function startVault(): Promise<void> {
+    if (!vaultApi || locked.current) return
+    active.current = 'obsidian'
+    locked.current = true; setBusy(true); setError(''); setNotice(''); setResult(null); setVaultResult(null)
+    try {
+      setVaultResult(await unwrap(vaultApi.start({ conversation_ids: [conversationId], range: dateRange
+        ? { type: 'date_range', start_date: startDate, end_date: endDate }
+        : { type: 'conversation', start_date: null, end_date: null } })))
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Obsidian 导出未完成，请检查 Vault。') }
+    finally { locked.current = false; setBusy(false) }
+  }
   async function cancel(): Promise<void> {
     if (!api) return
-    try { await unwrap(api.cancel()); setNotice('已请求取消，正在安全结束导出。') }
+    try { await unwrap(active.current === 'obsidian' && vaultApi ? vaultApi.cancel() : api.cancel()); setNotice('已请求取消，正在安全结束导出。') }
     catch (reason) { setError(reason instanceof Error ? reason.message : '取消请求未完成。') }
   }
   return <section className="settings-section markdown-export-section" aria-labelledby="markdown-export-title">
@@ -80,8 +108,24 @@ export function MarkdownExportPanel({ api: supplied }: { api?: MarkdownExportApi
         {busy && <button type="button" onClick={() => void cancel()}>取消导出</button>}
       </div>
       <small>相同且完整的导出会直接保留；聊天变化或文件被修改时创建新版本，不覆盖旧文件。当前支持 Windows 本地固定 NTFS 目录。</small>
+      <div className="obsidian-export-controls" aria-labelledby="obsidian-vault-title">
+        <h3 id="obsidian-vault-title">Obsidian Vault</h3>
+        <p className="markdown-export-path">当前 Vault：{vault.path || '尚未选择 Vault'}</p>
+        <button type="button" disabled={loading || busy || !vaultApi || !vault.supported} onClick={() => void chooseVault()}>选择 Vault</button>
+        <p>使用上方已选会话和日期范围，按会话及本地日期导出到 Vault 的 PrivateRadar 目录。无需运行 Obsidian。</p>
+        <button type="button" className="markdown-export-start" disabled={loading || busy || !vaultApi || !vault.supported || !vault.path || !conversationId || (dateRange && (!startDate || !endDate || startDate > endDate))} onClick={() => void startVault()}>导出到 Obsidian</button>
+        <small>仅支持 Windows 本地固定磁盘上的 Vault。未变化的文件跳过；源变化时更新未手改文件；手改或无法确认所有权的文件保留并另写版本。</small>
+      </div>
       {error && <p className="markdown-export-error" role="alert">{error}</p>}
-      {notice && !result && <p role="status">{notice}</p>}
+      {notice && !result && !vaultResult && <p role="status">{notice}</p>}
+      {vaultResult && <div role="status" className="obsidian-export-result">
+        <p>{vaultResult.status === 'cancelled' ? 'Obsidian 导出已取消，已完成的文件已保留。' : vaultResult.failed ? 'Obsidian 导出结束，部分文件未完成。' : 'Obsidian 导出完成'}</p>
+        <p>会话：{vaultResult.conversationCount} · 新建：{vaultResult.created} · 更新：{vaultResult.updated} · 未变化：{vaultResult.skipped} · 保留用户修改：{vaultResult.preserved} · 失败：{vaultResult.failed}</p>
+        {vaultResult.userModifiedFilePreserved && <p>已保留用户修改或无法确认所有权的文件，并生成安全新版本。</p>}
+        {vaultResult.manifestRecovered && <p>已安全建立导出清单，原有 Markdown 保留。</p>}
+        <p className="markdown-export-path">{vaultResult.directory}</p>
+        <button type="button" onClick={() => { if (vaultApi) void unwrap(vaultApi.openOutput()).catch(reason => setError(reason instanceof Error ? reason.message : '无法打开 Vault。')) }}>打开 Vault 导出目录</button>
+      </div>}
       {result && <div role="status">
         <p>{result.status === 'created' ? `导出成功，共 ${result.messageCount} 条消息。` : result.status === 'unchanged' ? '已有相同且完整的导出，已保留原文件。' : result.status === 'empty' ? '这个范围内没有可导出的消息。' : '导出已取消，未覆盖已有文件。'}</p>
         {result.excludedUnknownTimeCount > 0 && <p>已排除 {result.excludedUnknownTimeCount} 条未知时间消息。</p>}

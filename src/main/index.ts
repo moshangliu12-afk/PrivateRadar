@@ -6,6 +6,7 @@ import { openDatabase, getDashboardSummary, getTopicRadarSummary, validateDashbo
 import { importChatFile } from './import/importer'
 import { registerConversationLabelIpc } from './conversation-labels'
 import { registerMarkdownExportIpc } from './export/markdown-export'
+import { registerObsidianExportIpc } from './export/obsidian-desktop'
 import { macEditMenu, manualImportDialogOptions } from './desktop-platform'
 import { configureMacEvidenceRoot } from './batch-import/mac-json-evidence'
 import { getCandidateEvidence } from './intelligence/daily/repository'
@@ -93,11 +94,16 @@ app.whenReady().then(() => {
   const databasePath = join(dataDir, 'private-radar.db')
   const db = openDatabase(databasePath, process.env.PRIVATE_RADAR_SEED_DEMO === 'true')
   registerConversationLabelIpc(ipcMain, db)
+  const chooseExportDirectory = async (title: string): Promise<string | null> => {
+    const chosen = await dialog.showOpenDialog(mainWindow!, { title, properties: ['openDirectory', 'createDirectory'] })
+    return chosen.canceled ? null : chosen.filePaths[0] ?? null
+  }
   registerMarkdownExportIpc(ipcMain, db, databasePath, app.getVersion(), {
-    chooseDirectory: async () => {
-      const chosen = await dialog.showOpenDialog(mainWindow!, { title: '选择聊天导出目录', properties: ['openDirectory', 'createDirectory'] })
-      return chosen.canceled ? null : chosen.filePaths[0] ?? null
-    },
+    chooseDirectory: () => chooseExportDirectory('选择聊天导出目录'),
+    openDirectory: directory => shell.openPath(directory)
+  })
+  registerObsidianExportIpc(ipcMain, db, databasePath, {
+    chooseDirectory: () => chooseExportDirectory('选择 Obsidian Vault'),
     openDirectory: directory => shell.openPath(directory)
   })
   registerCollectionIpc(ipcMain, db)

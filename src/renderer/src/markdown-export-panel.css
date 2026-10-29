@@ -13,3 +13,6 @@
 .markdown-export-actions { display: flex; gap: 10px; }
 .markdown-export-form .markdown-export-start { background: var(--lime); border-color: var(--lime); color: var(--lime-ink); }
 .markdown-export-error { color: #9c3f35; }
+.obsidian-export-controls { display: grid; gap: 12px; padding-top: 16px; border-top: 1px solid var(--line); }
+.obsidian-export-controls h3, .obsidian-export-controls p { margin: 0; }
+.obsidian-export-controls p, .obsidian-export-result p { font-size: 13px; line-height: 1.7; }
