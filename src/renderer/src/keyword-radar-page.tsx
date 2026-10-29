@@ -96,7 +96,7 @@ function KeywordGroupCard({ group, api, changed, onRescanComplete }: { group: Ke
   return <article className={`keyword-group${!group.enabled || group.archivedAt ? ' is-disabled' : ''}`} data-group-id={group.id}>
     <header><h3>{group.name}</h3><span>{group.archivedAt ? '已归档' : group.enabled ? '已启用' : '已停用'}</span></header>
     {!group.archivedAt && <div className="keyword-rule-stats" aria-label="规则命中统计" title="统计全部已有命中；同一消息的多个来源只计一次。">
-      <span>历史命中：<strong>{group.stats?.historicalMatchCount ?? 0}</strong> 条</span>
+      <span>命中：<strong>{group.stats?.historicalMatchCount ?? 0}</strong> 条</span>
       <span>最近发现：{timeLabel(group.stats?.latestDiscoveryAt ?? null, '暂无')}</span>
       <span className="keyword-last-scan" title={!group.lastScan ? '尚未执行历史扫描' : group.lastScan.timeSource === 'finished_at' ? '扫描结束时间' : group.lastScan.lastScanStatus === 'running' ? '扫描开始时间' : '未记录结束时间时显示扫描开始时间'}>
         最近扫描：{!group.lastScan ? '尚未扫描' : <>{timeLabel(group.lastScan.lastScanAt, '时间未知')} · {Object.hasOwn(scanLabels, group.lastScan.lastScanStatus) ? scanLabels[group.lastScan.lastScanStatus] : '状态未知'}

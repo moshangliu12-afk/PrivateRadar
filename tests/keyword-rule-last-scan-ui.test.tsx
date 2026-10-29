@@ -33,7 +33,7 @@ function plain(value:string){return value.replace(/<!--.*?-->/g,'').replace(/<[^
 describe('最近扫描卡片与统一统计交互',()=>{
   it('从未扫描同时展示零、暂无和尚未扫描，不新增页面',()=>{
     const markup=html(base),text=plain(markup)
-    for(const value of ['历史命中：0 条','最近发现：暂无','最近扫描：尚未扫描'])expect(text).toContain(value)
+    for(const value of ['命中：0 条','最近发现：暂无','最近扫描：尚未扫描'])expect(text).toContain(value)
     expect(markup.match(/<section /g)).toHaveLength(2)
   })
   it.each([['complete','成功'],['running','扫描中'],['failed','失败'],['cancelled','已取消']])('真实状态 %s 映射为中文 %s，复用既有日期格式', (status,label)=>{
@@ -68,7 +68,7 @@ describe('最近扫描卡片与统一统计交互',()=>{
     scanHost.render(HistoricalKeywordScan,scanner.props);const stopFinal=scanHost.frame.effects[0]();await flush()
     section=elements(page.render(KeywordRadarPage,props)).find(e=>e.type===KeywordRadarContent)!
     const text=plain(renderToStaticMarkup(section))
-    expect(text).toContain('历史命中：1 条');expect(text).toContain(' · '+({complete:'成功',failed:'失败',cancelled:'已取消'}[outcome]))
+    expect(text).toContain('命中：1 条');expect(text).toContain(' · '+({complete:'成功',failed:'失败',cancelled:'已取消'}[outcome]))
     expect(text).not.toContain('尚未扫描当前规则');expect(client.listGroups).toHaveBeenCalledTimes(3)
     if(typeof stopFinal==='function')stopFinal();if(typeof cleanup==='function')cleanup()
   })

@@ -55,7 +55,8 @@ function content(groups:KeywordGroupView[],hits:KeywordHitView[]=[]) {
 describe('规则卡片统计展示与刷新',()=>{
   it('零命中显示零和暂无，维持现有页面和轻量卡片',()=>{
     const html=renderToStaticMarkup(content([group]))
-    expect(html).toContain('历史命中：<strong>0</strong> 条')
+    expect(html).toContain('命中：<strong>0</strong> 条')
+    expect(html).not.toContain('历史命中：')
     expect(html).toContain('最近发现：暂无')
     expect(html.match(/<section /g)).toHaveLength(2)
     expect(html).not.toMatch(/Invalid Date|统计详情|趋势图|排行榜/)
@@ -64,7 +65,8 @@ describe('规则卡片统计展示与刷新',()=>{
     const date='2026-10-29T05:18:00.000Z'
     const hit:KeywordHitView={id:'命中',groupId:'规则',groupName:'项目关注',matchedTerms:['Codex'],matchedAt:date,batchItemId:null,sourcePosition:null,messageId:'消息',body:'正文',senderName:null,chatTimestamp:null,timestampSource:'unknown',conversationName:null,source:{batchItemId:null,attachmentName:null,ordinal:null,evidenceKind:null,evidenceStatus:'missing',evidenceRecorded:false}}
     const html=renderToStaticMarkup(content([{...group,stats:{historicalMatchCount:38,latestDiscoveryAt:date}}],[hit]))
-    expect(html).toContain('历史命中：<strong>38</strong> 条')
+    expect(html).toContain('命中：<strong>38</strong> 条')
+    expect(html).not.toContain('历史命中：')
     expect(html.match(/最近发现：([^<]+)/)?.[1]).toBe(html.match(/发现时间：([^<]+)/)?.[1])
   })
   it('异常时间安全显示暂无，旧接口 fixture 不出现空值字符串',()=>{
@@ -75,7 +77,7 @@ describe('规则卡片统计展示与刷新',()=>{
   it('归档记录沿用折叠展示但不显示活动统计，停用组仍显示历史值',()=>{
     const archived=renderToStaticMarkup(content([{...group,archivedAt:'2026-10-29',enabled:false,stats:undefined}]))
     expect(archived).toContain('已归档关键词组（1）');expect(archived).not.toContain('class="keyword-rule-stats"')
-    expect(renderToStaticMarkup(content([{...group,enabled:false,stats:{historicalMatchCount:2,latestDiscoveryAt:null}}]))).toContain('历史命中：<strong>2</strong> 条')
+    expect(renderToStaticMarkup(content([{...group,enabled:false,stats:{historicalMatchCount:2,latestDiscoveryAt:null}}]))).toContain('命中：<strong>2</strong> 条')
   })
   it('真实扫描完成经现有回调刷新卡片，无需重进页面或新增订阅',async()=>{
     const f=radarFixture();ingestRadarItem(f,0,radarMessages([1]))
@@ -92,7 +94,7 @@ describe('规则卡片统计展示与刷新',()=>{
     const page=host(),props={api:client}
     page.render(KeywordRadarPage,props);const cleanup=page.frame.effects[0]();await flush()
     let tree=page.render(KeywordRadarPage,props),section=elements(tree).find(e=>e.type===KeywordRadarContent)!
-    expect(renderToStaticMarkup(section)).toContain('历史命中：<strong>0</strong> 条')
+    expect(renderToStaticMarkup(section)).toContain('命中：<strong>0</strong> 条')
     const sectionHost=host(),sectionTree=sectionHost.render(KeywordRadarContent,section.props)
     const card=elements(sectionTree).find(e=>typeof e.type==='function'&&e.props.group?.id===created.id)!
     const cardTree=host().render(card.type as (props:any)=>ReactNode,card.props)
@@ -106,7 +108,7 @@ describe('规则卡片统计展示与刷新',()=>{
     scanTree=scanHost.render(HistoricalKeywordScan,scanner.props)
     const stopFinal=scanHost.frame.effects[0]();await flush()
     tree=page.render(KeywordRadarPage,props);section=elements(tree).find(e=>e.type===KeywordRadarContent)!
-    expect(renderToStaticMarkup(section)).toContain('历史命中：<strong>1</strong> 条')
+    expect(renderToStaticMarkup(section)).toContain('命中：<strong>1</strong> 条')
     expect(renderToStaticMarkup(section)).not.toContain('最近发现：暂无')
     expect(client.listGroups).toHaveBeenCalledTimes(3)
     if(typeof stopFinal==='function')stopFinal();if(typeof cleanup==='function')cleanup()
