@@ -21,13 +21,13 @@ vi.mock('../src/main/deployment', () => ({
 
 // 单卡与双卡统一转交原始来源；技能正文更新时递增独立版本并固定完整哈希。
 // 各组件保护明确的独立版本，不要求所有组件版本相等，也不接受任意版本。
-const productVersion = '0.2.0-alpha.24'
+const productVersion = '0.2.0-alpha.25'
 const connectorVersion = '0.2.0-alpha.22'
 const mcpVersion = '0.2.0-alpha.22'
 const skillVersion = '0.2.0-alpha.18-skill.1'
 const readSource = (path: string): string => readFileSync(new URL(path, import.meta.url), 'utf8')
 
-describe('alpha.24 安全维护版本的独立组件版本契约', () => {
+describe('alpha.25 统一功能发布的独立组件版本契约', () => {
   it('产品与 lockfile 顶层和根包版本一致', () => {
     expect(product.version).toBe(productVersion)
     expect(lockfile.version).toBe(productVersion)
@@ -97,6 +97,6 @@ describe('alpha.24 安全维护版本的独立组件版本契约', () => {
   it('安装包命名由产品版本推导但不制作安装包', () => {
     expect(product.build.win.artifactName).toBe('PrivateRadar-Setup-${version}-x64.${ext}')
     const artifact = product.build.win.artifactName.replace('${version}', product.version).replace('${ext}', 'exe')
-    expect(artifact).toBe('PrivateRadar-Setup-0.2.0-alpha.24-x64.exe')
+    expect(artifact).toBe('PrivateRadar-Setup-0.2.0-alpha.25-x64.exe')
   })
 })
