@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ConversationName } from './conversation-labels'
+import { MarkdownExportPanel } from './markdown-export-panel'
 import type {
   CandidateEvidence,
   ChatQueryResponse,
@@ -701,6 +702,7 @@ export function SettingsPage({ status, importing, onImportFile, onConfigure, onC
       </div>
       {notice && <div role="status" className={`settings-operation-notice ${status.workBuddyConnected ? 'mode-notice' : 'error'}`}>{notice}</div>}
     </section>
+    <MarkdownExportPanel />
     <footer className="settings-footer"><span className="settings-footer-mark" aria-hidden="true"><UiIcon name="shield" /></span><span>本地数据 · 由你掌握</span></footer>
   </section>
 }

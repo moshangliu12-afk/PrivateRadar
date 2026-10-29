@@ -1,0 +1,15 @@
+.markdown-export-section > p, .markdown-export-form small { color: var(--muted); font-size: 13px; line-height: 1.7; }
+.markdown-export-form { display: grid; gap: 16px; margin-top: 18px; padding: 20px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--card); }
+.markdown-export-form label { display: grid; gap: 8px; font-size: 13px; color: var(--ink-2); }
+.markdown-export-form select, .markdown-export-form input[type=date] { min-width: 0; max-width: 100%; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--card); color: var(--ink); font: inherit; }
+.markdown-export-form button { width: fit-content; padding: 9px 14px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--card); color: var(--ink); font: inherit; cursor: pointer; }
+.markdown-export-form button:focus-visible, .markdown-export-form select:focus-visible, .markdown-export-form input:focus-visible { outline: 2px solid var(--lime-ink); outline-offset: 2px; }
+.markdown-export-form button:hover { background: var(--paper); }
+.markdown-export-form button:disabled { opacity: .55; cursor: default; }
+.markdown-export-form .markdown-export-range { display: flex; align-items: center; gap: 8px; }
+.markdown-export-dates { display: flex; flex-wrap: wrap; gap: 12px; }
+.markdown-export-dates p { width: 100%; margin: 0; color: var(--muted); font-size: 12px; }
+.markdown-export-path { overflow-wrap: anywhere; font-size: 13px; color: var(--ink-3); }
+.markdown-export-actions { display: flex; gap: 10px; }
+.markdown-export-form .markdown-export-start { background: var(--lime); border-color: var(--lime); color: var(--lime-ink); }
+.markdown-export-error { color: #9c3f35; }

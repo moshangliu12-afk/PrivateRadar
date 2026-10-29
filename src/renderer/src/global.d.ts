@@ -4,6 +4,7 @@ import type { KeywordRadarDesktopApi } from '../../shared/keyword-radar'
 import type { TodayKeywordInterestApi } from '../../shared/today-keyword-interest'
 import type { CommitmentDesktopApi } from '../../shared/commitment'
 import type { ConversationLabelApi } from '../../shared/conversation-labels'
+import type { MarkdownExportApi } from '../../shared/markdown-export'
 
 declare global {
   interface Window {
@@ -11,6 +12,7 @@ declare global {
       keywordRadar: KeywordRadarDesktopApi
       commitmentCandidates: CommitmentDesktopApi
       conversationLabels: ConversationLabelApi
+      markdownExport: MarkdownExportApi
       getDashboardSummary: (date?: string) => Promise<DashboardSummary>
       refreshDashboard: (date?: string) => Promise<DashboardSummary>
       regenerateDashboard: (date?: string) => Promise<DashboardSummary>

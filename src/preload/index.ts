@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { ConversationLabelApi } from '../shared/conversation-labels'
+import type { MarkdownExportApi } from '../shared/markdown-export'
 import type { CollectionDesktopApi } from '../shared/collections'
 import type { KeywordRadarDesktopApi } from '../shared/keyword-radar'
 import type { TodayKeywordInterestApi } from '../shared/today-keyword-interest'
@@ -7,6 +8,13 @@ import type { CommitmentDesktopApi } from '../shared/commitment'
 import type { CandidateEvidence, ChatQueryResponse, ConnectorSetupResult, DailyBriefItem, DashboardSummary, FeedbackExportResult, FeedbackState, FirstUseStatus, ImportResult, MessageContext, TopicEvidence, TopicRadarSummary } from '../shared/models'
 
 contextBridge.exposeInMainWorld('privateRadar', {
+  markdownExport: {
+    listConversations: () => ipcRenderer.invoke('markdown-export:conversations'),
+    chooseDirectory: () => ipcRenderer.invoke('markdown-export:choose-directory'),
+    start: request => ipcRenderer.invoke('markdown-export:start', request),
+    cancel: () => ipcRenderer.invoke('markdown-export:cancel'),
+    openOutput: () => ipcRenderer.invoke('markdown-export:open-output')
+  } satisfies MarkdownExportApi,
   conversationLabels: {
     listConversations: () => ipcRenderer.invoke('conversation-labels:list'),
     setConversationLabel: (id: string, label: string | null) => ipcRenderer.invoke('conversation-labels:set', id, label)
