@@ -35,6 +35,9 @@ function view(row: RunRow): HistoricalRescanState {
     newHits: row.new_hits, existingHits: row.existing_hits, removedHits: row.removed_hits,
     startedAt: row.started_at, finishedAt: row.finished_at, error: interrupted ? errors.INTERRUPTED : row.error_code ? errors[row.error_code] : null }
 }
+// 复用原只读投影，包括进程中断识别；不改变扫描执行或恢复行为。
+export { view as historicalRescanView }
+export type { RunRow as HistoricalRescanRunRow }
 function selectedRules(db: DatabaseSync, groupId: string): RulesSnapshot {
   const all = freezeKeywordRules(db), group = all.groups.find(group => group.group_id === groupId)
   if (!group) throw new HistoricalRescanError('RULE_UNAVAILABLE')

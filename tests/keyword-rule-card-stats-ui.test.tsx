@@ -108,7 +108,7 @@ describe('规则卡片统计展示与刷新',()=>{
     tree=page.render(KeywordRadarPage,props);section=elements(tree).find(e=>e.type===KeywordRadarContent)!
     expect(renderToStaticMarkup(section)).toContain('历史命中：<strong>1</strong> 条')
     expect(renderToStaticMarkup(section)).not.toContain('最近发现：暂无')
-    expect(client.listGroups).toHaveBeenCalledTimes(2)
+    expect(client.listGroups).toHaveBeenCalledTimes(3)
     if(typeof stopFinal==='function')stopFinal();if(typeof cleanup==='function')cleanup()
   })
 })

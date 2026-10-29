@@ -6,9 +6,17 @@ export interface KeywordRuleCardStats {
   historicalMatchCount: number
   latestDiscoveryAt: string | null
 }
+export interface KeywordRuleLastScan {
+  id: string
+  lastScanAt: string | null
+  lastScanStatus: string
+  timeSource: 'started_at' | 'finished_at'
+  matchesCurrentRule: boolean
+}
 export interface KeywordGroupView {
   id: string; name: string; enabled: boolean; archivedAt: string | null; terms: KeywordTermView[]
   stats?: KeywordRuleCardStats
+  lastScan?: KeywordRuleLastScan | null
 }
 export interface KeywordRadarStatus { pending: number; failed: number }
 export interface KeywordOccurrenceView extends ConversationNameInput {

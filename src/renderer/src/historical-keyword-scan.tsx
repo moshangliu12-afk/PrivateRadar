@@ -2,13 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import type { HistoricalRescanApi, HistoricalRescanState } from '../../shared/historical-keyword-rescan'
 import './historical-keyword-scan.css'
 
-export function HistoricalKeywordScan({ api, groupId, enabled, onComplete }: {
+export function HistoricalKeywordScan({ api, groupId, enabled, onComplete, onStarted, initialRunId }: {
   api?: HistoricalRescanApi; groupId: string; enabled: boolean; onComplete: () => Promise<void>
+  onStarted?: () => Promise<void>; initialRunId?: string
 }): React.JSX.Element | null {
   const [state, setState] = useState<HistoricalRescanState | null>(null)
   const [preparing, setPreparing] = useState(false), [error, setError] = useState('')
   const [refresh, setRefresh] = useState(0)
-  const completed = useRef(''), active = useRef(''), locked = useRef(false), callback = useRef(onComplete)
+  const completed = useRef(''), active = useRef(initialRunId ?? ''), locked = useRef(false), callback = useRef(onComplete)
   callback.current = onComplete
   useEffect(() => {
     if (!api) return
@@ -37,6 +38,7 @@ export function HistoricalKeywordScan({ api, groupId, enabled, onComplete }: {
       const result = await api!.start(groupId)
       if (!result.ok) { setError(result.error.message); return }
       active.current = result.value.id; setState(result.value); setRefresh(value => value + 1)
+      try { await onStarted?.() } catch { setError('扫描已开始，卡片信息暂未刷新。请稍后刷新。') }
     } catch { setError('扫描未能开始，请稍后重试。') }
     finally { locked.current = false; setPreparing(false) }
   }

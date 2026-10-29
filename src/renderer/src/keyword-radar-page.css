@@ -20,6 +20,8 @@
 .keyword-group.is-disabled { background: var(--paper-2); }
 .keyword-rule-stats { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 12px; color: var(--muted); font-size: 12px; line-height: 1.7; font-variant-numeric: tabular-nums; }
 .keyword-rule-stats strong { color: var(--ink-3); font-weight: 600; }
+.keyword-last-scan { flex-basis: 100%; }
+.keyword-scan-outdated { color: var(--ink-3); }
 .keyword-terms, .keyword-matched, .keyword-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .keyword-terms { margin: 17px 0; }
 .keyword-chip { display: inline-flex; align-items: center; gap: 7px; padding: 5px 9px; border-radius: 8px; background: var(--lime-2); font-size: 12px; overflow-wrap: anywhere; max-width: 100%; }

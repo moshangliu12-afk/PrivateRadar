@@ -38,6 +38,7 @@ export function KeywordContext({ context }: { context: KeywordHitContext }): Rea
   </ol>
 }
 const evidenceLabels = { pending: '证据待登记', available: '证据已登记可用', missing: '证据缺失', corrupt: '证据校验未通过', error: '证据状态待检查' }
+const scanLabels: Record<string, string> = { running: '扫描中', complete: '成功', failed: '失败', cancelled: '已取消' }
 export function KeywordHitCard({ hit, api }: { hit: KeywordHitView; api: KeywordRadarDesktopApi }): React.JSX.Element {
   const [expanded, setExpanded] = useState(false)
   const [context, setContext] = useState<KeywordHitContext | null>(null)
@@ -97,6 +98,10 @@ function KeywordGroupCard({ group, api, changed, onRescanComplete }: { group: Ke
     {!group.archivedAt && <div className="keyword-rule-stats" aria-label="规则命中统计" title="统计全部已有命中；同一消息的多个来源只计一次。">
       <span>历史命中：<strong>{group.stats?.historicalMatchCount ?? 0}</strong> 条</span>
       <span>最近发现：{timeLabel(group.stats?.latestDiscoveryAt ?? null, '暂无')}</span>
+      <span className="keyword-last-scan" title={!group.lastScan ? '尚未执行历史扫描' : group.lastScan.timeSource === 'finished_at' ? '扫描结束时间' : group.lastScan.lastScanStatus === 'running' ? '扫描开始时间' : '未记录结束时间时显示扫描开始时间'}>
+        最近扫描：{!group.lastScan ? '尚未扫描' : <>{timeLabel(group.lastScan.lastScanAt, '时间未知')} · {Object.hasOwn(scanLabels, group.lastScan.lastScanStatus) ? scanLabels[group.lastScan.lastScanStatus] : '状态未知'}
+          {!group.lastScan.matchesCurrentRule && <span className="keyword-scan-outdated">（尚未扫描当前规则）</span>}</>}
+      </span>
     </div>}
     <div className="keyword-terms">{group.terms.length ? group.terms.map(term => <span className={`keyword-chip${term.enabled ? '' : ' is-disabled'}`} key={term.id}>
       <span>{term.term}</span>{!group.archivedAt && <button type="button" disabled={busy} aria-label={`${term.enabled ? '停用' : '启用'}关键词 ${term.term}`} aria-pressed={term.enabled}
@@ -114,7 +119,7 @@ function KeywordGroupCard({ group, api, changed, onRescanComplete }: { group: Ke
       <div className="keyword-actions"><button type="button" disabled={busy} onClick={() => void act(() => api.setGroupEnabled(group.id, !group.enabled))}>{group.enabled ? '停用组' : '启用组'}</button>
         <button type="button" disabled={busy} onClick={() => { setName(group.name); setRenaming(!renaming); setArchive(false) }}>改组名</button>
         <button type="button" disabled={busy} onClick={() => { setArchive(!archive); setRenaming(false) }}>归档</button></div>
-      <HistoricalKeywordScan api={api.historicalRescan} groupId={group.id} enabled={group.enabled} onComplete={onRescanComplete} />
+      <HistoricalKeywordScan api={api.historicalRescan} groupId={group.id} enabled={group.enabled} onComplete={onRescanComplete} onStarted={changed} initialRunId={group.lastScan?.lastScanStatus === 'running' ? group.lastScan.id : undefined} />
       {renaming && <form className="keyword-inline-form" onSubmit={event => { event.preventDefault(); void act(() => api.renameGroup(group.id, name.trim()), () => setRenaming(false)) }}>
         <label htmlFor={`keyword-name-${group.id}`}>新组名</label><div><input id={`keyword-name-${group.id}`} maxLength={200} value={name} onChange={event => setName(event.target.value)} disabled={busy} /><button type="submit" disabled={busy || !name.trim()}>保存组名</button><button type="button" onClick={() => setRenaming(false)} disabled={busy}>取消</button></div>
       </form>}

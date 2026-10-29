@@ -6,10 +6,10 @@ import type { KeywordGroupView, KeywordHitContext, KeywordHitSource, KeywordHitV
 import { createKeywordGroup, renameKeywordGroup, setKeywordGroupEnabled, archiveKeywordGroup,
   addKeywordTerm, setKeywordTermEnabled } from './config'
 import { normalizeKeywordTermV1 } from './normalization'
-import { parseMatchedTermsSnapshot } from './contracts'
+import { parseMatchedTermsSnapshot, parseRulesSnapshot, type RulesSnapshot } from './contracts'
 import { retryKeywordRadarRun, logKeywordRadarFailure } from './processor'
 import { isReliableTimestampSource } from '../time-semantics'
-import { createHistoricalRescanService, HistoricalRescanError } from './historical-rescan'
+import { createHistoricalRescanService, HistoricalRescanError, historicalRescanView, type HistoricalRescanRunRow } from './historical-rescan'
 import { getMessageContext } from '../retrieval/service'
 
 const idSchema = z.string().uuid()
@@ -52,22 +52,49 @@ export function listDesktopKeywordGroups(db: DatabaseSync): KeywordGroupView[] {
     SELECT h.group_id,COUNT(DISTINCT h.message_id) AS hit_count,MAX(h.matched_at) AS latest_discovery_at
     FROM visible_hits h JOIN keyword_groups g ON g.id=h.group_id AND g.archived_at IS NULL
     GROUP BY h.group_id
-  ) SELECT g.id,g.name,g.enabled,g.archived_at,stats.hit_count,stats.latest_discovery_at,
-    t.id AS term_id,t.term,t.enabled AS term_enabled FROM keyword_groups g
+  ), latest_scans AS (
+    SELECT r.*,ROW_NUMBER() OVER(PARTITION BY r.group_id ORDER BY r.rowid DESC) AS recent_rank FROM keyword_rescans r
+  ) SELECT g.id AS group_key,g.name,g.enabled,g.archived_at,stats.hit_count,stats.latest_discovery_at,scan.*,
+    t.id AS term_id,t.term,t.normalized_term,t.enabled AS term_enabled FROM keyword_groups g
     LEFT JOIN rule_stats stats ON stats.group_id=g.id
+    LEFT JOIN latest_scans scan ON scan.group_id=g.id AND scan.recent_rank=1
     LEFT JOIN keyword_terms t ON t.group_id=g.id ORDER BY g.created_at,g.id,t.created_at,t.id`).all()
   const groups: KeywordGroupView[] = []
+  const snapshots = new Map<string, { json: string; current: RulesSnapshot['groups'][number] }>()
   for (const row of rows) {
     let group = groups.at(-1)
-    if (group?.id !== row.id) {
-      group = { id: String(row.id), name: String(row.name), enabled: Boolean(row.enabled),
+    if (group?.id !== row.group_key) {
+      group = { id: String(row.group_key), name: String(row.name), enabled: Boolean(row.enabled),
         archivedAt: row.archived_at as string | null, terms: [] }
       if (row.archived_at === null) group.stats = {
         historicalMatchCount: Number(row.hit_count ?? 0), latestDiscoveryAt: row.latest_discovery_at as string | null
       }
+      if (row.archived_at === null) {
+        group.lastScan = null
+        if (row.id !== null) {
+          const run = historicalRescanView(row as unknown as HistoricalRescanRunRow)
+          const finished = run.status !== 'running' && run.finishedAt ? run.finishedAt : null
+          group.lastScan = { id: run.id, lastScanAt: finished ?? run.startedAt, lastScanStatus: run.status,
+            timeSource: finished ? 'finished_at' : 'started_at', matchesCurrentRule: false }
+          snapshots.set(group.id, { json: String(row.rules_snapshot_json), current: { group_id: group.id, group_name: group.name, terms: [] } })
+        }
+      }
       groups.push(group)
     }
     if (row.term_id !== null) group.terms.push({ id: String(row.term_id), term: String(row.term), enabled: Boolean(row.term_enabled) })
+    if (row.term_id !== null && row.term_enabled) snapshots.get(group.id)?.current.terms.push({
+      term_id: String(row.term_id), term: String(row.term), normalized_term: String(row.normalized_term)
+    })
+  }
+  for (const group of groups) {
+    const snapshot = snapshots.get(group.id)
+    if (!snapshot || !group.lastScan) continue
+    snapshot.current.terms.sort((a, b) => a.term_id < b.term_id ? -1 : a.term_id > b.term_id ? 1 : 0)
+    try {
+      const frozen = parseRulesSnapshot(snapshot.json)
+      group.lastScan.matchesCurrentRule = group.enabled && frozen.groups.length === 1 &&
+        JSON.stringify(frozen.groups[0]) === JSON.stringify(snapshot.current)
+    } catch { /* 无法核对旧快照时，不宣称当前规则已扫描。 */ }
   }
   return groups
 }
