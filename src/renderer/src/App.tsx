@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ConversationName } from './conversation-labels'
 import { MarkdownExportPanel } from './markdown-export-panel'
+import { AddContextButton, ContextHandoffEntry } from './context-handoff'
 import type {
   CandidateEvidence,
   ChatQueryResponse,
@@ -331,6 +332,7 @@ export function App(): React.JSX.Element {
       <main className={`content-column page-${page}`}>
         <div className="app-toolbar">
           <div className="header-actions">
+            <ContextHandoffEntry />
             {summary?.demoMode && <span className="demo-badge">当前为示例数据</span>}
             {page === 'daily' && summary?.date && summary.mode === 'ai' && <button className="regenerate-button" type="button" onClick={() => void regenerate()} disabled={regenerating || dailyLoading}>{regenerating ? '正在整理…' : '重新生成'}</button>}
             <button className="import-button" type="button" onClick={() => void beginWechatImport()}><UiIcon name="inbox" />开始导入我的聊天</button>
@@ -969,6 +971,7 @@ export function SearchPage({
                       <div className="search-result-footer">
                         <div className="reason-list">{result.matchReasons.map((reason) => <span key={reason}>{reason}</span>)}</div>
                         <button type="button" onClick={() => void onToggleContext(result.messageId)}>{openMessageId === result.messageId ? '收起上下文' : '查看上下文'}</button>
+                        <AddContextButton messageId={result.messageId} />
                       </div>
                     </article>
                     {openMessageId === result.messageId && <MessageContextPanel context={context} />}
@@ -987,6 +990,7 @@ export function SearchPage({
                         <div className="search-result-footer">
                           <div className="reason-list">{result.matchReasons.map((reason) => <span key={reason}>{reason}</span>)}</div>
                           <button type="button" onClick={() => void onToggleContext(result.messageId)}>{openMessageId === result.messageId ? '收起上下文' : '查看上下文'}</button>
+                          <AddContextButton messageId={result.messageId} />
                         </div>
                       </article>
                       {openMessageId === result.messageId && <MessageContextPanel context={context} />}
@@ -1042,6 +1046,7 @@ function MessageContextPanel({ context }: { context: MessageContext | null }): R
         <div className={message.isSource ? 'evidence-message source' : 'evidence-message'} key={message.messageId}>
           <div><strong>{displayMetadata(message.senderName, '发送人未提供')}</strong><span><ConversationName value={message} evidence /> · {formatTime(message.timestamp)}</span></div>
           <p>{message.content}</p>
+          <AddContextButton messageId={message.messageId} />
         </div>
       ))}
     </div>
@@ -1071,6 +1076,7 @@ function TopicEvidencePanel({ evidence }: { evidence: TopicEvidence | null }): R
         <div className="evidence-message source" key={message.messageId}>
           <div><strong>{displayMetadata(message.senderName, '发送人未提供')}</strong><span><ConversationName value={message} evidence /> · {formatTime(message.timestamp)}</span></div>
           <p>{message.content}</p>
+          <AddContextButton messageId={message.messageId} />
         </div>
       ))}
     </div>
@@ -1095,6 +1101,7 @@ function EvidencePanel({ evidence }: { evidence: CandidateEvidence | null }): Re
             <div className={item.isSource ? 'evidence-message source' : 'evidence-message'} key={`${group.sourceMessageId}-${item.messageId}`}>
               <div><strong>{displayMetadata(item.senderName, '发送人未提供')}</strong><span><ConversationName value={item} evidence /> · {formatTime(item.timestamp)}</span></div>
               <p>{item.content}</p>
+              <AddContextButton messageId={item.messageId} />
             </div>
           ))}
         </div>

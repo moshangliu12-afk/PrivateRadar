@@ -131,9 +131,9 @@ interface SourceRow {
 const metadataColumns = ['id', 'platform', 'conversation_name', 'conversation_name_source', 'sender_id', 'sender_name',
   'sender_name_source', 'timestamp', 'timestamp_source', 'content_source', 'message_type', 'reply_to', 'source_message_id',
   'source_batch_id', 'attachments_json'] as const
-const selectedCte = `WITH timed AS (SELECT ${metadataColumns.join(',')},source_position,
+const selectedCte = (filter = '') => `WITH timed AS (SELECT ${metadataColumns.join(',')},source_position,
   length(CAST(content AS BLOB)) AS body_bytes,export_canonical_time(timestamp,timestamp_source) AS canonical_ms
-  FROM messages WHERE conversation_id=?), selected AS (
+  FROM messages WHERE conversation_id=?${filter}), selected AS (
   SELECT *,CASE WHEN canonical_ms IS NULL THEN 1 ELSE 0 END AS unknown_key,COALESCE(canonical_ms,0) AS time_key
   FROM timed WHERE (?=0 OR (canonical_ms>=? AND canonical_ms<?)))`
 const placeholderSql = (length: number) => Array.from({ length }, () => '?').join(',')
@@ -168,9 +168,17 @@ function freezeTree<T>(value: T): T {
 /** 路径仅由主进程提供；创建独立只读连接，绝不经过初始化、修复或迁移入口。 */
 export async function buildCanonicalExportSnapshot(
   databasePath: string, request: ExportSelectionRequest,
-  options: { signal?: AbortSignal; onProgress?: (progress: ExportReadProgress) => void } = {}
+  options: { signal?: AbortSignal; onProgress?: (progress: ExportReadProgress) => void; messageIds?: readonly string[] } = {}
 ): Promise<CanonicalExportSnapshot> {
   const started = performance.now(), selection = captureExportSelection(request)
+  // 仅主进程交接快照使用有界消息选择；原导出调用不附带筛选，保留完整旧契约。
+  const ids = options.messageIds
+  if (ids !== undefined && (!Array.isArray(ids) || !ids.length || ids.length > 200 || new Set(ids).size !== ids.length
+    || ids.some(id => typeof id !== 'string' || !id.trim() || Buffer.byteLength(id, 'utf8') > limits.max_metadata_string_bytes))) {
+    fail('INVALID_SELECTION', '消息选择无效，每次最多选择 200 条且不能重复。')
+  }
+  const messageParams = ids ? [...ids] : []
+  const messageFilter = ids ? ` AND id IN (${placeholderSql(ids.length)})` : ''
   const guard = () => {
     if (options.signal?.aborted) fail('EXPORT_CANCELLED', '导出已取消。')
     if (performance.now() - started >= limits.read_snapshot_timeout_ms) fail('READ_SNAPSHOT_TIMEOUT', '读取快照超时，请缩小范围。')
@@ -199,10 +207,10 @@ export async function buildCanonicalExportSnapshot(
     const platform = platformValue(conversation.platform)
     const names = { sourceConversationName: conversation.name?.trim() ? conversation.name : null, userConversationLabel: conversation.user_conversation_label }
     const displayConversationName = resolveDisplayConversationName(names)
-    const baseParams: SQLInputValue[] = [selection.conversation_id, selection.range.type === 'date_range' ? 1 : 0,
+    const baseParams: SQLInputValue[] = [selection.conversation_id, ...messageParams, selection.range.type === 'date_range' ? 1 : 0,
       selection.start_inclusive_utc === null ? 0 : Date.parse(selection.start_inclusive_utc),
       selection.end_exclusive_utc === null ? 0 : Date.parse(selection.end_exclusive_utc)]
-    const totals = db.prepare(`${selectedCte} SELECT
+    const totals = db.prepare(`${selectedCte(messageFilter)} SELECT
       (SELECT COUNT(*) FROM timed) AS conversation_count,
       (SELECT COUNT(*) FROM timed WHERE canonical_ms IS NULL) AS unknown_count,
       COUNT(*) AS message_count,COALESCE(SUM(body_bytes),0) AS body_bytes,COALESCE(MAX(body_bytes),0) AS max_body_bytes,
@@ -212,7 +220,7 @@ export async function buildCanonicalExportSnapshot(
       }
     checkLimit(totals.message_count <= limits.max_message_count && totals.body_bytes <= limits.max_total_body_bytes &&
       totals.max_body_bytes <= limits.max_single_body_bytes && totals.metadata_bytes <= limits.max_metadata_string_bytes)
-    const sourceTotals = db.prepare(`${selectedCte} SELECT COUNT(*) AS relation_count,
+    const sourceTotals = db.prepare(`${selectedCte(messageFilter)} SELECT COUNT(*) AS relation_count,
       COUNT(DISTINCT s.batch_item_id) AS item_count FROM selected m
       JOIN batch_item_message_sources s ON s.message_id=m.id`).get(...baseParams) as unknown as { relation_count: number; item_count: number }
     checkLimit(sourceTotals.relation_count <= limits.max_source_relations && sourceTotals.item_count <= limits.max_unique_source_items)
@@ -226,18 +234,18 @@ export async function buildCanonicalExportSnapshot(
     const projection = `${metadataColumns.join(',')},source_position,length(CAST(content AS BLOB)) AS body_bytes`
     const readKnownPage = db.prepare(`SELECT ${projection},0 AS unknown_key,
       export_canonical_time(timestamp,timestamp_source) AS time_key FROM messages
-      WHERE conversation_id=? AND timestamp>=? AND timestamp<? AND export_canonical_time(timestamp,timestamp_source) IS NOT NULL
+      WHERE conversation_id=?${messageFilter} AND timestamp>=? AND timestamp<? AND export_canonical_time(timestamp,timestamp_source) IS NOT NULL
       AND (?=0 OR (timestamp COLLATE BINARY,source_batch_id COLLATE BINARY,source_position,id COLLATE BINARY)>(?,?,?,?))
       ORDER BY timestamp COLLATE BINARY,source_batch_id COLLATE BINARY,source_position,id COLLATE BINARY LIMIT ?`)
     const readUnknownPage = db.prepare(`SELECT ${projection},1 AS unknown_key,0 AS time_key FROM messages
-      WHERE conversation_id=? AND export_canonical_time(timestamp,timestamp_source) IS NULL
+      WHERE conversation_id=?${messageFilter} AND export_canonical_time(timestamp,timestamp_source) IS NULL
       AND (?=0 OR (source_batch_id COLLATE BINARY,source_position,id COLLATE BINARY)>(?,?,?))
       ORDER BY source_batch_id COLLATE BINARY,source_position,id COLLATE BINARY LIMIT ?`)
     while (messages.length < totals.message_count) {
       guard()
-      const page = (readingUnknown ? readUnknownPage.all(selection.conversation_id, cursor ? 1 : 0,
+      const page = (readingUnknown ? readUnknownPage.all(selection.conversation_id, ...messageParams, cursor ? 1 : 0,
         cursor?.source_batch_id ?? '', cursor?.source_position ?? 0, cursor?.id ?? '', limits.page_size) :
-        readKnownPage.all(selection.conversation_id, cursor?.timestamp ?? selection.start_inclusive_utc ?? '',
+        readKnownPage.all(selection.conversation_id, ...messageParams, cursor?.timestamp ?? selection.start_inclusive_utc ?? '',
           selection.end_exclusive_utc ?? '\uffff', cursor ? 1 : 0, cursor?.timestamp ?? '',
           cursor?.source_batch_id ?? '', cursor?.source_position ?? 0, cursor?.id ?? '', limits.page_size)) as unknown as MessageRow[]
       if (!page.length) {

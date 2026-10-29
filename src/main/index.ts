@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, shell } from 'electron'
 import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -6,6 +6,7 @@ import { openDatabase, getDashboardSummary, getTopicRadarSummary, validateDashbo
 import { importChatFile } from './import/importer'
 import { registerConversationLabelIpc } from './conversation-labels'
 import { registerMarkdownExportIpc } from './export/markdown-export'
+import { registerContextHandoffIpc } from './export/context-handoff-desktop'
 import { registerObsidianExportIpc } from './export/obsidian-desktop'
 import { renderChatPdf } from './export/pdf-renderer'
 import { macEditMenu, manualImportDialogOptions } from './desktop-platform'
@@ -103,6 +104,11 @@ app.whenReady().then(() => {
     chooseDirectory: () => chooseExportDirectory('选择聊天导出目录'),
     renderPdf: renderChatPdf,
     openDirectory: directory => shell.openPath(directory)
+  })
+  registerContextHandoffIpc(ipcMain, databasePath, app.getVersion(), {
+    chooseDirectory: () => chooseExportDirectory('选择 AI 上下文输出目录'),
+    openDirectory: directory => shell.openPath(directory),
+    writeClipboard: text => clipboard.writeText(text)
   })
   registerObsidianExportIpc(ipcMain, db, databasePath, {
     chooseDirectory: () => chooseExportDirectory('选择 Obsidian Vault'),

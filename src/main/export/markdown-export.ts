@@ -82,13 +82,34 @@ async function nativeOperation(op: 'volume' | 'move', source: string, destinatio
   })
 }
 
-interface ExportOptions {
-  format?: ExportFormat
+export interface ExportWriteOptions {
   signal?: AbortSignal
-  renderPdf?: PdfRenderer
+  /** 主进程传入的总操作截止值，不暴露给 IPC。 */
+  deadline?: number
   /** 只供主进程工程测试注入中断，不暴露给 IPC。 */
   beforePublish?: (stage: string, destination: string) => Promise<void>
   writeStagedFile?: (path: string, bytes: Buffer) => Promise<void>
+}
+interface ExportOptions extends ExportWriteOptions {
+  format?: ExportFormat
+  renderPdf?: PdfRenderer
+}
+export interface PublishExportInput {
+  identity: string
+  title: string
+  messageCount: number
+  excludedUnknownTimeCount: number
+  rendered: {
+    content: Buffer
+    filename: string
+    manifest: Buffer
+    selectionDigest: string
+    digestProjection: unknown
+    format: string
+    exportVersion: string
+  }
+  storedProjection: (saved: Record<string, any>) => unknown
+  storedIdentity?: (saved: Record<string, any>) => string | undefined
 }
 async function exists(path: string): Promise<boolean> {
   try { await fs.lstat(path); return true } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false; throw error }
@@ -126,6 +147,29 @@ export async function exportChat(databasePath: string, outputDirectory: string, 
     ? await createPdfExportFiles(snapshot, appVersion, safeConversationFilename(snapshot.conversation.displayConversationName) + '.pdf', options.renderPdf!, options.signal)
     : createExportFiles(snapshot, appVersion, format)
   guard()
+  return publishExportFiles(databasePath, outputDirectory, {
+    identity: snapshot.conversation_id,
+    title: snapshot.conversation.displayConversationName,
+    messageCount: snapshot.messages.length,
+    excludedUnknownTimeCount: snapshot.selection.excluded_unknown_time_count,
+    rendered,
+    storedProjection: saved => storedExportProjection(saved, format)
+  }, { ...options, deadline: started + EXPORT_LIMITS.active_export_timeout_ms })
+}
+
+/** 聊天与上下文导出共用同一暂存、原子发布及不覆盖管线；不查询或修改数据库。 */
+export async function publishExportFiles(databasePath: string, outputDirectory: string, input: PublishExportInput,
+  options: ExportWriteOptions = {}): Promise<MarkdownExportOutcome> {
+  const { rendered } = input
+  const deadline = options.deadline ?? performance.now() + EXPORT_LIMITS.active_export_timeout_ms
+  const guard = () => {
+    if (options.signal?.aborted) throw new ExportSelectionError('EXPORT_CANCELLED', '导出已取消，未覆盖已有文件。')
+    if (performance.now() > deadline) throw new ExportSelectionError('EXPORT_IO_ERROR', '导出超时，未覆盖已有文件。')
+  }
+  guard()
+  if (!rendered.filename || basename(rendered.filename) !== rendered.filename || /[<>:"/\\|?*\u0000-\u001f]/.test(rendered.filename)
+    || /[. ]$/.test(rendered.filename) || /^(con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/i.test(rendered.filename)
+    || rendered.filename.toLowerCase() === 'export.json') fail('导出文件名不安全，未写入任何文件。')
   const selected = safeAbsolutePath(outputDirectory), dataRoot = resolve(dirname(databasePath))
   if (inside(dataRoot, selected)) fail('不能把原数据目录作为导出目录，请选择其他本地目录。')
   const lease = new WindowsPathLease()
@@ -144,14 +188,14 @@ export async function exportChat(databasePath: string, outputDirectory: string, 
       await lease.lock(root, true)
     }
     if (inside(dataRoot, root)) fail('目标与原数据目录重合，未写入任何文件。')
-    const identityHash = sha256(snapshot.conversation_id)
+    const identityHash = sha256(input.identity)
     let identityLength = 16
     for (let version = 1; version <= 1000; version++) {
       guard(); lease.assertHealthy()
       const tail = `--${identityHash.slice(0, identityLength)}--${rendered.selectionDigest.slice(0, 16)}${version === 1 ? '' : `--v${version}`}`
       const nameBudget = Math.min(60, 240 - root.length - tail.length - Math.max('/export.json'.length, rendered.filename.length + 1) - 1)
       if (nameBudget < 8) fail('输出目录路径过长，请选择更短的本地目录。')
-      const name = safeConversationFilename(snapshot.conversation.displayConversationName, nameBudget)
+      const name = safeConversationFilename(input.title, nameBudget)
       const destination = join(root, name + tail)
       if (join(destination, 'export.json').length > 240 || join(destination, rendered.filename).length > 240) fail('导出路径超过安全长度。')
       if (await exists(destination)) {
@@ -165,17 +209,18 @@ export async function exportChat(databasePath: string, outputDirectory: string, 
           await lease.lock(manifestPath, false); await lease.lock(contentPath, false)
           const bytes = await lease.readFile(manifestPath, EXPORT_LIMITS.max_manifest_bytes)
           const saved = JSON.parse(bytes.toString('utf8'))
-          identityConflict = typeof saved.conversation?.id === 'string' && saved.conversation.id !== snapshot.conversation_id
-          const projection = storedExportProjection(saved, format)
-          const output = saved.output ?? (format === 'markdown' ? saved.markdown : undefined)
-          matched = saved.schema_version === 1 && saved.export_version === rendered.exportVersion && (saved.export_format ?? 'markdown') === format && saved.selection_digest === rendered.selectionDigest
+          const savedIdentity = input.storedIdentity ? input.storedIdentity(saved) : saved.conversation?.id
+          identityConflict = typeof savedIdentity === 'string' && savedIdentity !== input.identity
+          const projection = input.storedProjection(saved)
+          const output = saved.output ?? (rendered.format === 'markdown' ? saved.markdown : undefined)
+          matched = saved.schema_version === 1 && saved.export_version === rendered.exportVersion && (saved.export_format ?? 'markdown') === rendered.format && saved.selection_digest === rendered.selectionDigest
             && canonicalJson(projection) === canonicalJson(rendered.digestProjection) && sha256(canonicalJson(projection)) === saved.selection_digest
             && output?.path === rendered.filename && Number.isSafeInteger(output?.bytes)
             && output.bytes === (await fs.stat(contentPath)).size && /^[a-f0-9]{64}$/.test(output?.sha256)
             && await lease.hashFile(contentPath) === output.sha256
         } catch { /* 缺失、修改或损坏的旧导出均保留，发布到新版本目录。 */ }
         finally { await lease.releaseTree(destination) }
-        if (matched) return { status: 'unchanged', directory: destination, messageCount: snapshot.messages.length, excludedUnknownTimeCount: snapshot.selection.excluded_unknown_time_count }
+        if (matched) return { status: 'unchanged', directory: destination, messageCount: input.messageCount, excludedUnknownTimeCount: input.excludedUnknownTimeCount }
         if (identityConflict && identityLength < 64) { identityLength += 8; version = 0 }
         continue
       }
@@ -201,7 +246,7 @@ export async function exportChat(databasePath: string, outputDirectory: string, 
         throw new ExportSelectionError('EXPORT_IO_ERROR', '发布失败，已有文件未被覆盖。请检查目录权限和磁盘空间。')
       }
       stage = ''
-      return { status: 'created', directory: destination, messageCount: snapshot.messages.length, excludedUnknownTimeCount: snapshot.selection.excluded_unknown_time_count }
+      return { status: 'created', directory: destination, messageCount: input.messageCount, excludedUnknownTimeCount: input.excludedUnknownTimeCount }
     }
     throw new ExportSelectionError('EXPORT_IO_ERROR', '导出版本过多，请选择其他输出目录。')
   } finally {

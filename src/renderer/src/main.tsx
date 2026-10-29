@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { App } from './App'
 import { ConversationLabelProvider } from './conversation-labels'
+import { ContextHandoffProvider } from './context-handoff'
 import './styles.css'
 import './search-refresh.css'
 import './settings-refresh.css'
@@ -11,6 +12,6 @@ import './keyword-radar-page.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <ConversationLabelProvider><App /></ConversationLabelProvider>
+    <ConversationLabelProvider><ContextHandoffProvider><App /></ContextHandoffProvider></ConversationLabelProvider>
   </React.StrictMode>
 )
