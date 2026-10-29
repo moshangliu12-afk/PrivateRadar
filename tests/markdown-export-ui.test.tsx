@@ -1,13 +1,15 @@
 import { createElement, isValidElement } from 'react'
 import type { ReactElement, ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MarkdownExportPanel } from '../src/renderer/src/markdown-export-panel'
 import type { MarkdownExportApi, MarkdownExportOutcome, MarkdownExportResult } from '../src/shared/markdown-export'
 import type { ObsidianExportApi } from '../src/shared/obsidian-export'
+import { ConversationLabelEditor, ConversationLabelProvider } from '../src/renderer/src/conversation-labels'
+import type { ConversationLabelApi, ConversationLabelView } from '../src/shared/conversation-labels'
 
-interface Frame { slots: any[]; cursor: number }
-const hooks = vi.hoisted(() => ({ active: null as Frame | null }))
+interface Frame { slots: any[]; cursor: number; effects: Array<() => void>; cleanups: Map<number, () => void> }
+const hooks = vi.hoisted(() => ({ active: null as Frame | null, context: undefined as any, emptyNames: new Map() }))
 vi.mock('react', async original => {
   const actual = await original<typeof import('react')>()
   return { ...actual,
@@ -22,7 +24,22 @@ vi.mock('react', async original => {
       const f = hooks.active, index = f.cursor++
       if (!(index in f.slots)) f.slots[index] = { current: initial }
       return f.slots[index]
-    }
+    },
+    useCallback(callback: any, dependencies: readonly unknown[]) {
+      if (!hooks.active) return actual.useCallback(callback, dependencies)
+      const f = hooks.active, index = f.cursor++, prior = f.slots[index]
+      if (!prior || dependencies.some((value, at) => value !== prior.dependencies[at])) f.slots[index] = { callback, dependencies }
+      return f.slots[index].callback
+    },
+    useEffect(effect: () => (() => void) | undefined, dependencies?: readonly unknown[]) {
+      if (!hooks.active) return actual.useEffect(effect, dependencies)
+      const f = hooks.active, index = f.cursor++, prior = f.slots[index]
+      if (!prior || !dependencies || dependencies.some((value, at) => value !== prior.dependencies?.[at])) {
+        f.slots[index] = { dependencies }
+        f.effects.push(() => { f.cleanups.get(index)?.(); const cleanup = effect(); if (cleanup) f.cleanups.set(index, cleanup); else f.cleanups.delete(index) })
+      }
+    },
+    useContext(context: any) { return hooks.active ? hooks.context ?? { names: hooks.emptyNames } : actual.useContext(context) }
   }
 })
 
@@ -31,8 +48,9 @@ describe('Vault 导出复用现有会话与日期选择', () => {
     const h = setup(true); let tree = h.render()
     button(tree, '导出聊天').onClick(); await flush(); tree = h.render()
     expect(renderToStaticMarkup(tree)).toContain('D:\\已有Vault')
-    button(tree, '展开会话列表').onClick(); tree = h.render()
-    expect(elements(tree).filter(element => element.type === 'select')).toHaveLength(2)
+    button(tree, '选择会话').onClick(); tree = h.render()
+    expect(elements(tree).filter(element => element.type === 'select')).toHaveLength(1)
+    expect(button(tree, '选择会话').role).toBe('combobox')
     expect(button(tree, '导出到 Obsidian').disabled).toBe(false)
     expect(button(tree, '开始导出').disabled).toBe(true)
     button(tree, '选择 Vault').onClick(); await flush(); tree = h.render()
@@ -76,7 +94,17 @@ describe('Vault 导出复用现有会话与日期选择', () => {
     expect(renderToStaticMarkup(tree)).toContain('Obsidian 导出已取消')
   })
 })
-afterEach(() => { hooks.active = null; vi.restoreAllMocks() })
+const frames: Frame[] = []
+beforeEach(() => { vi.stubGlobal('window', new EventTarget()) })
+afterEach(() => { for (const f of frames.splice(0)) for (const cleanup of f.cleanups.values()) cleanup(); hooks.active = null; hooks.context = undefined; vi.restoreAllMocks(); vi.unstubAllGlobals() })
+function frame(): Frame { const value = { slots: [], cursor: 0, effects: [], cleanups: new Map() } as Frame; frames.push(value); return value }
+function renderFrame<T>(state: Frame, action: () => T): T {
+  state.cursor = 0; hooks.active = state
+  let value: T
+  try { value = action() } finally { hooks.active = null }
+  for (const effect of state.effects.splice(0)) effect()
+  return value
+}
 function elements(node: ReactNode): ReactElement<any>[] {
   if (Array.isArray(node)) return node.flatMap(elements)
   if (!isValidElement(node)) return []
@@ -84,8 +112,11 @@ function elements(node: ReactNode): ReactElement<any>[] {
   return [element, ...elements(element.props.children)]
 }
 function button(tree: ReactNode, label: string) {
-  return elements(tree).find(element => element.type === 'button' && (element.props.children === label || elements(element.props.children).some(child => child.props.children === label)))!.props
+  const found = elements(tree).find(element => element.type === 'button' && (element.props['aria-label'] === label || element.props.children === label || elements(element.props.children).some(child => child.props.children === label)))
+  if (!found) throw Error('缺少按钮：' + label)
+  return found.props
 }
+const pick = (tree: ReactNode, name: string, ctrlKey = false) => button(tree, `选择会话 ${name}`).onClick({ ctrlKey, metaKey: false })
 async function flush() { for (let n = 0; n < 12; n++) await Promise.resolve() }
 const ok = <T,>(value: T): MarkdownExportResult<T> => ({ ok: true, value })
 function setup(withVault = false) {
@@ -97,9 +128,9 @@ function setup(withVault = false) {
     start: vi.fn(async () => ok({ status: 'completed' as const, directory: 'D:\\新Vault\\PrivateRadar', conversationCount: 1, created: 2, updated: 1, skipped: 3, preserved: 1, failed: 0, manifestRecovered: false, userModifiedFilePreserved: true })),
     cancel: vi.fn(async () => ok(null)), openOutput: vi.fn(async () => ok(null))
   }
-  const frame: Frame = { slots: [], cursor: 0 }
-  const render = () => { frame.cursor = 0; hooks.active = frame; try { return MarkdownExportPanel({ api, ...(withVault ? { vaultApi } : {}) }) } finally { hooks.active = null } }
-  return { api, vaultApi, render }
+  const state = frame()
+  const render = () => renderFrame(state, () => MarkdownExportPanel({ api, ...(withVault ? { vaultApi } : {}) }))
+  return { api, vaultApi, render, unmount() { for (const cleanup of state.cleanups.values()) cleanup(); state.cleanups.clear() } }
 }
 
 describe('PDF 选择与批量反馈', () => {
@@ -109,13 +140,13 @@ describe('PDF 选择与批量反馈', () => {
     vi.mocked(h.api.listConversations).mockResolvedValueOnce(ok([item('甲'), item('乙')]))
     let tree = h.render(); button(tree, '导出聊天').onClick(); await flush(); tree = h.render()
     elements(tree).find(element => element.props['aria-label'] === '导出格式')!.props.onChange({ target: { value: 'pdf' } }); tree = h.render()
-    button(tree, '展开会话列表').onClick(); tree = h.render()
-    elements(tree).find(element => element.props['aria-label'] === '选择会话 乙')!.props.onChange({ target: { checked: true } }); tree = h.render()
+    button(tree, '选择会话').onClick(); tree = h.render()
+    pick(tree, '乙', true); tree = h.render()
     vi.mocked(h.api.listConversations).mockResolvedValueOnce(ok([item('丙'), item('乙')]))
-    button(tree, '刷新会话名称').onClick(); await flush(); tree = h.render()
+    window.dispatchEvent(new Event('privateradar-conversations-updated')); await flush(); tree = h.render()
     expect(renderToStaticMarkup(tree)).toContain('当前已选会话：乙 · 1 条消息')
-    button(tree, '展开会话列表').onClick(); tree = h.render()
-    expect(elements(tree).find(element => element.props['aria-label'] === '选择会话 乙')!.props.checked).toBe(true)
+    button(tree, '选择会话').onClick(); tree = h.render()
+    expect(elements(tree).find(element => element.props['aria-label'] === '选择会话 乙')!.props['aria-selected']).toBe(true)
     expect(button(tree, '导出到 Obsidian').disabled).toBe(false)
     button(tree, '导出到 Obsidian').onClick(); await flush()
     expect(h.vaultApi.start).toHaveBeenCalledExactlyOnceWith({ conversation_ids: ['乙'], range: { type: 'conversation', start_date: null, end_date: null } })
@@ -128,10 +159,10 @@ describe('PDF 选择与批量反馈', () => {
     ]))
     let tree = h.render(); button(tree, '导出聊天').onClick(); await flush(); tree = h.render()
     elements(tree).find(element => element.props['aria-label'] === '导出格式')!.props.onChange({ target: { value: 'pdf' } }); tree = h.render()
-    button(tree, '展开会话列表').onClick(); tree = h.render()
-    expect(elements(tree).find(element => element.props['aria-label'] === '选择多个会话')!.props.role).toBe('group')
-    expect(elements(tree).find(element => element.props['aria-label'] === '选择会话 用户标签')!.props.checked).toBe(true)
-    elements(tree).find(element => element.props['aria-label'] === '选择会话 另一个来源群')!.props.onChange({ target: { checked: true } }); tree = h.render()
+    button(tree, '选择会话').onClick(); tree = h.render()
+    expect(elements(tree).find(element => element.props['aria-label'] === '选择多个会话')!.props.role).toBe('listbox')
+    expect(elements(tree).find(element => element.props['aria-label'] === '选择会话 用户标签')!.props['aria-selected']).toBe(true)
+    pick(tree, '另一个来源群', true); tree = h.render()
     expect(button(tree, '导出到 Obsidian').disabled).toBe(true)
     button(tree, '选择输出目录').onClick(); await flush(); tree = h.render()
     vi.mocked(h.api.start).mockResolvedValueOnce(ok({
@@ -160,9 +191,9 @@ describe('PDF 选择与批量反馈', () => {
     expect(html).toContain('role="alert"'); expect(html).toContain('失败：1')
     expect(html).toContain('用户标签：PDF 生成失败')
     elements(tree).find(element => element.props['aria-label'] === '导出格式')!.props.onChange({ target: { value: 'txt' } }); tree = h.render()
-    button(tree, '展开会话列表').onClick(); tree = h.render()
+    button(tree, '选择会话').onClick(); tree = h.render()
     const selector = elements(tree).find(element => element.props['aria-label'] === '选择会话')!
-    expect(selector.props.multiple).not.toBe(true); expect(selector.props.value).toBe('真实会话编号')
+    expect(button(tree, '选择会话').role).toBe('combobox'); expect(button(tree, '选择会话 用户标签')['aria-selected']).toBe(true)
     button(tree, '开始导出').onClick(); await flush()
     expect(h.api.start).toHaveBeenLastCalledWith({ format: 'txt', conversation_id: '真实会话编号', range: { type: 'conversation', start_date: null, end_date: null } })
   })
@@ -171,12 +202,12 @@ describe('PDF 选择与批量反馈', () => {
     button(tree, '导出聊天').onClick(); await flush(); tree = h.render()
     elements(tree).find(element => element.props['aria-label'] === '导出格式')!.props.onChange({ target: { value: 'pdf' } }); tree = h.render()
     button(tree, '选择输出目录').onClick(); await flush(); tree = h.render()
-    button(tree, '展开会话列表').onClick(); tree = h.render()
+    button(tree, '选择会话').onClick(); tree = h.render()
     const selector = elements(tree).find(element => element.props['aria-label'] === '选择会话 用户标签')!
-    selector.props.onChange({ target: { checked: false } }); tree = h.render()
+    pick(tree, '用户标签', true); tree = h.render()
     expect(button(tree, '开始导出').disabled).toBe(true)
-    button(tree, '展开会话列表').onClick(); tree = h.render()
-    elements(tree).find(element => element.props['aria-label'] === '选择会话 用户标签')!.props.onChange({ target: { checked: true } }); tree = h.render()
+    button(tree, '选择会话').onClick(); tree = h.render()
+    pick(tree, '用户标签', true); tree = h.render()
     let finish!: (value: MarkdownExportResult<MarkdownExportOutcome>) => void
     vi.mocked(h.api.start).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
     const start = button(tree, '开始导出').onClick; start(); start(); tree = h.render()
@@ -196,17 +227,16 @@ describe('导出选择器与归档分组优化', () => {
     const h = setup()
     vi.mocked(h.api.listConversations).mockResolvedValueOnce(ok([conversation('甲会话'), conversation('乙会话')]))
     let tree = h.render(); button(tree, '导出聊天').onClick(); await flush(); tree = h.render()
-    expect(button(tree, '展开会话列表')['aria-expanded']).toBe(false)
-    expect(elements(tree).some(element => element.props['aria-label'] === '选择会话')).toBe(false)
-    button(tree, '展开会话列表').onClick(); tree = h.render()
-    const selector = elements(tree).find(element => element.props['aria-label'] === '选择会话')!
-    expect(selector.props.value).toBe('甲会话')
-    selector.props.onChange({ target: { value: '乙会话' } }); tree = h.render()
-    expect(button(tree, '展开会话列表')['aria-expanded']).toBe(false)
-    expect(elements(tree).some(element => element.props['aria-label'] === '选择会话')).toBe(false)
+    expect(button(tree, '选择会话')['aria-expanded']).toBe(false)
+    expect(elements(tree).some(element => element.props.role === 'option')).toBe(false)
+    button(tree, '选择会话').onClick(); tree = h.render()
+    expect(button(tree, '选择会话 甲会话')['aria-selected']).toBe(true)
+    pick(tree, '乙会话'); tree = h.render()
+    expect(button(tree, '选择会话')['aria-expanded']).toBe(false)
+    expect(elements(tree).some(element => element.props.role === 'option')).toBe(false)
     expect(renderToStaticMarkup(tree)).toContain('当前已选会话：乙会话 · 1 条消息')
-    button(tree, '展开会话列表').onClick(); tree = h.render()
-    expect(elements(tree).find(element => element.props['aria-label'] === '选择会话')!.props.value).toBe('乙会话')
+    button(tree, '选择会话').onClick(); tree = h.render()
+    expect(button(tree, '选择会话 乙会话')['aria-selected']).toBe(true)
     expect(h.api.start).not.toHaveBeenCalled()
   })
   it('PDF 每次勾选立即收起，重新打开继续累计选择，重复勾选不重复', async () => {
@@ -215,11 +245,11 @@ describe('导出选择器与归档分组优化', () => {
     let tree = h.render(); button(tree, '导出聊天').onClick(); await flush(); tree = h.render()
     elements(tree).find(element => element.props['aria-label'] === '导出格式')!.props.onChange({ target: { value: 'pdf' } }); tree = h.render()
     for (const name of ['乙会话', '丙会话']) {
-      button(tree, '展开会话列表').onClick(); tree = h.render()
-      expect(elements(tree).find(element => element.props['aria-label'] === '选择会话 甲会话')!.props.checked).toBe(true)
-      const select = elements(tree).find(element => element.props['aria-label'] === `选择会话 ${name}`)!.props.onChange
-      select({ target: { checked: true } }); select({ target: { checked: true } }); tree = h.render()
-      expect(button(tree, '展开会话列表')['aria-expanded']).toBe(false)
+      button(tree, '选择会话').onClick(); tree = h.render()
+      expect(elements(tree).find(element => element.props['aria-label'] === '选择会话 甲会话')!.props['aria-selected']).toBe(true)
+      const select = button(tree, `选择会话 ${name}`).onClick
+      select({ ctrlKey: true }); select({ ctrlKey: true }); tree = h.render()
+      expect(button(tree, '选择会话')['aria-expanded']).toBe(false)
       expect(elements(tree).some(element => element.props['aria-label'] === '选择多个会话')).toBe(false)
     }
     const html = renderToStaticMarkup(tree)
@@ -233,15 +263,15 @@ describe('导出选择器与归档分组优化', () => {
     vi.mocked(h.api.listConversations).mockResolvedValueOnce(ok([conversation('甲会话'), conversation('乙会话')]))
     let tree = h.render(); button(tree, '导出聊天').onClick(); await flush(); tree = h.render()
     elements(tree).find(element => element.props['aria-label'] === '导出格式')!.props.onChange({ target: { value: 'pdf' } }); tree = h.render()
-    button(tree, '展开会话列表').onClick(); tree = h.render()
-    elements(tree).find(element => element.props['aria-label'] === '选择会话 乙会话')!.props.onChange({ target: { checked: true } }); tree = h.render()
+    button(tree, '选择会话').onClick(); tree = h.render()
+    pick(tree, '乙会话', true); tree = h.render()
     elements(tree).find(element => element.props['aria-label'] === '导出格式')!.props.onChange({ target: { value: 'txt' } }); tree = h.render()
     elements(tree).find(element => element.props['aria-label'] === '导出格式')!.props.onChange({ target: { value: 'pdf' } }); tree = h.render()
-    button(tree, '展开会话列表').onClick(); tree = h.render()
-    expect(elements(tree).find(element => element.props['aria-label'] === '选择会话 甲会话')!.props.checked).toBe(true)
-    expect(elements(tree).find(element => element.props['aria-label'] === '选择会话 乙会话')!.props.checked).toBe(true)
-    elements(tree).find(element => element.props['aria-label'] === '选择会话 乙会话')!.props.onChange({ target: { checked: false } }); tree = h.render()
-    expect(button(tree, '展开会话列表')['aria-expanded']).toBe(false)
+    button(tree, '选择会话').onClick(); tree = h.render()
+    expect(elements(tree).find(element => element.props['aria-label'] === '选择会话 甲会话')!.props['aria-selected']).toBe(true)
+    expect(elements(tree).find(element => element.props['aria-label'] === '选择会话 乙会话')!.props['aria-selected']).toBe(true)
+    pick(tree, '乙会话', true); tree = h.render()
+    expect(button(tree, '选择会话')['aria-expanded']).toBe(false)
     expect(renderToStaticMarkup(tree)).toContain('当前已选会话：甲会话 · 1 条消息')
     button(tree, '选择输出目录').onClick(); await flush(); tree = h.render()
     button(tree, '开始导出').onClick(); await flush()
@@ -251,8 +281,8 @@ describe('导出选择器与归档分组优化', () => {
     const h = setup(true); let tree = h.render()
     button(tree, '导出聊天').onClick(); await flush(); tree = h.render()
     const html = renderToStaticMarkup(tree)
-    for (const text of ['普通文件导出', '将聊天记录导出为独立文件，保存到指定文件夹。', 'Obsidian Vault 归档',
-      '将聊天记录整理为 Markdown 笔记，保存到指定的 Obsidian Vault。此功能始终生成 .md 文件，与上方的导出格式相互独立。']) expect(html).toContain(text)
+    for (const text of ['普通文件导出', '将聊天记录导出为 Markdown、JSON、TXT 或 PDF 文件，保存到指定文件夹。', 'Obsidian Vault 归档',
+      '将聊天记录整理为 Markdown 笔记，保存到指定的 Obsidian Vault。此功能始终生成 .md 文件，与上方普通文件导出相互独立。']) expect(html).toContain(text)
     expect(elements(tree).find(element => element.props['aria-labelledby'] === 'markdown-export-file-title')).toBeTruthy()
     expect(elements(tree).find(element => element.props['aria-labelledby'] === 'obsidian-vault-title')).toBeTruthy()
     elements(tree).find(element => element.props['aria-label'] === '导出格式')!.props.onChange({ target: { value: 'pdf' } }); tree = h.render()
@@ -326,5 +356,143 @@ describe('轻量聊天导出界面', () => {
     button(tree, '选择输出目录').onClick(); await flush(); tree = h.render()
     button(tree, '开始导出').onClick(); await flush()
     expect(h.api.start).toHaveBeenCalledWith({ format, conversation_id: '真实会话编号', range: { type: 'conversation', start_date: null, end_date: null } })
+  })
+})
+
+describe('最后两项导出界面修正', () => {
+  const conversation = (id: string, count = 1) => ({ conversationId: id, sourceConversationName: id, userConversationLabel: null, displayConversationName: id, messageCount: count })
+  it('只有紧凑选择控件，普通点击单选、Ctrl继续多选，关闭重开保留全部名称和消息数', async () => {
+    const h = setup()
+    vi.mocked(h.api.listConversations).mockResolvedValueOnce(ok([conversation('甲', 3), conversation('乙', 7), conversation('丙', 2)]))
+    let tree = h.render(); button(tree, '导出聊天').onClick(); await flush(); tree = h.render()
+    expect(button(tree, '选择会话').role).toBe('combobox')
+    expect(renderToStaticMarkup(tree)).not.toMatch(/收起会话列表|展开会话列表|刷新会话名称/)
+    expect(elements(tree).some(element => element.props.role === 'listbox')).toBe(false)
+    elements(tree).find(element => element.props['aria-label'] === '导出格式')!.props.onChange({ target: { value: 'pdf' } }); tree = h.render()
+    button(tree, '选择会话').onClick(); tree = h.render(); pick(tree, '乙', true); tree = h.render()
+    expect(button(tree, '选择会话')['aria-expanded']).toBe(false)
+    button(tree, '选择会话').onClick(); tree = h.render()
+    expect(button(tree, '选择会话 甲')['aria-selected']).toBe(true)
+    expect(button(tree, '选择会话 乙')['aria-selected']).toBe(true)
+    pick(tree, '丙', true); tree = h.render()
+    expect(renderToStaticMarkup(tree)).toContain('当前已选会话：甲 · 3 条消息；乙 · 7 条消息；丙 · 2 条消息')
+    button(tree, '选择会话').onClick(); tree = h.render(); pick(tree, '乙', true); tree = h.render()
+    expect(renderToStaticMarkup(tree)).toContain('当前已选会话：甲 · 3 条消息；丙 · 2 条消息')
+    button(tree, '选择会话').onClick(); tree = h.render(); pick(tree, '乙'); tree = h.render()
+    expect(renderToStaticMarkup(tree)).toContain('当前已选会话：乙 · 7 条消息')
+    expect(renderToStaticMarkup(tree)).not.toContain('甲 · 3 条消息')
+    button(tree, '选择输出目录').onClick(); await flush(); tree = h.render(); button(tree, '开始导出').onClick(); await flush()
+    expect(h.api.start).toHaveBeenCalledWith({ format: 'pdf', conversation_id: '乙', conversation_ids: ['乙'], range: { type: 'conversation', start_date: null, end_date: null } })
+  })
+  it('键盘打开、Ctrl加选及Escape关闭均保留选择', async () => {
+    const h = setup()
+    vi.mocked(h.api.listConversations).mockResolvedValueOnce(ok([conversation('甲'), conversation('乙')]))
+    let tree = h.render(); button(tree, '导出聊天').onClick(); await flush(); tree = h.render()
+    elements(tree).find(element => element.props['aria-label'] === '导出格式')!.props.onChange({ target: { value: 'pdf' } }); tree = h.render()
+    const preventDefault = vi.fn()
+    button(tree, '选择会话').onKeyDown({ key: 'ArrowDown', preventDefault }); tree = h.render()
+    button(tree, '选择会话 乙').onKeyDown({ key: 'Enter', ctrlKey: true, preventDefault }); tree = h.render()
+    expect(button(tree, '选择会话')['aria-expanded']).toBe(false)
+    button(tree, '选择会话').onClick(); tree = h.render()
+    button(tree, '选择会话 乙').onKeyDown({ key: 'Escape', preventDefault }); tree = h.render()
+    expect(button(tree, '选择会话')['aria-expanded']).toBe(false)
+    expect(renderToStaticMarkup(tree)).toContain('甲 · 1 条消息；乙 · 1 条消息')
+    expect(preventDefault).toHaveBeenCalled()
+  })
+  it('现有Provider成功修改名称后，列表与当前选择立即同步且不依赖人工刷新', async () => {
+    const view: ConversationLabelView = { conversationId: '真实会话编号', sourceConversationName: '来源群', userConversationLabel: '用户标签', displayConversationName: '用户标签' }
+    const labelApi: ConversationLabelApi = { listConversations: vi.fn(async () => ok([view])), setConversationLabel: vi.fn(async (_id, label) => ok({ ...view, userConversationLabel: label, displayConversationName: label ?? view.sourceConversationName! })) }
+    const providerState = frame()
+    const renderProvider = () => renderFrame(providerState, () => ConversationLabelProvider({ children: null, api: labelApi }))
+    renderProvider(); await flush()
+    let provider = renderProvider(); hooks.context = provider.props.value
+    const h = setup(); let tree = h.render(); button(tree, '导出聊天').onClick(); await flush(); tree = h.render()
+    provider.props.value.edit(view); provider = renderProvider()
+    const editor = elements(provider).find(element => element.type === ConversationLabelEditor)!
+    await editor.props.onSave('即时同步的新名称')
+    provider = renderProvider(); hooks.context = provider.props.value; tree = h.render()
+    expect(renderToStaticMarkup(tree)).toContain('当前已选会话：即时同步的新名称 · 3 条消息')
+    button(tree, '选择会话').onClick(); tree = h.render()
+    expect(button(tree, '选择会话 即时同步的新名称')['aria-selected']).toBe(true)
+    expect(h.api.listConversations).toHaveBeenCalledOnce()
+    expect(labelApi.setConversationLabel).toHaveBeenCalledExactlyOnceWith('真实会话编号', '即时同步的新名称')
+  })
+  it('共享名称仍为旧Map时，新的会话列表名称不会被旧Map盖住', async () => {
+    hooks.context = { names: new Map([['真实会话编号', { ...conversation('真实会话编号'), displayConversationName: '共享旧名称' }]]) }
+    const h = setup()
+    vi.mocked(h.api.listConversations).mockResolvedValueOnce(ok([{ ...conversation('真实会话编号', 9), displayConversationName: '列表最新名称' }]))
+    let tree = h.render(); button(tree, '导出聊天').onClick(); await flush(); tree = h.render()
+    expect(renderToStaticMarkup(tree)).toContain('列表最新名称 · 9 条消息')
+    expect(renderToStaticMarkup(tree)).not.toContain('共享旧名称')
+  })
+  it('旧列表读取期间成功修改名称，新Map优先，旧响应不回退名称', async () => {
+    hooks.context = { names: new Map() }
+    const h = setup()
+    let finish!: (value: Awaited<ReturnType<MarkdownExportApi['listConversations']>>) => void
+    vi.mocked(h.api.listConversations).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    let tree = h.render(); button(tree, '导出聊天').onClick()
+    hooks.context = { names: new Map([['真实会话编号', { ...conversation('真实会话编号'), displayConversationName: '读取期间保存的新名称' }]]) }
+    tree = h.render()
+    finish(ok([{ ...conversation('真实会话编号', 5), displayConversationName: '读取开始时的旧名称' }]))
+    await flush(); tree = h.render()
+    expect(renderToStaticMarkup(tree)).toContain('读取期间保存的新名称 · 5 条消息')
+    expect(renderToStaticMarkup(tree)).not.toContain('读取开始时的旧名称')
+  })
+  it('focus与既有会话更新事件自动重读，新响应优先且保留有效选择', async () => {
+    const h = setup()
+    vi.mocked(h.api.listConversations).mockResolvedValueOnce(ok([conversation('甲'), conversation('乙')]))
+    let tree = h.render(); button(tree, '导出聊天').onClick(); await flush(); tree = h.render()
+    button(tree, '选择会话').onClick(); tree = h.render(); pick(tree, '乙'); tree = h.render()
+    let oldFinish!: (value: Awaited<ReturnType<MarkdownExportApi['listConversations']>>) => void
+    vi.mocked(h.api.listConversations).mockImplementationOnce(() => new Promise(resolve => { oldFinish = resolve }))
+    window.dispatchEvent(new Event('focus'))
+    vi.mocked(h.api.listConversations).mockResolvedValueOnce(ok([{ ...conversation('乙', 8), displayConversationName: '自动更新名称' }]))
+    window.dispatchEvent(new Event('privateradar-conversations-updated')); await flush(); tree = h.render()
+    oldFinish(ok([conversation('过时列表')])); await flush(); tree = h.render()
+    expect(renderToStaticMarkup(tree)).toContain('当前已选会话：自动更新名称 · 8 条消息')
+    expect(h.api.listConversations).toHaveBeenCalledTimes(3)
+    button(tree, '选择输出目录').onClick(); await flush(); tree = h.render(); button(tree, '开始导出').onClick(); await flush()
+    expect(h.api.start).toHaveBeenCalledWith({ conversation_id: '乙', range: { type: 'conversation', start_date: null, end_date: null } })
+  })
+  it('导出忙时延后自动重读，结束后保留选择且更新消息数', async () => {
+    const h = setup(); let finish!: (value: Awaited<ReturnType<MarkdownExportApi['start']>>) => void
+    let tree = h.render(); button(tree, '导出聊天').onClick(); await flush(); tree = h.render()
+    button(tree, '选择输出目录').onClick(); await flush(); tree = h.render()
+    vi.mocked(h.api.start).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    button(tree, '开始导出').onClick(); tree = h.render()
+    vi.mocked(h.api.listConversations).mockResolvedValueOnce(ok([{ ...conversation('真实会话编号', 6), displayConversationName: '导出后名称' }]))
+    window.dispatchEvent(new Event('focus')); await flush()
+    expect(h.api.listConversations).toHaveBeenCalledOnce()
+    finish(ok({ status: 'created', directory: 'D:\\输出', messageCount: 3, excludedUnknownTimeCount: 0 })); await flush(); tree = h.render(); await flush(); tree = h.render()
+    expect(h.api.listConversations).toHaveBeenCalledTimes(2)
+    expect(renderToStaticMarkup(tree)).toContain('导出后名称 · 6 条消息')
+  })
+  it('卸载后忽略未完成列表响应，不再读取Vault设置', async () => {
+    const h = setup(true)
+    let finish!: (value: Awaited<ReturnType<MarkdownExportApi['listConversations']>>) => void
+    vi.mocked(h.api.listConversations).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    h.render(); h.unmount(); finish(ok([conversation('不应写入')])); await flush()
+    expect(h.vaultApi.settings).not.toHaveBeenCalled()
+    window.dispatchEvent(new Event('focus'))
+    expect(h.api.listConversations).toHaveBeenCalledOnce()
+  })
+  it('两个保存位置有独立标题，依次更换目录互不影响且导出通道保留', async () => {
+    const h = setup(true); let tree = h.render(); button(tree, '导出聊天').onClick(); await flush(); tree = h.render()
+    const html = renderToStaticMarkup(tree)
+    for (const label of ['普通文件保存位置', 'Obsidian 知识库位置', '将聊天记录导出为 Markdown、JSON、TXT 或 PDF 文件，保存到指定文件夹。', '此功能始终生成 .md 文件，与上方普通文件导出相互独立。']) expect(html).toContain(label)
+    button(tree, '选择输出目录').onClick(); await flush(); tree = h.render()
+    vi.mocked(h.api.chooseDirectory).mockResolvedValueOnce(ok('F:\\普通文件新位置'))
+    button(tree, '选择输出目录').onClick(); await flush(); tree = h.render()
+    expect(renderToStaticMarkup(tree)).toContain('F:\\普通文件新位置')
+    expect(renderToStaticMarkup(tree)).toContain('D:\\已有Vault')
+    expect(h.vaultApi.chooseVault).not.toHaveBeenCalled()
+    vi.mocked(h.vaultApi.chooseVault).mockResolvedValueOnce(ok('C:\\Vault新位置'))
+    button(tree, '选择 Vault').onClick(); await flush(); tree = h.render()
+    expect(renderToStaticMarkup(tree)).toContain('F:\\普通文件新位置')
+    expect(renderToStaticMarkup(tree)).toContain('C:\\Vault新位置')
+    elements(tree).find(element => element.props['aria-label'] === '导出格式')!.props.onChange({ target: { value: 'pdf' } }); tree = h.render()
+    button(tree, '开始导出').onClick(); await flush(); tree = h.render(); button(tree, '导出到 Obsidian').onClick(); await flush()
+    expect(h.api.start).toHaveBeenCalledExactlyOnceWith({ format: 'pdf', conversation_id: '真实会话编号', conversation_ids: ['真实会话编号'], range: { type: 'conversation', start_date: null, end_date: null } })
+    expect(h.vaultApi.start).toHaveBeenCalledExactlyOnceWith({ conversation_ids: ['真实会话编号'], range: { type: 'conversation', start_date: null, end_date: null } })
   })
 })

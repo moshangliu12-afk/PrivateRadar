@@ -76,6 +76,9 @@ export function ConversationLabelProvider({ children, api: supplied }: { childre
   </Context.Provider>
 }
 
+// 只读消费现有名称映射用于显示同步，不建立额外缓存或修改名称业务规则。
+export function useConversationNames(): ReadonlyMap<string, ConversationLabelView> { return useContext(Context).names }
+
 export function ConversationName({ value, evidence = false }: { value: ConversationNameInput; evidence?: boolean }): React.JSX.Element {
   const state = useContext(Context)
   const current: ConversationNameInput = state.names.get(value.conversationId ?? '') ?? value
