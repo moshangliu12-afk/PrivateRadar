@@ -7,9 +7,10 @@ import { WindowsPathLease, safeAbsolutePath } from '../batch-import/windows-path
 import { listConversations } from '../conversation-labels'
 import { EXPORT_LIMITS } from '../../shared/markdown-export'
 import type { ExportFormat, ExportSelectionRequest, FormattedExportRequest, MarkdownExportConversation, MarkdownExportOutcome, MarkdownExportResult } from '../../shared/markdown-export'
-import { buildCanonicalExportSnapshot, ExportSelectionError } from './chat-selection'
+import { buildCanonicalExportSnapshot, captureExportSelection, ExportSelectionError } from './chat-selection'
 import { canonicalJson, sha256 } from './chat-markdown'
 import { createExportFiles, storedExportProjection, validateExportFormat } from './chat-formats'
+import { createPdfExportFiles, type PdfRenderer } from './chat-pdf'
 
 const fail = (message: string): never => { throw new ExportSelectionError('EXPORT_PATH_UNSAFE', message) }
 const inside = (parent: string, target: string) => target.toLowerCase() === parent.toLowerCase() || target.toLowerCase().startsWith(parent.toLowerCase().replace(/[\\/]+$/, '') + sep)
@@ -84,6 +85,7 @@ async function nativeOperation(op: 'volume' | 'move', source: string, destinatio
 interface ExportOptions {
   format?: ExportFormat
   signal?: AbortSignal
+  renderPdf?: PdfRenderer
   /** 只供主进程工程测试注入中断，不暴露给 IPC。 */
   beforePublish?: (stage: string, destination: string) => Promise<void>
   writeStagedFile?: (path: string, bytes: Buffer) => Promise<void>
@@ -96,13 +98,13 @@ export async function writeComplete(path: string, bytes: Buffer): Promise<void> 
   try { await file.writeFile(bytes); await file.sync() } finally { await file.close() }
   if (sha256(await fs.readFile(path)) !== sha256(bytes)) throw new ExportSelectionError('EXPORT_IO_ERROR', '临时文件校验未通过，未发布导出。')
 }
-async function cleanStage(stage: string, root: string): Promise<void> {
+async function cleanStage(stage: string, root: string, filename?: string): Promise<void> {
   if (!inside(root, stage) || dirname(stage) !== root || !basename(stage).startsWith('.privateradar-export-')) return
   try {
     const stat = await fs.lstat(stage)
     if (!stat.isDirectory() || stat.isSymbolicLink()) return
     const names = await fs.readdir(stage)
-    if (names.some(name => !['聊天.md', '聊天.json', '聊天.txt', 'export.json'].includes(name))) return
+    if (names.some(name => !['聊天.md', '聊天.json', '聊天.txt', 'export.json', ...(filename ? [filename] : [])].includes(name))) return
     for (const name of names) await fs.unlink(join(stage, name))
     await fs.rmdir(stage)
   } catch { /* 失败时保留无法安全清理的临时目录，不触碰用户既有内容。 */ }
@@ -117,9 +119,13 @@ export async function exportChat(databasePath: string, outputDirectory: string, 
     if (performance.now() - started > EXPORT_LIMITS.active_export_timeout_ms) throw new ExportSelectionError('EXPORT_IO_ERROR', '导出超时，未覆盖已有文件。')
   }
   guard()
+  if (format === 'pdf' && !options.renderPdf) throw new ExportSelectionError('EXPORT_UNSUPPORTED', '当前运行环境未提供 PDF 打印能力。')
   const snapshot = await buildCanonicalExportSnapshot(databasePath, request, { signal: options.signal })
   if (!snapshot.messages.length) return { status: 'empty', directory: null, messageCount: 0, excludedUnknownTimeCount: snapshot.selection.excluded_unknown_time_count }
-  const rendered = createExportFiles(snapshot, appVersion, format)
+  const rendered = format === 'pdf'
+    ? await createPdfExportFiles(snapshot, appVersion, safeConversationFilename(snapshot.conversation.displayConversationName) + '.pdf', options.renderPdf!, options.signal)
+    : createExportFiles(snapshot, appVersion, format)
+  guard()
   const selected = safeAbsolutePath(outputDirectory), dataRoot = resolve(dirname(databasePath))
   if (inside(dataRoot, selected)) fail('不能把原数据目录作为导出目录，请选择其他本地目录。')
   const lease = new WindowsPathLease()
@@ -143,11 +149,11 @@ export async function exportChat(databasePath: string, outputDirectory: string, 
     for (let version = 1; version <= 1000; version++) {
       guard(); lease.assertHealthy()
       const tail = `--${identityHash.slice(0, identityLength)}--${rendered.selectionDigest.slice(0, 16)}${version === 1 ? '' : `--v${version}`}`
-      const nameBudget = Math.min(60, 240 - root.length - tail.length - '/export.json'.length - 1)
+      const nameBudget = Math.min(60, 240 - root.length - tail.length - Math.max('/export.json'.length, rendered.filename.length + 1) - 1)
       if (nameBudget < 8) fail('输出目录路径过长，请选择更短的本地目录。')
       const name = safeConversationFilename(snapshot.conversation.displayConversationName, nameBudget)
       const destination = join(root, name + tail)
-      if (join(destination, 'export.json').length > 240) fail('导出路径超过安全长度。')
+      if (join(destination, 'export.json').length > 240 || join(destination, rendered.filename).length > 240) fail('导出路径超过安全长度。')
       if (await exists(destination)) {
         const stat = await fs.lstat(destination)
         if (stat.isSymbolicLink()) fail('已有导出位置是目录链接，未跟随或覆盖。')
@@ -190,7 +196,7 @@ export async function exportChat(databasePath: string, outputDirectory: string, 
       guard()
       const publication = await nativeOperation('move', stage, destination)
       if (!publication.ok) {
-        await cleanStage(stage, root); stage = ''
+        await cleanStage(stage, root, rendered.filename); stage = ''
         if (publication.code === 80 || publication.code === 183 || await exists(destination)) continue
         throw new ExportSelectionError('EXPORT_IO_ERROR', '发布失败，已有文件未被覆盖。请检查目录权限和磁盘空间。')
       }
@@ -199,16 +205,54 @@ export async function exportChat(databasePath: string, outputDirectory: string, 
     }
     throw new ExportSelectionError('EXPORT_IO_ERROR', '导出版本过多，请选择其他输出目录。')
   } finally {
-    try { if (stage) await cleanStage(stage, root) } finally { await lease.close() }
+    try { if (stage) await cleanStage(stage, root, rendered.filename) } finally { await lease.close() }
   }
 }
 
 /** 保留已验收 Markdown 的旧入口与默认行为。 */
 export const exportMarkdown = exportChat
 
+/** 批量只编排现有单会话管线，每次读取并释放一个有界只读快照。 */
+export async function exportPdfConversations(databasePath: string, directory: string, request: FormattedExportRequest,
+  appVersion: string, options: ExportOptions): Promise<MarkdownExportOutcome> {
+  const ids = request?.conversation_ids ?? [request?.conversation_id]
+  if (!Array.isArray(ids) || !ids.length || ids.length > 50 || ids[0] !== request?.conversation_id
+    || ids.some(id => typeof id !== 'string' || !id.trim() || Buffer.byteLength(id, 'utf8') > EXPORT_LIMITS.max_metadata_string_bytes)
+    || new Set(ids).size !== ids.length) throw new ExportSelectionError('INVALID_SELECTION', '请选择有效会话，PDF 每批最多 50 个且不能重复。')
+  const selection = captureExportSelection({ conversation_id: ids[0], range: request.range })
+  const summary: NonNullable<MarkdownExportOutcome['pdf']> = { requested: ids.length, succeeded: 0, created: 0,
+    unchanged: 0, empty: 0, failed: 0, remaining: ids.length, errors: [] }
+  let output: string | null = null, messageCount = 0, excluded = 0, cancelled = false
+  for (const id of ids) {
+    if (options.signal?.aborted) { cancelled = true; break }
+    try {
+      if (new Intl.DateTimeFormat().resolvedOptions().timeZone !== selection.timezone) throw new ExportSelectionError('TIMEZONE_CHANGED', '系统时区已改变，请重新导出。')
+      const result = await exportChat(databasePath, directory, { conversation_id: id, range: request.range }, appVersion, { ...options, format: 'pdf' })
+      messageCount += result.messageCount; excluded += result.excludedUnknownTimeCount
+      if (result.status === 'empty') summary.empty++
+      else {
+        summary.succeeded++
+        if (result.status === 'unchanged') summary.unchanged++; else summary.created++
+        output ??= result.directory ? dirname(result.directory) : null
+      }
+    } catch (error) {
+      if (error instanceof ExportSelectionError && error.code === 'EXPORT_CANCELLED') { cancelled = true; break }
+      summary.failed++
+      summary.errors.push({ conversationId: id, code: error instanceof ExportSelectionError ? error.code : 'EXPORT_IO_ERROR',
+        message: error instanceof ExportSelectionError ? error.message.replace(/^[A-Z_]+: /, '') : '生成或保存 PDF 失败，已有文件已保留。' })
+      if (error instanceof ExportSelectionError && error.code === 'TIMEZONE_CHANGED') break
+    }
+  }
+  summary.remaining = summary.requested - summary.succeeded - summary.empty - summary.failed
+  return { status: cancelled ? 'cancelled' : summary.failed ? (summary.succeeded ? 'partial' : 'failed')
+    : summary.created ? 'created' : summary.unchanged ? 'unchanged' : 'empty',
+    directory: output, messageCount, excludedUnknownTimeCount: excluded, pdf: summary }
+}
+
 interface ExportIpc { handle: (channel: string, listener: (event: unknown, ...args: any[]) => unknown) => unknown }
 export function registerMarkdownExportIpc(ipc: ExportIpc, db: DatabaseSync, databasePath: string, appVersion: string, desktop: {
   chooseDirectory: () => Promise<string | null>; openDirectory: (directory: string) => Promise<string>
+  renderPdf?: PdfRenderer
 }): void {
   let directory: string | null = null, output: string | null = null, current: AbortController | null = null
   async function safe<T>(action: () => T | Promise<T>): Promise<MarkdownExportResult<T>> {
@@ -232,7 +276,9 @@ export function registerMarkdownExportIpc(ipc: ExportIpc, db: DatabaseSync, data
     if (!directory) throw new ExportSelectionError('INVALID_SELECTION', '请先选择输出目录。')
     const controller = current = new AbortController()
     try {
-      const result = await exportChat(databasePath, directory, request, appVersion, { signal: controller.signal, format: request?.format })
+      const result = request?.format === 'pdf'
+        ? await exportPdfConversations(databasePath, directory, request, appVersion, { signal: controller.signal, renderPdf: desktop.renderPdf })
+        : await exportChat(databasePath, directory, request, appVersion, { signal: controller.signal, format: request?.format })
       output = result.directory
       return result
     } catch (error) {

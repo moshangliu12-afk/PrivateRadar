@@ -7,8 +7,8 @@ import { renderChatTxt } from './chat-txt'
 
 export function validateExportFormat(value: unknown): ExportFormat {
   if (value === undefined) return 'markdown'
-  if (value === 'markdown' || value === 'json' || value === 'txt') return value
-  throw new ExportSelectionError('INVALID_SELECTION', '请选择 Markdown、JSON 或 TXT 格式。')
+  if (value === 'markdown' || value === 'json' || value === 'txt' || value === 'pdf') return value
+  throw new ExportSelectionError('INVALID_SELECTION', '请选择 Markdown、JSON、TXT 或 PDF 格式。')
 }
 
 /** 旧 Markdown 选择摘要保持不变；新格式在同一投影中加入格式和渲染策略。 */
@@ -18,6 +18,7 @@ export function storedExportProjection(saved: Record<string, any>, format: Expor
 }
 
 export function createExportFiles(snapshot: CanonicalExportSnapshot, appVersion: string, format: ExportFormat) {
+  if (format === 'pdf') throw new ExportSelectionError('INVALID_SELECTION', 'PDF 需要通过隔离打印适配器生成。')
   if (format === 'markdown') {
     const previous = createMarkdownExport(snapshot, appVersion)
     const metadata = JSON.parse(previous.manifest.toString('utf8'))

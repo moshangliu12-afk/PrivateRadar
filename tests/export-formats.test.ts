@@ -66,7 +66,7 @@ describe.each(['json', 'txt'] as const)('复用安全发布链 %s', format => {
 })
 
 describe('格式分发与 Markdown 兼容', () => {
-  it.each([null, '', 'pdf', 'JSON', '../json', '__proto__', {}])('拒绝不支持或注入格式 %j', value => {
+  it.each([null, '', 'PDF', 'JSON', '../json', '__proto__', {}])('拒绝不支持或注入格式 %j', value => {
     expect(() => validateExportFormat(value)).toThrow('INVALID_SELECTION')
   })
   it('默认仍为 Markdown，原 renderer 的字节、选择摘要及投影不变，格式之间摘要隔离', async () => {

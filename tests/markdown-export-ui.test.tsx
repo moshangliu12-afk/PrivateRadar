@@ -100,6 +100,89 @@ function setup(withVault = false) {
   const render = () => { frame.cursor = 0; hooks.active = frame; try { return MarkdownExportPanel({ api, ...(withVault ? { vaultApi } : {}) }) } finally { hooks.active = null } }
   return { api, vaultApi, render }
 }
+
+describe('PDF 选择与批量反馈', () => {
+  it('刷新列表移除原首选会话后，Obsidian 仍只导出界面实际所选会话', async () => {
+    const h = setup(true)
+    const item = (id: string) => ({ conversationId: id, sourceConversationName: id, userConversationLabel: null, displayConversationName: id, messageCount: 1 })
+    vi.mocked(h.api.listConversations).mockResolvedValueOnce(ok([item('甲'), item('乙')]))
+    let tree = h.render(); button(tree, '导出聊天').onClick(); await flush(); tree = h.render()
+    elements(tree).find(element => element.props['aria-label'] === '导出格式')!.props.onChange({ target: { value: 'pdf' } }); tree = h.render()
+    elements(tree).find(element => element.props['aria-label'] === '选择会话')!.props.onChange({ target: { selectedOptions: [{ value: '甲' }, { value: '乙' }] } }); tree = h.render()
+    vi.mocked(h.api.listConversations).mockResolvedValueOnce(ok([item('丙'), item('乙')]))
+    button(tree, '刷新会话名称').onClick(); await flush(); tree = h.render()
+    expect(elements(tree).find(element => element.props['aria-label'] === '选择会话')!.props.value).toEqual(['乙'])
+    expect(button(tree, '导出到 Obsidian').disabled).toBe(false)
+    button(tree, '导出到 Obsidian').onClick(); await flush()
+    expect(h.vaultApi.start).toHaveBeenCalledExactlyOnceWith({ conversation_ids: ['乙'], range: { type: 'conversation', start_date: null, end_date: null } })
+  })
+  it('复用原选择器支持 PDF 多选，逐会话输出并展示成功与失败数', async () => {
+    const h = setup(true)
+    vi.mocked(h.api.listConversations).mockResolvedValueOnce(ok([
+      { conversationId: '真实会话编号', sourceConversationName: '来源群', userConversationLabel: '用户标签', displayConversationName: '用户标签', messageCount: 3 },
+      { conversationId: '第二会话', sourceConversationName: '另一个来源群', userConversationLabel: null, displayConversationName: '另一个来源群', messageCount: 2 }
+    ]))
+    let tree = h.render(); button(tree, '导出聊天').onClick(); await flush(); tree = h.render()
+    elements(tree).find(element => element.props['aria-label'] === '导出格式')!.props.onChange({ target: { value: 'pdf' } }); tree = h.render()
+    const selector = elements(tree).find(element => element.props['aria-label'] === '选择会话')!
+    expect(selector.props.multiple).toBe(true)
+    expect(selector.props.value).toEqual(['真实会话编号'])
+    selector.props.onChange({ target: { selectedOptions: [{ value: '真实会话编号' }, { value: '第二会话' }] } }); tree = h.render()
+    expect(button(tree, '导出到 Obsidian').disabled).toBe(true)
+    button(tree, '选择输出目录').onClick(); await flush(); tree = h.render()
+    vi.mocked(h.api.start).mockResolvedValueOnce(ok({
+      status: 'created', directory: 'D:\\用户输出\\PrivateRadar', messageCount: 5, excludedUnknownTimeCount: 0,
+      pdf: { requested: 2, succeeded: 2, created: 2, unchanged: 0, empty: 0, failed: 0, remaining: 0, errors: [] }
+    }))
+    button(tree, '开始导出').onClick(); await flush(); tree = h.render()
+    expect(h.api.start).toHaveBeenCalledExactlyOnceWith({ format: 'pdf', conversation_id: '真实会话编号',
+      conversation_ids: ['真实会话编号', '第二会话'], range: { type: 'conversation', start_date: null, end_date: null } })
+    const html = renderToStaticMarkup(tree)
+    for (const text of ['PDF 导出完成', '成功：2', '失败：0', '未处理：0', 'D:\\用户输出\\PrivateRadar']) expect(html).toContain(text)
+    expect(h.vaultApi.start).not.toHaveBeenCalled()
+  })
+  it('PDF 部分失败返回可见错误，切回 TXT 保留原单会话请求契约', async () => {
+    const h = setup(); let tree = h.render()
+    button(tree, '导出聊天').onClick(); await flush(); tree = h.render()
+    elements(tree).find(element => element.props['aria-label'] === '导出格式')!.props.onChange({ target: { value: 'pdf' } }); tree = h.render()
+    button(tree, '选择输出目录').onClick(); await flush(); tree = h.render()
+    vi.mocked(h.api.start).mockResolvedValueOnce(ok({
+      status: 'failed', directory: null, messageCount: 0, excludedUnknownTimeCount: 0,
+      pdf: { requested: 1, succeeded: 0, created: 0, unchanged: 0, empty: 0, failed: 1, remaining: 0,
+        errors: [{ conversationId: '真实会话编号', code: 'EXPORT_IO_ERROR', message: 'PDF 生成失败，已有文件保留。' }] }
+    }))
+    button(tree, '开始导出').onClick(); await flush(); tree = h.render()
+    const html = renderToStaticMarkup(tree)
+    expect(html).toContain('role="alert"'); expect(html).toContain('失败：1')
+    expect(html).toContain('用户标签：PDF 生成失败')
+    elements(tree).find(element => element.props['aria-label'] === '导出格式')!.props.onChange({ target: { value: 'txt' } }); tree = h.render()
+    const selector = elements(tree).find(element => element.props['aria-label'] === '选择会话')!
+    expect(selector.props.multiple).toBe(false); expect(selector.props.value).toBe('真实会话编号')
+    button(tree, '开始导出').onClick(); await flush()
+    expect(h.api.start).toHaveBeenLastCalledWith({ format: 'txt', conversation_id: '真实会话编号', range: { type: 'conversation', start_date: null, end_date: null } })
+  })
+  it('空 PDF 选择禁用开始，不发出重复任务；取消显示已完成和未处理数量', async () => {
+    const h = setup(); let tree = h.render()
+    button(tree, '导出聊天').onClick(); await flush(); tree = h.render()
+    elements(tree).find(element => element.props['aria-label'] === '导出格式')!.props.onChange({ target: { value: 'pdf' } }); tree = h.render()
+    button(tree, '选择输出目录').onClick(); await flush(); tree = h.render()
+    const selector = elements(tree).find(element => element.props['aria-label'] === '选择会话')!
+    selector.props.onChange({ target: { selectedOptions: [] } }); tree = h.render()
+    expect(button(tree, '开始导出').disabled).toBe(true)
+    elements(tree).find(element => element.props['aria-label'] === '选择会话')!.props.onChange({ target: { selectedOptions: [{ value: '真实会话编号' }] } }); tree = h.render()
+    let finish!: (value: MarkdownExportResult<MarkdownExportOutcome>) => void
+    vi.mocked(h.api.start).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const start = button(tree, '开始导出').onClick; start(); start(); tree = h.render()
+    expect(h.api.start).toHaveBeenCalledOnce()
+    button(tree, '取消导出').onClick(); await flush(); expect(h.api.cancel).toHaveBeenCalledOnce()
+    finish(ok({ status: 'cancelled', directory: null, messageCount: 0, excludedUnknownTimeCount: 0,
+      pdf: { requested: 1, succeeded: 0, created: 0, unchanged: 0, empty: 0, failed: 0, remaining: 1, errors: [] } }))
+    await flush(); tree = h.render()
+    expect(renderToStaticMarkup(tree)).toContain('PDF 导出已取消')
+    expect(renderToStaticMarkup(tree)).toContain('未处理：1')
+  })
+})
+
 describe('轻量聊天导出界面', () => {
   it('明确入口、单会话选择、目录选择和成功输出；不引入复杂页面或任务中心', async () => {
     const h = setup(); let tree = h.render()
@@ -112,7 +195,7 @@ describe('轻量聊天导出界面', () => {
     expect(h.api.start).toHaveBeenCalledWith({ conversation_id: '真实会话编号', range: { type: 'conversation', start_date: null, end_date: null } })
     expect(renderToStaticMarkup(tree)).toContain('导出成功，共 3 条消息')
     button(tree, '打开导出目录').onClick(); await flush(); expect(h.api.openOutput).toHaveBeenCalledOnce()
-    expect(renderToStaticMarkup(tree)).not.toMatch(/PDF|任务中心|模板设置/)
+    expect(renderToStaticMarkup(tree)).not.toMatch(/任务中心|模板设置/)
   })
   it('取消目录选择不执行导出，失败保留选择并明确提示，重复点击不会并发提交', async () => {
     const h = setup(); let tree = h.render()

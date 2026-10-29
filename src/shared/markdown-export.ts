@@ -34,8 +34,12 @@ export interface ExportSelectionRequest {
   readonly range: ExportRange
 }
 
-export type ExportFormat = 'markdown' | 'json' | 'txt'
-export interface FormattedExportRequest extends ExportSelectionRequest { readonly format?: ExportFormat }
+export type ExportFormat = 'markdown' | 'json' | 'txt' | 'pdf'
+export interface FormattedExportRequest extends ExportSelectionRequest {
+  readonly format?: ExportFormat
+  /** 仅 PDF 批量模式使用，其他格式保持单会话契约。 */
+  readonly conversation_ids?: readonly string[]
+}
 
 export interface CapturedExportSelection extends ExportSelectionRequest {
   readonly timezone: string
@@ -152,10 +156,20 @@ export interface MarkdownExportConversation {
   messageCount: number
 }
 export interface MarkdownExportOutcome {
-  status: 'created' | 'unchanged' | 'empty' | 'cancelled'
+  status: 'created' | 'unchanged' | 'empty' | 'cancelled' | 'partial' | 'failed'
   directory: string | null
   messageCount: number
   excludedUnknownTimeCount: number
+  pdf?: {
+    requested: number
+    succeeded: number
+    created: number
+    unchanged: number
+    empty: number
+    failed: number
+    remaining: number
+    errors: Array<{ conversationId: string; code: ExportErrorCode; message: string }>
+  }
 }
 export type MarkdownExportResult<T> = { ok: true; value: T } | { ok: false; error: { code: ExportErrorCode; message: string } }
 export interface MarkdownExportApi {

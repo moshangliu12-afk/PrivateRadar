@@ -7,6 +7,7 @@ import { importChatFile } from './import/importer'
 import { registerConversationLabelIpc } from './conversation-labels'
 import { registerMarkdownExportIpc } from './export/markdown-export'
 import { registerObsidianExportIpc } from './export/obsidian-desktop'
+import { renderChatPdf } from './export/pdf-renderer'
 import { macEditMenu, manualImportDialogOptions } from './desktop-platform'
 import { configureMacEvidenceRoot } from './batch-import/mac-json-evidence'
 import { getCandidateEvidence } from './intelligence/daily/repository'
@@ -100,6 +101,7 @@ app.whenReady().then(() => {
   }
   registerMarkdownExportIpc(ipcMain, db, databasePath, app.getVersion(), {
     chooseDirectory: () => chooseExportDirectory('选择聊天导出目录'),
+    renderPdf: renderChatPdf,
     openDirectory: directory => shell.openPath(directory)
   })
   registerObsidianExportIpc(ipcMain, db, databasePath, {
