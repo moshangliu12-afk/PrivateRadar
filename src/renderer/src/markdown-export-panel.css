@@ -23,7 +23,8 @@
 .markdown-export-picker-label { font-size: 13px; color: var(--ink-2); }
 .markdown-export-form .markdown-export-combobox { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; text-align: left; }
 .markdown-export-conversation-options { display: grid; gap: 4px; padding: 8px; border: 1px solid var(--line-strong); border-radius: 8px; max-height: 220px; overflow: auto; }
-.markdown-export-form .markdown-export-conversation-option { width: 100%; text-align: left; cursor: pointer; }
-.markdown-export-conversation-option[aria-selected=true] { background: var(--paper); border-color: var(--lime-ink); }
+.markdown-export-form .markdown-export-conversation-option { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px; border: 1px solid transparent; border-radius: 6px; cursor: pointer; }
+.markdown-export-conversation-option:has(input:checked) { background: var(--paper); border-color: var(--lime-ink); }
+.markdown-export-conversation-option input { flex: 0 0 auto; }
 .markdown-export-location { display: grid; gap: 12px; margin: 8px 0; padding: 16px; border: 1px solid var(--line); border-radius: 8px; }
 .markdown-export-location h4 { margin: 0; font-size: 13px; color: var(--ink-2); }

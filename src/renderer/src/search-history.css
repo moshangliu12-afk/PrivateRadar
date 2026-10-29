@@ -1,0 +1,12 @@
+.search-history { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.search-history-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--muted); }
+.search-history-heading button, .search-history-list button { border: 0; font: inherit; cursor: pointer; }
+.search-history-heading button { padding: 4px 0; background: transparent; color: var(--ink-2); }
+.search-history-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 9px 0 0; padding: 0; list-style: none; }
+.search-history-list li { display: inline-flex; max-width: 100%; align-items: stretch; overflow: hidden; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); }
+.search-history-list .search-history-query { min-width: 0; padding: 7px 10px; background: transparent; color: var(--ink-2); text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+.search-history-list .search-history-remove { flex-shrink: 0; padding: 5px 9px; background: transparent; color: var(--muted); }
+.search-history-list button:hover, .search-history-heading button:hover { background: var(--card); color: var(--ink); }
+.search-history-list button:disabled { opacity: .55; cursor: default; }
+.search-history button:focus-visible { outline: 2px solid var(--lime-ink); outline-offset: -2px; }
+.search-history-error { margin: 10px 0 0; color: #9c3f35; font-size: 12px; line-height: 1.6; }

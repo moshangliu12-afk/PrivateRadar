@@ -1,4 +1,4 @@
-import type { ExportRange, MarkdownExportResult } from './markdown-export'
+import type { ExportErrorCode, ExportRange, MarkdownExportResult } from './markdown-export'
 
 export interface ObsidianExportRequest {
   readonly conversation_ids: readonly string[]
@@ -16,6 +16,12 @@ export interface ObsidianExportOutcome {
   failed: number
   manifestRecovered: boolean
   userModifiedFilePreserved: boolean
+  batch?: {
+    requested: number
+    processed: number
+    remaining: number
+    errors: Array<{ conversationId: string; code: ExportErrorCode; message: string }>
+  }
 }
 export interface ObsidianExportApi {
   settings: () => Promise<MarkdownExportResult<ObsidianVaultSettings>>

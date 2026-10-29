@@ -3,7 +3,7 @@ import type { MarkdownExportResult } from '../../shared/markdown-export'
 import type { ObsidianExportRequest, ObsidianVaultSettings } from '../../shared/obsidian-export'
 import { WindowsPathLease } from '../batch-import/windows-path-lease'
 import { ExportSelectionError } from './chat-selection'
-import { exportObsidianVault } from './obsidian-export'
+import { exportObsidianConversations } from './obsidian-batch'
 import { validateObsidianVault } from './obsidian-vault-writer'
 
 export const OBSIDIAN_VAULT_SETTING = 'obsidian_vault_path'
@@ -50,7 +50,7 @@ export function registerObsidianExportIpc(ipc: ExportIpc, db: DatabaseSync, data
     if (!vault) throw new ExportSelectionError('INVALID_SELECTION', '请先选择 Obsidian Vault。')
     const controller = current = new AbortController()
     try {
-      const result = await exportObsidianVault(databasePath, vault, request, { signal: controller.signal })
+      const result = await exportObsidianConversations(databasePath, vault, request, { signal: controller.signal })
       output = result.directory
       return result
     } finally { if (current === controller) current = null }

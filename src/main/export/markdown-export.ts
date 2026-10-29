@@ -7,10 +7,11 @@ import { WindowsPathLease, safeAbsolutePath } from '../batch-import/windows-path
 import { listConversations } from '../conversation-labels'
 import { EXPORT_LIMITS } from '../../shared/markdown-export'
 import type { ExportFormat, ExportSelectionRequest, FormattedExportRequest, MarkdownExportConversation, MarkdownExportOutcome, MarkdownExportResult } from '../../shared/markdown-export'
-import { buildCanonicalExportSnapshot, captureExportSelection, ExportSelectionError } from './chat-selection'
+import { buildCanonicalExportSnapshot, ExportSelectionError } from './chat-selection'
 import { canonicalJson, sha256 } from './chat-markdown'
 import { createExportFiles, storedExportProjection, validateExportFormat } from './chat-formats'
-import { createPdfExportFiles, type PdfRenderer } from './chat-pdf'
+import { assertPdfBytes, createPdfExportFiles, type PdfRenderer } from './chat-pdf'
+import { ConversationBatchFailure, runFormattedExportBatch, stopsConversationBatch } from './export-batch-selection'
 
 const fail = (message: string): never => { throw new ExportSelectionError('EXPORT_PATH_UNSAFE', message) }
 const inside = (parent: string, target: string) => target.toLowerCase() === parent.toLowerCase() || target.toLowerCase().startsWith(parent.toLowerCase().replace(/[\\/]+$/, '') + sep)
@@ -258,40 +259,28 @@ export async function publishExportFiles(databasePath: string, outputDirectory: 
 export const exportMarkdown = exportChat
 
 /** 批量只编排现有单会话管线，每次读取并释放一个有界只读快照。 */
-export async function exportPdfConversations(databasePath: string, directory: string, request: FormattedExportRequest,
+export async function exportConversations(databasePath: string, directory: string, request: FormattedExportRequest,
   appVersion: string, options: ExportOptions): Promise<MarkdownExportOutcome> {
-  const ids = request?.conversation_ids ?? [request?.conversation_id]
-  if (!Array.isArray(ids) || !ids.length || ids.length > 50 || ids[0] !== request?.conversation_id
-    || ids.some(id => typeof id !== 'string' || !id.trim() || Buffer.byteLength(id, 'utf8') > EXPORT_LIMITS.max_metadata_string_bytes)
-    || new Set(ids).size !== ids.length) throw new ExportSelectionError('INVALID_SELECTION', '请选择有效会话，PDF 每批最多 50 个且不能重复。')
-  const selection = captureExportSelection({ conversation_id: ids[0], range: request.range })
-  const summary: NonNullable<MarkdownExportOutcome['pdf']> = { requested: ids.length, succeeded: 0, created: 0,
-    unchanged: 0, empty: 0, failed: 0, remaining: ids.length, errors: [] }
-  let output: string | null = null, messageCount = 0, excluded = 0, cancelled = false
-  for (const id of ids) {
-    if (options.signal?.aborted) { cancelled = true; break }
-    try {
-      if (new Intl.DateTimeFormat().resolvedOptions().timeZone !== selection.timezone) throw new ExportSelectionError('TIMEZONE_CHANGED', '系统时区已改变，请重新导出。')
-      const result = await exportChat(databasePath, directory, { conversation_id: id, range: request.range }, appVersion, { ...options, format: 'pdf' })
-      messageCount += result.messageCount; excluded += result.excludedUnknownTimeCount
-      if (result.status === 'empty') summary.empty++
-      else {
-        summary.succeeded++
-        if (result.status === 'unchanged') summary.unchanged++; else summary.created++
-        output ??= result.directory ? dirname(result.directory) : null
+  const format = validateExportFormat(options.format ?? request?.format)
+  return runFormattedExportBatch(request?.conversation_ids ?? [request?.conversation_id], request?.range, request?.conversation_id,
+    format, async (id, range) => {
+      let renderFailed = false
+      const renderPdf: PdfRenderer | undefined = options.renderPdf ? async (...args) => {
+        try { const bytes = await options.renderPdf!(...args); assertPdfBytes(bytes); return bytes }
+        catch (error) { renderFailed = true; throw error }
+      } : undefined
+      try { return await exportChat(databasePath, directory, { conversation_id: id, range }, appVersion, { ...options, format, renderPdf }) }
+      catch (error) {
+        // 单个 PDF 打印失败仍可尝试下一会话；路径、磁盘等全局故障应停止整批。
+        throw new ConversationBatchFailure(error, !renderFailed && (stopsConversationBatch(error) || !(error instanceof ExportSelectionError)))
       }
-    } catch (error) {
-      if (error instanceof ExportSelectionError && error.code === 'EXPORT_CANCELLED') { cancelled = true; break }
-      summary.failed++
-      summary.errors.push({ conversationId: id, code: error instanceof ExportSelectionError ? error.code : 'EXPORT_IO_ERROR',
-        message: error instanceof ExportSelectionError ? error.message.replace(/^[A-Z_]+: /, '') : '生成或保存 PDF 失败，已有文件已保留。' })
-      if (error instanceof ExportSelectionError && error.code === 'TIMEZONE_CHANGED') break
-    }
-  }
-  summary.remaining = summary.requested - summary.succeeded - summary.empty - summary.failed
-  return { status: cancelled ? 'cancelled' : summary.failed ? (summary.succeeded ? 'partial' : 'failed')
-    : summary.created ? 'created' : summary.unchanged ? 'unchanged' : 'empty',
-    directory: output, messageCount, excludedUnknownTimeCount: excluded, pdf: summary }
+    }, options.signal)
+}
+
+/** 保留 PDF 已有批量入口及 pdf 汇总字段，复用同一顺序编排。 */
+export function exportPdfConversations(databasePath: string, directory: string, request: FormattedExportRequest,
+  appVersion: string, options: ExportOptions): Promise<MarkdownExportOutcome> {
+  return exportConversations(databasePath, directory, request, appVersion, { ...options, format: 'pdf' })
 }
 
 interface ExportIpc { handle: (channel: string, listener: (event: unknown, ...args: any[]) => unknown) => unknown }
@@ -321,8 +310,8 @@ export function registerMarkdownExportIpc(ipc: ExportIpc, db: DatabaseSync, data
     if (!directory) throw new ExportSelectionError('INVALID_SELECTION', '请先选择输出目录。')
     const controller = current = new AbortController()
     try {
-      const result = request?.format === 'pdf'
-        ? await exportPdfConversations(databasePath, directory, request, appVersion, { signal: controller.signal, renderPdf: desktop.renderPdf })
+      const result = request?.format === 'pdf' || request?.conversation_ids !== undefined
+        ? await exportConversations(databasePath, directory, request, appVersion, { signal: controller.signal, renderPdf: desktop.renderPdf })
         : await exportChat(databasePath, directory, request, appVersion, { signal: controller.signal, format: request?.format })
       output = result.directory
       return result

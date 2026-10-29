@@ -114,6 +114,7 @@ export async function exportObsidianVault(databasePath: string, vault: string, r
       result.conversationCount++
       let conversation = conversations.get(conversationId)
       if (!conversation) {
+        if (manifest.conversations.length >= 10000) throw new ExportSelectionError('EXPORT_LIMIT_EXCEEDED', 'Vault 清单已达到会话登记安全容量；已完成文件保留，请选择另一个 Vault。')
         const budget = Math.min(60, 240 - writer.root.length - 110)
         if (budget < 8) throw new ExportSelectionError('EXPORT_PATH_UNSAFE', 'Vault 路径过长，请选择更短的本地目录。')
         const folder = safeConversationFilename(snapshot.conversation.displayConversationName, budget) + '--' + sha256(conversationId).slice(0, 16)
@@ -131,6 +132,9 @@ export async function exportObsidianVault(databasePath: string, vault: string, r
       for (const old of manifest.files.filter(item => item.conversation_id === conversationId)) {
         if (!dates.has(old.date) && (request.range.type === 'conversation'
           || (old.date !== null && old.date >= request.range.start_date && old.date <= request.range.end_date))) days.push({ date: old.date, messages: [] })
+      }
+      if (manifest.files.length + days.filter(day => !files.has(JSON.stringify([conversationId, day.date]))).length > 200000) {
+        throw new ExportSelectionError('EXPORT_LIMIT_EXCEEDED', 'Vault 清单已达到文件登记安全容量；未发布本会话的新日期文件，请选择另一个 Vault。')
       }
       for (const day of days) {
         guard()

@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { ConversationLabelApi } from '../shared/conversation-labels'
 import type { MarkdownExportApi } from '../shared/markdown-export'
+import type { SearchHistoryApi } from '../shared/search-history'
 import type { ContextHandoffApi } from '../shared/context-handoff'
 import type { ObsidianExportApi } from '../shared/obsidian-export'
 import type { CollectionDesktopApi } from '../shared/collections'
@@ -10,6 +11,12 @@ import type { CommitmentDesktopApi } from '../shared/commitment'
 import type { CandidateEvidence, ChatQueryResponse, ConnectorSetupResult, DailyBriefItem, DashboardSummary, FeedbackExportResult, FeedbackState, FirstUseStatus, ImportResult, MessageContext, TopicEvidence, TopicRadarSummary } from '../shared/models'
 
 contextBridge.exposeInMainWorld('privateRadar', {
+  searchHistory: {
+    list: () => ipcRenderer.invoke('search-history:list'),
+    record: query => ipcRenderer.invoke('search-history:record', query),
+    remove: query => ipcRenderer.invoke('search-history:remove', query),
+    clear: () => ipcRenderer.invoke('search-history:clear')
+  } satisfies SearchHistoryApi,
   contextHandoff: {
     preview: selection => ipcRenderer.invoke('context-handoff:preview', selection),
     copyMarkdown: selection => ipcRenderer.invoke('context-handoff:copy-markdown', selection),

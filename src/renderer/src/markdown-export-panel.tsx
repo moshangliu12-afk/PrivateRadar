@@ -16,8 +16,7 @@ export function MarkdownExportPanel({ api: supplied, vaultApi: suppliedVault }: 
   const vaultApi = suppliedVault ?? (typeof window === 'undefined' ? undefined : window.privateRadar?.obsidianExport)
   const [open, setOpen] = useState(false)
   const [conversations, setConversations] = useState<MarkdownExportConversation[]>([])
-  const [conversationId, setConversationId] = useState('')
-  const [pdfConversationIds, setPdfConversationIds] = useState<string[]>([])
+  const [selectedConversationIds, setSelectedConversationIds] = useState<string[]>([])
   const [conversationPickerOpen, setConversationPickerOpen] = useState(false)
   const [format, setFormat] = useState<ExportFormat>('markdown')
   const [dateRange, setDateRange] = useState(false)
@@ -31,23 +30,22 @@ export function MarkdownExportPanel({ api: supplied, vaultApi: suppliedVault }: 
   const locked = useRef(false)
   const conversationPickerButton = useRef<HTMLButtonElement | null>(null)
   const conversationPicker = useRef<HTMLDivElement | null>(null)
-  const optionButtons = useRef(new Map<string, HTMLButtonElement>())
+  const optionButtons = useRef(new Map<string, HTMLInputElement>())
   const optionFocus = useRef(0)
   const mounted = useRef(false), loadVersion = useRef(0), reloadPending = useRef(false)
-  const currentConversationId = useRef(conversationId)
-  currentConversationId.current = conversationId
+  const selectionInitialized = useRef(false)
   const names = useConversationNames()
   const latestNames = useRef(names), namesAtListRead = useRef<typeof names | null>(null)
   latestNames.current = names
   const active = useRef<'normal' | 'obsidian'>('normal')
-  const vaultConversationId = format === 'pdf' ? pdfConversationIds[0] ?? '' : conversationId
-  const selectedConversationIds = format === 'pdf' ? pdfConversationIds : conversationId ? [conversationId] : []
   const displayedConversations = conversations.map(value => {
     const known = names !== namesAtListRead.current ? names.get(value.conversationId) : undefined
     return known ? { ...value, sourceConversationName: known.sourceConversationName, userConversationLabel: known.userConversationLabel,
       displayConversationName: known.displayConversationName } : value
   })
-  const selectedConversations = selectedConversationIds.map(id => displayedConversations.find(value => value.conversationId === id)).filter((value): value is MarkdownExportConversation => !!value)
+  const conversationsById = new Map(displayedConversations.map(value => [value.conversationId, value]))
+  const selectedIds = new Set(selectedConversationIds)
+  const selectedConversations = selectedConversationIds.map(id => conversationsById.get(id)).filter((value): value is MarkdownExportConversation => !!value)
   const selectedSummary = selectedConversations.length ? selectedConversations.map(value => `${value.displayConversationName} · ${value.messageCount} 条消息`).join('；') : loading ? '正在读取会话…' : '尚未选择会话'
   function finishConversationSelection(): void {
     setConversationPickerOpen(false)
@@ -65,11 +63,12 @@ export function MarkdownExportPanel({ api: supplied, vaultApi: suppliedVault }: 
       if (!valid()) return
       namesAtListRead.current = namesAtStart
       setConversations(values)
-      setConversationId(current => values.some(value => value.conversationId === current) ? current : values[0]?.conversationId ?? '')
-      setPdfConversationIds(current => {
+      const initialized = selectionInitialized.current
+      setSelectedConversationIds(current => {
         const retained = current.filter(id => values.some(value => value.conversationId === id))
-        return retained.length ? retained : values.some(value => value.conversationId === currentConversationId.current) ? [currentConversationId.current] : values[0] ? [values[0].conversationId] : []
+        return retained.length ? retained : initialized && !current.length ? [] : values[0] ? [values[0].conversationId] : []
       })
+      selectionInitialized.current = true
       if (vaultApi) {
         const settings = await unwrap(vaultApi.settings())
         if (valid()) setVault(settings)
@@ -105,16 +104,12 @@ export function MarkdownExportPanel({ api: supplied, vaultApi: suppliedVault }: 
     return () => { if (typeof document !== 'undefined') document.removeEventListener('pointerdown', outside) }
   }, [conversationPickerOpen])
   function openConversationPicker(last = false): void {
-    const selected = displayedConversations.findIndex(value => selectedConversationIds.includes(value.conversationId))
+    const selected = displayedConversations.findIndex(value => selectedIds.has(value.conversationId))
     optionFocus.current = last ? displayedConversations.length - 1 : Math.max(0, selected)
     setConversationPickerOpen(true)
   }
-  function selectConversation(id: string, extend: boolean): void {
-    if (format === 'pdf') {
-      const ids = extend ? pdfConversationIds.includes(id) ? pdfConversationIds.filter(value => value !== id) : [...pdfConversationIds, id] : [id]
-      setPdfConversationIds(ids); setConversationId(ids[0] ?? '')
-    } else setConversationId(id)
-    finishConversationSelection()
+  function selectConversation(id: string, checked: boolean): void {
+    setSelectedConversationIds(current => checked ? [...new Set([...current, id])] : current.filter(value => value !== id))
   }
   async function choose(): Promise<void> {
     if (!api || locked.current) return
@@ -131,8 +126,8 @@ export function MarkdownExportPanel({ api: supplied, vaultApi: suppliedVault }: 
     locked.current = true; setBusy(true); setError(''); setNotice(''); setResult(null); setVaultResult(null)
     try {
       const value = await unwrap(api.start({ ...(format === 'markdown' ? {} : { format }),
-        ...(format === 'pdf' ? { conversation_ids: pdfConversationIds } : {}),
-        conversation_id: format === 'pdf' ? pdfConversationIds[0] : conversationId, range: dateRange
+        ...(format === 'pdf' || selectedConversationIds.length > 1 ? { conversation_ids: selectedConversationIds } : {}),
+        conversation_id: selectedConversationIds[0], range: dateRange
         ? { type: 'date_range', start_date: startDate, end_date: endDate }
         : { type: 'conversation', start_date: null, end_date: null } }))
       setResult(value)
@@ -150,11 +145,11 @@ export function MarkdownExportPanel({ api: supplied, vaultApi: suppliedVault }: 
     finally { locked.current = false; setLoading(false) }
   }
   async function startVault(): Promise<void> {
-    if (!vaultApi || locked.current || !vaultConversationId || (format === 'pdf' && pdfConversationIds.length !== 1)) return
+    if (!vaultApi || locked.current || !selectedConversationIds.length) return
     active.current = 'obsidian'
     locked.current = true; setBusy(true); setError(''); setNotice(''); setResult(null); setVaultResult(null)
     try {
-      setVaultResult(await unwrap(vaultApi.start({ conversation_ids: [vaultConversationId], range: dateRange
+      setVaultResult(await unwrap(vaultApi.start({ conversation_ids: selectedConversationIds, range: dateRange
         ? { type: 'date_range', start_date: startDate, end_date: endDate }
         : { type: 'conversation', start_date: null, end_date: null } })))
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Obsidian 导出未完成，请检查 Vault。') }
@@ -165,6 +160,8 @@ export function MarkdownExportPanel({ api: supplied, vaultApi: suppliedVault }: 
     try { await unwrap(active.current === 'obsidian' && vaultApi ? vaultApi.cancel() : api.cancel()); setNotice('已请求取消，正在安全结束导出。') }
     catch (reason) { setError(reason instanceof Error ? reason.message : '取消请求未完成。') }
   }
+  const batch = result?.batch ?? result?.pdf
+  const batchLabel = result?.pdf ? 'PDF' : '普通文件'
   return <section className="settings-section markdown-export-section" aria-labelledby="markdown-export-title">
     <div className="settings-section-heading"><div><span className="settings-kicker">本地导出</span><h2 id="markdown-export-title">导出聊天</h2></div></div>
     <p>将已有聊天导出为 Markdown、JSON、TXT 或 PDF。导出不会改动聊天或来源证据，附件仅保留占位说明。</p>
@@ -174,28 +171,29 @@ export function MarkdownExportPanel({ api: supplied, vaultApi: suppliedVault }: 
     {open && <div className="markdown-export-form" aria-busy={loading || busy}>
       <div className="markdown-export-conversation-picker" ref={conversationPicker}>
         <span className="markdown-export-picker-label">选择会话</span>
-        <button ref={conversationPickerButton} type="button" className="markdown-export-combobox" role="combobox" aria-label="选择会话" aria-describedby="markdown-export-selection-summary" aria-haspopup="listbox" aria-expanded={conversationPickerOpen} aria-controls="markdown-export-conversation-options" disabled={loading || busy || !conversations.length}
+        <button ref={conversationPickerButton} type="button" className="markdown-export-combobox" aria-label="选择会话" aria-describedby="markdown-export-selection-summary" aria-haspopup="dialog" aria-expanded={conversationPickerOpen} aria-controls="markdown-export-conversation-options" disabled={loading || busy || !conversations.length}
           onClick={() => conversationPickerOpen ? setConversationPickerOpen(false) : openConversationPicker()}
           onKeyDown={event => {
             if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); openConversationPicker(event.key === 'ArrowUp') }
             else if (event.key === 'Escape') finishConversationSelection()
           }}>
-          <span id="markdown-export-selection-summary" className="markdown-export-selection-summary">当前已选会话：{selectedSummary}</span><span aria-hidden="true">▾</span>
+          <span id="markdown-export-selection-summary" className="markdown-export-selection-summary">已选择 {selectedConversationIds.length} 个会话 · 当前已选会话：{selectedSummary}</span><span aria-hidden="true">▾</span>
         </button>
-        {format === 'pdf' && <small>按住 Ctrl 点击可增加或取消会话；选择后可再次打开继续多选。</small>}
-        {conversationPickerOpen && <div id="markdown-export-conversation-options" className="markdown-export-conversation-options" role="listbox" aria-label={format === 'pdf' ? '选择多个会话' : '候选会话'} aria-multiselectable={format === 'pdf' || undefined}>
-          {displayedConversations.map((value, index) => <button type="button" role="option" aria-selected={selectedConversationIds.includes(value.conversationId)} aria-label={`选择会话 ${value.displayConversationName}`} key={value.conversationId}
-            className="markdown-export-conversation-option" ref={element => { if (element) optionButtons.current.set(value.conversationId, element); else optionButtons.current.delete(value.conversationId) }} disabled={loading || busy}
-            onClick={event => selectConversation(value.conversationId, event.ctrlKey || event.metaKey)}
+        {selectedConversationIds.length > 50 && <small role="status">已选择超过 50 个会话，导出可能耗时更长；仍可继续选择和导出。</small>}
+        {conversationPickerOpen && <div id="markdown-export-conversation-options" className="markdown-export-conversation-options" role="dialog" aria-label="选择多个会话">
+          {displayedConversations.map((value, index) => <label key={value.conversationId} className="markdown-export-conversation-option">
+            <input type="checkbox" aria-label={`选择会话 ${value.displayConversationName}`} checked={selectedIds.has(value.conversationId)}
+            ref={element => { if (element) optionButtons.current.set(value.conversationId, element); else optionButtons.current.delete(value.conversationId) }} disabled={loading || busy}
+            onChange={event => selectConversation(value.conversationId, event.target.checked)}
             onKeyDown={event => {
               if (event.key === 'Escape') { event.preventDefault(); finishConversationSelection() }
-              else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectConversation(value.conversationId, event.ctrlKey || event.metaKey) }
+              else if (event.key === 'Enter') { event.preventDefault(); selectConversation(value.conversationId, !selectedIds.has(value.conversationId)) }
               else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
                 event.preventDefault()
                 const next = event.key === 'Home' ? 0 : event.key === 'End' ? displayedConversations.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + displayedConversations.length) % displayedConversations.length
                 optionButtons.current.get(displayedConversations[next]?.conversationId)?.focus()
               }
-            }}>{value.displayConversationName} · {value.messageCount} 条消息</button>)}
+            }} />{value.displayConversationName} · {value.messageCount} 条消息</label>)}
         </div>}
       </div>
       <label className="markdown-export-range"><input type="checkbox" checked={dateRange} disabled={busy || loading} onChange={event => setDateRange(event.target.checked)} />按日期范围导出（默认导出完整会话）</label>
@@ -206,13 +204,12 @@ export function MarkdownExportPanel({ api: supplied, vaultApi: suppliedVault }: 
       <label>导出格式<select aria-label="导出格式" value={format} disabled={loading || busy} onChange={event => {
         const next = event.target.value as ExportFormat
         setFormat(next); setResult(null); setNotice(''); setConversationPickerOpen(false)
-        if (next === 'pdf') setPdfConversationIds(current => current.includes(conversationId) ? current : conversationId ? [conversationId] : [])
       }}>
         <option value="markdown">Markdown</option><option value="json">JSON</option><option value="txt">TXT</option><option value="pdf">PDF</option>
       </select></label>
       <small>{format === 'markdown' ? '适合 Obsidian / Markdown 工具' : format === 'json' ? '适合备份、脚本、AI 和程序处理；不包含实际附件' : format === 'pdf' ? '适合打印与归档；每个会话单独生成一份 A4 文档。' : '适合普通文本阅读与复制'}</small>
       <div className="markdown-export-location"><h4>普通文件保存位置</h4><button type="button" disabled={busy || loading} onClick={() => void choose()}>选择输出目录</button><p className="markdown-export-path">{directory || '尚未选择输出目录'}</p></div>
-      <div className="markdown-export-actions"><button type="button" className="markdown-export-start" disabled={busy || loading || (format === 'pdf' ? !pdfConversationIds.length : !conversationId) || !directory || (dateRange && (!startDate || !endDate || startDate > endDate))} onClick={() => void start()}>{busy ? '正在导出…' : '开始导出'}</button>
+      <div className="markdown-export-actions"><button type="button" className="markdown-export-start" disabled={busy || loading || !selectedConversationIds.length || !directory || (dateRange && (!startDate || !endDate || startDate > endDate))} onClick={() => void start()}>{busy ? '正在导出…' : '开始导出'}</button>
         {busy && <button type="button" onClick={() => void cancel()}>取消导出</button>}
       </div>
       <small>相同且完整的导出会直接保留；聊天变化或文件被修改时创建新版本，不覆盖旧文件。当前支持 Windows 本地固定 NTFS 目录。</small>
@@ -222,25 +219,29 @@ export function MarkdownExportPanel({ api: supplied, vaultApi: suppliedVault }: 
         <p>将聊天记录整理为 Markdown 笔记，保存到指定的 Obsidian Vault。此功能始终生成 .md 文件，与上方普通文件导出相互独立。</p>
         <div className="markdown-export-location"><h4>Obsidian 知识库位置</h4><p className="markdown-export-path">{vault.path || '尚未选择 Vault'}</p>
         <button type="button" disabled={loading || busy || !vaultApi || !vault.supported} onClick={() => void chooseVault()}>选择 Vault</button></div>
-        <p>{format === 'pdf' && pdfConversationIds.length > 1 ? 'Obsidian 导出请保留一个已选会话。' : '使用上方已选会话和日期范围，按会话及本地日期导出到 Vault 的 PrivateRadar 目录。无需运行 Obsidian。'}</p>
-        <button type="button" className="markdown-export-start" disabled={loading || busy || !vaultApi || !vault.supported || !vault.path || !vaultConversationId || (format === 'pdf' && pdfConversationIds.length !== 1) || (dateRange && (!startDate || !endDate || startDate > endDate))} onClick={() => void startVault()}>导出到 Obsidian</button>
+        <p>使用上方同一组已选会话和日期范围，按会话及本地日期导出到 Vault 的 PrivateRadar 目录。无需运行 Obsidian。</p>
+        <button type="button" className="markdown-export-start" disabled={loading || busy || !vaultApi || !vault.supported || !vault.path || !selectedConversationIds.length || (dateRange && (!startDate || !endDate || startDate > endDate))} onClick={() => void startVault()}>导出到 Obsidian</button>
         <small>仅支持 Windows 本地固定磁盘上的 Vault。未变化的文件跳过；源变化时更新未手改文件；手改或无法确认所有权的文件保留并另写版本。</small>
       </div>
       {error && <p className="markdown-export-error" role="alert">{error}</p>}
       {notice && !result && !vaultResult && <p role="status">{notice}</p>}
-      {vaultResult && <div role="status" className="obsidian-export-result">
-        <p>{vaultResult.status === 'cancelled' ? 'Obsidian 导出已取消，已完成的文件已保留。' : vaultResult.failed ? 'Obsidian 导出结束，部分文件未完成。' : 'Obsidian 导出完成'}</p>
+      {vaultResult && <div role={vaultResult.failed || vaultResult.batch?.errors.length ? 'alert' : 'status'} className="obsidian-export-result">
+        <p>{vaultResult.status === 'cancelled' ? 'Obsidian 导出已取消，已完成的文件已保留。' : vaultResult.failed || vaultResult.batch?.remaining ? 'Obsidian 导出结束，部分文件未完成。' : 'Obsidian 导出完成'}</p>
         <p>会话：{vaultResult.conversationCount} · 新建：{vaultResult.created} · 更新：{vaultResult.updated} · 未变化：{vaultResult.skipped} · 保留用户修改：{vaultResult.preserved} · 失败：{vaultResult.failed}</p>
+        {vaultResult.batch && <>
+          <p>已处理：{vaultResult.batch.processed} · 未处理：{vaultResult.batch.remaining}</p>
+          {vaultResult.batch.errors.map(item => <p key={item.conversationId}>{conversationsById.get(item.conversationId)?.displayConversationName ?? '所选会话'}：{item.message}</p>)}
+        </>}
         {vaultResult.userModifiedFilePreserved && <p>已保留用户修改或无法确认所有权的文件，并生成安全新版本。</p>}
         {vaultResult.manifestRecovered && <p>已安全建立导出清单，原有 Markdown 保留。</p>}
         <p className="markdown-export-path">{vaultResult.directory}</p>
         <button type="button" onClick={() => { if (vaultApi) void unwrap(vaultApi.openOutput()).catch(reason => setError(reason instanceof Error ? reason.message : '无法打开 Vault。')) }}>打开 Vault 导出目录</button>
       </div>}
-      {result && <div role={result.pdf?.failed ? 'alert' : 'status'}>
-        {result.pdf ? <>
-          <p>{result.status === 'cancelled' ? 'PDF 导出已取消，已完成的文件已保留。' : result.pdf.failed ? 'PDF 导出结束，部分会话未完成。' : 'PDF 导出完成。'}</p>
-          <p>成功：{result.pdf.succeeded} · 新建：{result.pdf.created} · 未变化：{result.pdf.unchanged} · 无消息：{result.pdf.empty} · 失败：{result.pdf.failed} · 未处理：{result.pdf.remaining}</p>
-          {result.pdf.errors.map(item => <p key={item.conversationId}>{conversations.find(value => value.conversationId === item.conversationId)?.displayConversationName ?? '所选会话'}：{item.message}</p>)}
+      {result && <div role={batch?.failed ? 'alert' : 'status'}>
+        {batch ? <>
+          <p>{result.status === 'cancelled' ? `${batchLabel} 导出已取消，已完成的文件已保留。` : batch.failed ? `${batchLabel} 导出结束，部分会话未完成。` : `${batchLabel} 导出完成。`}</p>
+          <p>成功：{batch.succeeded} · 新建：{batch.created} · 未变化：{batch.unchanged} · 无消息：{batch.empty} · 失败：{batch.failed} · 未处理：{batch.remaining}</p>
+          {batch.errors.map(item => <p key={item.conversationId}>{conversationsById.get(item.conversationId)?.displayConversationName ?? '所选会话'}：{item.message}</p>)}
         </> : <p>{result.status === 'created' ? `导出成功，共 ${result.messageCount} 条消息。` : result.status === 'unchanged' ? '已有相同且完整的导出，已保留原文件。' : result.status === 'empty' ? '这个范围内没有可导出的消息。' : '导出已取消，未覆盖已有文件。'}</p>}
         {result.excludedUnknownTimeCount > 0 && <p>已排除 {result.excludedUnknownTimeCount} 条未知时间消息。</p>}
         {result.directory && <><p className="markdown-export-path">{result.directory}</p><button type="button" onClick={() => { if (api) void unwrap(api.openOutput()).catch(reason => setError(reason instanceof Error ? reason.message : '无法打开输出目录。')) }}>打开导出目录</button></>}

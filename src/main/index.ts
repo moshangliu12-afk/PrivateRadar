@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { openDatabase, getDashboardSummary, getTopicRadarSummary, validateDashboardDateKey } from './database'
 import { importChatFile } from './import/importer'
 import { registerConversationLabelIpc } from './conversation-labels'
+import { registerSearchHistoryIpc } from './search-history'
 import { registerMarkdownExportIpc } from './export/markdown-export'
 import { registerContextHandoffIpc } from './export/context-handoff-desktop'
 import { registerObsidianExportIpc } from './export/obsidian-desktop'
@@ -96,6 +97,7 @@ app.whenReady().then(() => {
   const databasePath = join(dataDir, 'private-radar.db')
   const db = openDatabase(databasePath, process.env.PRIVATE_RADAR_SEED_DEMO === 'true')
   registerConversationLabelIpc(ipcMain, db)
+  registerSearchHistoryIpc(ipcMain, db)
   const chooseExportDirectory = async (title: string): Promise<string | null> => {
     const chosen = await dialog.showOpenDialog(mainWindow!, { title, properties: ['openDirectory', 'createDirectory'] })
     return chosen.canceled ? null : chosen.filePaths[0] ?? null

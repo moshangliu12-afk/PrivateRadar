@@ -37,7 +37,7 @@ export interface ExportSelectionRequest {
 export type ExportFormat = 'markdown' | 'json' | 'txt' | 'pdf'
 export interface FormattedExportRequest extends ExportSelectionRequest {
   readonly format?: ExportFormat
-  /** 仅 PDF 批量模式使用，其他格式保持单会话契约。 */
+  /** 批量模式使用；省略数组时保留原单会话请求契约。 */
   readonly conversation_ids?: readonly string[]
 }
 
@@ -160,16 +160,18 @@ export interface MarkdownExportOutcome {
   directory: string | null
   messageCount: number
   excludedUnknownTimeCount: number
-  pdf?: {
-    requested: number
-    succeeded: number
-    created: number
-    unchanged: number
-    empty: number
-    failed: number
-    remaining: number
-    errors: Array<{ conversationId: string; code: ExportErrorCode; message: string }>
-  }
+  batch?: ExportBatchSummary
+  pdf?: ExportBatchSummary
+}
+export interface ExportBatchSummary {
+  requested: number
+  succeeded: number
+  created: number
+  unchanged: number
+  empty: number
+  failed: number
+  remaining: number
+  errors: Array<{ conversationId: string; code: ExportErrorCode; message: string }>
 }
 export type MarkdownExportResult<T> = { ok: true; value: T } | { ok: false; error: { code: ExportErrorCode; message: string } }
 export interface MarkdownExportApi {

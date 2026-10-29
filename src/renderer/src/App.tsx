@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ConversationName } from './conversation-labels'
 import { MarkdownExportPanel } from './markdown-export-panel'
 import { AddContextButton, ContextHandoffEntry } from './context-handoff'
+import { RecentSearches, useSearchHistory } from './search-history'
 import type {
   CandidateEvidence,
   ChatQueryResponse,
@@ -54,6 +55,7 @@ export function App(): React.JSX.Element {
   const [openTopicId, setOpenTopicId] = useState('')
   const [topicEvidence, setTopicEvidence] = useState<TopicEvidence | null>(null)
   const [question, setQuestion] = useState('')
+  const searchHistory = useSearchHistory()
   const [querying, setQuerying] = useState(false)
   const [queryResponse, setQueryResponse] = useState<ChatQueryResponse | null>(null)
   const [openMessageId, setOpenMessageId] = useState('')
@@ -246,6 +248,7 @@ export function App(): React.JSX.Element {
     setError('')
     setOpenMessageId('')
     setMessageContext(null)
+    void searchHistory.record(nextQuestion)
     try {
       setQueryResponse(await window.privateRadar.askChat(nextQuestion))
     } catch (reason) {
@@ -438,6 +441,10 @@ export function App(): React.JSX.Element {
             onQuestionChange={setQuestion}
             onSubmit={submitQuestion}
             onToggleContext={toggleMessageContext}
+            recentSearches={searchHistory.entries}
+            searchHistoryError={searchHistory.error}
+            onRemoveRecentSearch={query => { void searchHistory.remove(query) }}
+            onClearRecentSearches={() => { void searchHistory.clear() }}
           />
         )}
         {page === 'settings' && firstUse && (
@@ -880,7 +887,11 @@ export function SearchPage({
   context,
   onQuestionChange,
   onSubmit,
-  onToggleContext
+  onToggleContext,
+  recentSearches = [],
+  searchHistoryError = '',
+  onRemoveRecentSearch,
+  onClearRecentSearches
 }: {
   status: FirstUseStatus | null
   question: string
@@ -891,6 +902,10 @@ export function SearchPage({
   onQuestionChange: (value: string) => void
   onSubmit: (value?: string) => Promise<void>
   onToggleContext: (messageId: string) => Promise<void>
+  recentSearches?: readonly string[]
+  searchHistoryError?: string
+  onRemoveRecentSearch?: (query: string) => void
+  onClearRecentSearches?: () => void
 }): React.JSX.Element {
   const examples = ['上个月谁推荐过 AI 工具？', '最近大家怎么评价 Claude Code？']
   return (
@@ -910,6 +925,8 @@ export function SearchPage({
             </label>
             <button type="submit" disabled={querying || !question.trim()}><span>{querying ? '正在检索…' : '检索聊天'}</span><UiIcon name="arrow" /></button>
           </div>
+          <RecentSearches entries={recentSearches} querying={querying} onSearch={onSubmit} onRemove={query => onRemoveRecentSearch?.(query)} onClear={() => onClearRecentSearches?.()} />
+          {searchHistoryError && <p className="search-history-error" role="status">{searchHistoryError}</p>}
           <div className="query-examples"><span>试试：</span>{examples.map((example) => <button type="button" key={example} onClick={() => void onSubmit(example)}>{example}</button>)}</div>
         </form>
 

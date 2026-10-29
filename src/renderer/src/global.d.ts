@@ -5,6 +5,7 @@ import type { TodayKeywordInterestApi } from '../../shared/today-keyword-interes
 import type { CommitmentDesktopApi } from '../../shared/commitment'
 import type { ConversationLabelApi } from '../../shared/conversation-labels'
 import type { MarkdownExportApi } from '../../shared/markdown-export'
+import type { SearchHistoryApi } from '../../shared/search-history'
 import type { ContextHandoffApi } from '../../shared/context-handoff'
 import type { ObsidianExportApi } from '../../shared/obsidian-export'
 
@@ -15,6 +16,7 @@ declare global {
       commitmentCandidates: CommitmentDesktopApi
       conversationLabels: ConversationLabelApi
       markdownExport: MarkdownExportApi
+      searchHistory: SearchHistoryApi
       contextHandoff: ContextHandoffApi
       obsidianExport: ObsidianExportApi
       getDashboardSummary: (date?: string) => Promise<DashboardSummary>
