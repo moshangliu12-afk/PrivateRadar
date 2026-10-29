@@ -11,7 +11,7 @@ interface ActiveHitRow extends OccurrenceRow {
   active_term_id: string
   attachment_name: string | null
   ordinal: number
-  evidence_source_kind: KeywordHitSource['evidenceKind']
+  evidence_source_kind: NonNullable<KeywordHitSource['evidenceKind']>
   evidence_status: KeywordHitSource['evidenceStatus']
   evidence_relative_path: string | null
 }

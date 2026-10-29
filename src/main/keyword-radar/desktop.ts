@@ -9,6 +9,8 @@ import { normalizeKeywordTermV1 } from './normalization'
 import { parseMatchedTermsSnapshot } from './contracts'
 import { retryKeywordRadarRun, logKeywordRadarFailure } from './processor'
 import { isReliableTimestampSource } from '../time-semantics'
+import { createHistoricalRescanService, HistoricalRescanError } from './historical-rescan'
+import { getMessageContext } from '../retrieval/service'
 
 const idSchema = z.string().uuid()
 const nameSchema = z.string().trim().min(1).max(200)
@@ -27,6 +29,7 @@ export class KeywordRadarDesktopError extends Error {
 }
 export async function safeKeywordRadarAction<T>(action: () => T | Promise<T>): Promise<KeywordRadarResult<T>> {
   try { return { ok: true, value: await action() } } catch (reason) {
+    if (reason instanceof HistoricalRescanError) return { ok: false, error: { code: reason.code, message: reason.message } }
     const code = reason instanceof KeywordRadarDesktopError ? reason.code : reason instanceof z.ZodError ? 'INVALID_INPUT' :
       reason instanceof Error && reason.message.startsWith('KEYWORD_CONFIG_NOT_FOUND:') ? 'CONFIG_UNAVAILABLE' : 'OPERATION_FAILED'
     return { ok: false, error: { code, message: messages[code] } }
@@ -81,7 +84,7 @@ function chatTime(value: string | null, source: string | null): string | null {
   if (!Number.isFinite(day.getTime()) || day.toISOString().slice(0, 10) !== date) return null
   return new Date(time).toISOString()
 }
-export function occurrence(row: OccurrenceRow): KeywordOccurrenceView {
+export function occurrence(row: OccurrenceRow): KeywordOccurrenceView & { batchItemId: string; sourcePosition: number } {
   if (typeof row.content !== 'string') throw new KeywordRadarDesktopError('HIT_UNAVAILABLE')
   const source = row.current_conversation_name === undefined ? row.source_conversation_name : row.current_conversation_name
   const names = { sourceConversationName: source?.trim() ? source : null, userConversationLabel: row.user_conversation_label ?? null }
@@ -115,10 +118,13 @@ function getHit(db: DatabaseSync, id: unknown): HitRow {
   return row
 }
 export function listRecentKeywordHits(db: DatabaseSync, limit?: unknown): KeywordHitView[] {
-  return (db.prepare(hitSelect + ' ORDER BY h.matched_at DESC,h.id DESC LIMIT ?').all(limitSchema.parse(limit)) as unknown as HitRow[])
+  const maximum = limitSchema.parse(limit)
+  const sourced = (db.prepare(hitSelect + ' ORDER BY h.matched_at DESC,h.id DESC LIMIT ?').all(maximum) as unknown as HitRow[])
     .map(row => ({ ...occurrence(row), id: row.id, groupId: row.group_id, groupName: row.group_name_snapshot,
       matchedTerms: parseMatchedTermsSnapshot(row.matched_terms_snapshot).terms.map(term => term.term),
       matchedAt: row.matched_at, source: sourceView(row) }))
+  const direct = (db.prepare(canonicalHitSelect + ' ORDER BY c.matched_at DESC,c.id DESC LIMIT ?').all(maximum) as unknown as CanonicalHitRow[]).map(canonicalHit)
+  return [...sourced, ...direct].sort((a, b) => b.matchedAt.localeCompare(a.matchedAt) || b.id.localeCompare(a.id)).slice(0, maximum)
 }
 export function getKeywordRadarStatus(db: DatabaseSync): KeywordRadarStatus {
   const result: KeywordRadarStatus = { pending: 0, failed: 0 }
@@ -127,8 +133,24 @@ export function getKeywordRadarStatus(db: DatabaseSync): KeywordRadarStatus {
   }
   return result
 }
-export function getKeywordHitSource(db: DatabaseSync, hitId: unknown): KeywordHitSource { return sourceView(getHit(db, hitId)) }
+export function getKeywordHitSource(db: DatabaseSync, hitId: unknown): KeywordHitSource {
+  const direct = getCanonicalHit(db, hitId)
+  return direct ? canonicalHit(direct).source : sourceView(getHit(db, hitId))
+}
 export function getKeywordHitContext(db: DatabaseSync, hitId: unknown): KeywordHitContext {
+  const direct = getCanonicalHit(db, hitId)
+  if (direct) {
+    const context = getMessageContext(db, direct.message_id)
+    if (!context) throw new KeywordRadarDesktopError('HIT_UNAVAILABLE')
+    return { hitId: direct.id, batchItemId: null, entries: context.messages.map(message => {
+      const facts = db.prepare('SELECT sender_name,sender_name_source,timestamp,timestamp_source FROM messages WHERE id=?').get(message.messageId)!
+      return { batchItemId: null, sourcePosition: null, messageId: message.messageId, conversationId: message.conversationId,
+        body: message.content, senderName: ['source_native','user_supplied'].includes(String(facts.sender_name_source)) && String(facts.sender_name ?? '').trim() ? String(facts.sender_name) : null,
+        chatTimestamp: chatTime(facts.timestamp as string | null, facts.timestamp_source as string), timestampSource: String(facts.timestamp_source), conversationName: message.conversationName || null,
+        sourceConversationName: message.sourceConversationName, userConversationLabel: message.userConversationLabel,
+        displayConversationName: message.displayConversationName, isCurrent: message.messageId === direct.message_id }
+    }) }
+  }
   const hit = getHit(db, hitId)
   const conversation = hit.source_conversation_name_source &&
     isReliableTimestampSource(hit.source_conversation_name_source) ? hit.source_conversation_name : null
@@ -138,7 +160,7 @@ export function getKeywordHitContext(db: DatabaseSync, hitId: unknown): KeywordH
 /** 复用附件来源窗口；传入会话时先限制来源会话，未知会话仅保留中心。 */
 export function readItemOccurrenceContext(
   db: DatabaseSync, batchItemId: string, sourcePosition: number, conversationName?: string | null
-): Array<KeywordOccurrenceView & { isCurrent: boolean }> {
+): Array<KeywordOccurrenceView & { batchItemId: string; sourcePosition: number; isCurrent: boolean }> {
   let restriction = '', arguments_: Array<string | number> = [batchItemId]
   if (conversationName !== undefined) {
     restriction = conversationName?.trim() ? ' AND s.source_conversation_name=?' : ' AND s.source_position=?'
@@ -168,6 +190,7 @@ interface IpcRegistrar { handle: (channel: string, listener: (event: unknown, ..
 export function registerKeywordRadarIpc(
   ipc: IpcRegistrar, db: DatabaseSync, openEvidence: (hitId: unknown) => Promise<{ batchItemId: string; opened: true }>
 ): void {
+  const rescans = createHistoricalRescanService(db)
   const handle = (name: string, action: (...args: unknown[]) => unknown) =>
     ipc.handle('keyword-radar:' + name, (_event, ...args) => safeKeywordRadarAction(() => action(...args)))
   handle('groups', () => listDesktopKeywordGroups(db))
@@ -183,4 +206,34 @@ export function registerKeywordRadarIpc(
   handle('context', id => getKeywordHitContext(db, id))
   handle('source', id => getKeywordHitSource(db, id))
   handle('open-evidence', id => { idSchema.parse(id); return openEvidence(id) })
+  handle('rescan-start', id => rescans.start(idSchema.parse(id)))
+  handle('rescan-status', id => rescans.status(idSchema.parse(id)))
+  handle('rescan-cancel', id => { rescans.cancel(idSchema.parse(id)); return null })
+}
+
+interface CanonicalHitRow {
+  id: string; group_id: string; message_id: string; rules_snapshot_json: string; matched_terms_snapshot: string; matched_at: string
+  content: string; sender_name: string | null; sender_name_source: string; timestamp: string | null; timestamp_source: string
+  conversation_id: string; conversation_name: string | null; current_conversation_name: string; user_conversation_label: string | null
+}
+const canonicalHitSelect = `SELECT c.id,c.group_id,c.message_id,c.matched_terms_snapshot,c.matched_at,r.rules_snapshot_json,
+  m.content,m.sender_name,m.sender_name_source,m.timestamp,m.timestamp_source,m.conversation_id,m.conversation_name,
+  conv.name AS current_conversation_name,conv.user_conversation_label
+  FROM keyword_rescan_coverage c JOIN keyword_rescans r ON r.id=c.run_id JOIN messages m ON m.id=c.message_id
+  JOIN conversations conv ON conv.id=m.conversation_id
+  WHERE c.batch_item_id IS NULL AND c.matched_terms_snapshot IS NOT NULL
+    AND NOT EXISTS(SELECT 1 FROM keyword_hits h JOIN batch_item_message_sources s ON s.batch_item_id=h.batch_item_id AND s.source_position=h.source_position
+      WHERE h.group_id=c.group_id AND s.message_id=c.message_id)`
+function getCanonicalHit(db: DatabaseSync, id: unknown): CanonicalHitRow | undefined {
+  return db.prepare(canonicalHitSelect + ' AND c.id=?').get(idSchema.parse(id)) as unknown as CanonicalHitRow | undefined
+}
+function canonicalHit(row: CanonicalHitRow): KeywordHitView {
+  const rules = JSON.parse(row.rules_snapshot_json), name = rules.groups[0].group_name as string
+  const names = { sourceConversationName: row.current_conversation_name?.trim() ? row.current_conversation_name : null, userConversationLabel: row.user_conversation_label }
+  return { id: row.id, groupId: row.group_id, groupName: name, matchedTerms: parseMatchedTermsSnapshot(row.matched_terms_snapshot).terms.map(term => term.term), matchedAt: row.matched_at,
+    batchItemId: null, sourcePosition: null, messageId: row.message_id, body: row.content, conversationId: row.conversation_id,
+    ...names, displayConversationName: resolveDisplayConversationName(names), conversationName: row.conversation_name?.trim() || null,
+    senderName: ['source_native','user_supplied'].includes(row.sender_name_source) && row.sender_name?.trim() ? row.sender_name : null,
+    chatTimestamp: chatTime(row.timestamp, row.timestamp_source), timestampSource: row.timestamp_source,
+    source: { batchItemId: null, attachmentName: null, ordinal: null, evidenceKind: null, evidenceStatus: 'missing', evidenceRecorded: false } }
 }

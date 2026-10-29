@@ -104,8 +104,8 @@ describe('关键词配置桌面动作与输入边界', () => {
   })
   it('编号、布尔值、上限严格校验，开放通道无 SQL 或任意路径能力', async () => {
     const f = prepared(), api = ipc(f), before = fingerprint(f)
-    expect(api.handlers.size).toBe(13)
-    for (const name of ['archive-group', 'context', 'source', 'open-evidence']) {
+    expect(api.handlers.size).toBe(16)
+    for (const name of ['archive-group', 'context', 'source', 'open-evidence', 'rescan-start', 'rescan-status', 'rescan-cancel']) {
       expect(await api.call(name, "' OR 1=1 --")).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT' } })
     }
     expect(api.open).not.toHaveBeenCalled()
@@ -190,7 +190,10 @@ describe('历史命中、来源事实与上下文', () => {
   })
   it('按发现时间降序，默认最多 100 条，不按聊天时间排序', () => {
     const f = prepared(Array.from({ length: 105 }, (_, i) => i + 1))
-    for (const hit of listRecentKeywordHits(f.db)) f.db.prepare('UPDATE keyword_hits SET matched_at=? WHERE id=?').run(`2026-10-06T${String(Math.floor(hit.sourcePosition / 60)).padStart(2, '0')}:${String(hit.sourcePosition % 60).padStart(2, '0')}:00.000Z`, hit.id)
+    for (const hit of listRecentKeywordHits(f.db)) {
+      if (hit.sourcePosition === null) throw new Error('本夹具必须保留真实来源位置')
+      f.db.prepare('UPDATE keyword_hits SET matched_at=? WHERE id=?').run(`2026-10-06T${String(Math.floor(hit.sourcePosition / 60)).padStart(2, '0')}:${String(hit.sourcePosition % 60).padStart(2, '0')}:00.000Z`, hit.id)
+    }
     const hits = listRecentKeywordHits(f.db)
     expect(hits).toHaveLength(100)
     expect(hits.map(hit => hit.matchedAt)).toEqual(hits.map(hit => hit.matchedAt).sort().reverse())

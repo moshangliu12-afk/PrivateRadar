@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ConversationName } from './conversation-labels'
+import { HistoricalKeywordScan } from './historical-keyword-scan'
 import type { KeywordGroupView, KeywordHitContext, KeywordHitView, KeywordOccurrenceView, KeywordRadarDesktopApi, KeywordRadarResult, KeywordRadarStatus } from '../../shared/keyword-radar'
 
 const safeErrors: Record<string, string> = {
@@ -29,9 +30,9 @@ export function KeywordOccurrence({ entry }: { entry: KeywordOccurrenceView }): 
   </div>
 }
 export function KeywordContext({ context }: { context: KeywordHitContext }): React.JSX.Element {
-  return <ol className="keyword-context" aria-label="同一附件中的上下文">
-    {context.entries.map(entry => <li key={entry.sourcePosition} aria-current={entry.isCurrent ? 'true' : undefined}>
-      <div className="keyword-context-position">来源位置 {entry.sourcePosition}{entry.isCurrent && <strong>当前命中</strong>}</div>
+  return <ol className="keyword-context" aria-label={context.batchItemId === null ? '原始消息上下文' : '同一附件中的上下文'}>
+    {context.entries.map(entry => <li key={`${entry.messageId}:${entry.sourcePosition ?? ''}`} aria-current={entry.isCurrent ? 'true' : undefined}>
+      <div className="keyword-context-position">{entry.sourcePosition === null ? '原始消息' : `来源位置 ${entry.sourcePosition}`}{entry.isCurrent && <strong>当前命中</strong>}</div>
       <KeywordOccurrence entry={entry} /><p>{entry.body}</p>
     </li>)}
   </ol>
@@ -66,8 +67,8 @@ export function KeywordHitCard({ hit, api }: { hit: KeywordHitView; api: Keyword
     <KeywordOccurrence entry={hit} />
     <p className="keyword-body">{expanded || hit.body.length <= 600 ? hit.body : hit.body.slice(0, 600) + '…'}</p>
     {hit.body.length > 600 && <button type="button" onClick={() => setExpanded(!expanded)} aria-expanded={expanded}>{expanded ? '收起正文' : '展开正文'}</button>}
-    <div className="keyword-source"><span>来源：{hit.source.attachmentName ?? `附件 ${hit.source.ordinal + 1}`}</span><span>{hit.source.evidenceRecorded ? evidenceLabels[hit.source.evidenceStatus] : '证据未登记'}</span></div>
-    <details className="keyword-source-id"><summary>附件编号</summary><code>{hit.batchItemId}</code></details>
+    <div className="keyword-source"><span>来源：{hit.batchItemId === null ? '历史消息（本命中未绑定附件）' : hit.source.attachmentName ?? (hit.source.ordinal === null ? '来源未登记' : `附件 ${hit.source.ordinal + 1}`)}</span><span>{hit.source.evidenceRecorded ? evidenceLabels[hit.source.evidenceStatus] : '证据未登记'}</span></div>
+    {hit.batchItemId !== null && <details className="keyword-source-id"><summary>附件编号</summary><code>{hit.batchItemId}</code></details>}
     <div className="keyword-actions">
       <button type="button" disabled={!!busy} onClick={() => void openContext()} aria-expanded={showContext}>{busy === 'context' ? '读取上下文…' : showContext ? '收起上下文' : '查看上下文'}</button>
       <button type="button" disabled={!!busy || !hit.source.evidenceRecorded} onClick={() => void openEvidence()}>{busy === 'evidence' ? '检查证据…' : '查看证据'}</button>
@@ -77,7 +78,7 @@ export function KeywordHitCard({ hit, api }: { hit: KeywordHitView; api: Keyword
     {showContext && context && <KeywordContext context={context} />}
   </article>
 }
-function KeywordGroupCard({ group, api, changed }: { group: KeywordGroupView; api: KeywordRadarDesktopApi; changed: () => Promise<void> }): React.JSX.Element {
+function KeywordGroupCard({ group, api, changed, onRescanComplete }: { group: KeywordGroupView; api: KeywordRadarDesktopApi; changed: () => Promise<void>; onRescanComplete: () => Promise<void> }): React.JSX.Element {
   const [draft, setDraft] = useState('')
   const [name, setName] = useState(group.name)
   const [renaming, setRenaming] = useState(false)
@@ -109,6 +110,7 @@ function KeywordGroupCard({ group, api, changed }: { group: KeywordGroupView; ap
       <div className="keyword-actions"><button type="button" disabled={busy} onClick={() => void act(() => api.setGroupEnabled(group.id, !group.enabled))}>{group.enabled ? '停用组' : '启用组'}</button>
         <button type="button" disabled={busy} onClick={() => { setName(group.name); setRenaming(!renaming); setArchive(false) }}>改组名</button>
         <button type="button" disabled={busy} onClick={() => { setArchive(!archive); setRenaming(false) }}>归档</button></div>
+      <HistoricalKeywordScan api={api.historicalRescan} groupId={group.id} enabled={group.enabled} onComplete={onRescanComplete} />
       {renaming && <form className="keyword-inline-form" onSubmit={event => { event.preventDefault(); void act(() => api.renameGroup(group.id, name.trim()), () => setRenaming(false)) }}>
         <label htmlFor={`keyword-name-${group.id}`}>新组名</label><div><input id={`keyword-name-${group.id}`} maxLength={200} value={name} onChange={event => setName(event.target.value)} disabled={busy} /><button type="submit" disabled={busy || !name.trim()}>保存组名</button><button type="button" onClick={() => setRenaming(false)} disabled={busy}>取消</button></div>
       </form>}
@@ -117,9 +119,10 @@ function KeywordGroupCard({ group, api, changed }: { group: KeywordGroupView; ap
     {notice && <p className="keyword-notice" role="status">{notice}</p>}{error && <p className="keyword-error" role="alert">{error}</p>}
   </article>
 }
-export function KeywordRadarContent({ groups, hits, status, api, refreshGroups, retry, retrying }: {
+export function KeywordRadarContent({ groups, hits, status, api, refreshGroups, retry, retrying, onRescanComplete = refreshGroups }: {
   groups: KeywordGroupView[]; hits: KeywordHitView[]; status: KeywordRadarStatus; api: KeywordRadarDesktopApi
   refreshGroups: () => Promise<void>; retry: () => void; retrying: boolean
+  onRescanComplete?: () => Promise<void>
 }): React.JSX.Element {
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
@@ -137,15 +140,15 @@ export function KeywordRadarContent({ groups, hits, status, api, refreshGroups, 
     {status.failed > 0 && <div className="keyword-failed" role="status"><span>有 {status.failed} 个导入批次的关键词处理失败。</span><button type="button" disabled={retrying} onClick={retry}>{retrying ? '处理中…' : '重新处理'}</button></div>}
     <section className="keyword-settings" aria-labelledby="keyword-settings-title">
       <header className="keyword-section-heading"><h2 id="keyword-settings-title">关键词设置</h2><button type="button" className="keyword-primary" disabled={busy} onClick={() => setCreating(!creating)} aria-expanded={creating}>+ 新增关键词组</button></header>
-      <p className="keyword-muted">规则修改只影响之后新导入的聊天，不会重新扫描以前的记录。</p>
+      <p className="keyword-muted">规则修改只影响之后新导入的聊天，不会自动重新扫描以前的记录。需要时点击“扫描历史聊天”。</p>
       {creating && <form className="keyword-create" onSubmit={event => { event.preventDefault(); void create() }}><label htmlFor="keyword-create-name">组名</label><div><input id="keyword-create-name" maxLength={200} value={name} onChange={event => setName(event.target.value)} disabled={busy} placeholder="例如：拼车" autoFocus /><button type="submit" className="keyword-primary" disabled={busy || !name.trim()}>{busy ? '创建中…' : '创建关键词组'}</button><button type="button" disabled={busy} onClick={() => setCreating(false)}>取消</button></div></form>}
       {error && <p className="keyword-error" role="alert">{error}</p>}
       {!active.length && <div className="keyword-empty">还没有设置关键词。点击“新增关键词组”开始。</div>}
-      <div className="keyword-group-grid">{active.map(group => <KeywordGroupCard key={group.id} group={group} api={api} changed={refreshGroups} />)}</div>
-      {!!archived.length && <details className="keyword-archived"><summary>已归档关键词组（{archived.length}）</summary><div className="keyword-group-grid">{archived.map(group => <KeywordGroupCard key={group.id} group={group} api={api} changed={refreshGroups} />)}</div></details>}
+      <div className="keyword-group-grid">{active.map(group => <KeywordGroupCard key={group.id} group={group} api={api} changed={refreshGroups} onRescanComplete={onRescanComplete} />)}</div>
+      {!!archived.length && <details className="keyword-archived"><summary>已归档关键词组（{archived.length}）</summary><div className="keyword-group-grid">{archived.map(group => <KeywordGroupCard key={group.id} group={group} api={api} changed={refreshGroups} onRescanComplete={onRescanComplete} />)}</div></details>}
     </section>
     <section className="keyword-recent" aria-labelledby="keyword-hits-title"><header className="keyword-section-heading"><h2 id="keyword-hits-title">最近命中</h2><small>按发现时间排序 · 最近 100 条</small></header>
-      {!hits.length ? <div className="keyword-empty"><p>还没有命中记录。之后新导入的聊天如果包含这些关键词，会出现在这里。</p><small>不扫描以前的聊天记录。</small></div> : <div className="keyword-hit-list">{hits.map(hit => <KeywordHitCard key={hit.id} hit={hit} api={api} />)}</div>}
+      {!hits.length ? <div className="keyword-empty"><p>还没有命中记录。之后新导入的聊天如果包含这些关键词，会出现在这里。</p><small>不自动扫描以前的聊天记录，可在对应组手动扫描。</small></div> : <div className="keyword-hit-list">{hits.map(hit => <KeywordHitCard key={hit.id} hit={hit} api={api} />)}</div>}
     </section>
   </>
 }
@@ -184,6 +187,6 @@ export function KeywordRadarPage({ api = window.privateRadar.keywordRadar }: { a
   return <div className="keyword-radar-page" aria-busy={loading || retrying}>
     <div className="keyword-refresh"><span>只匹配之后新导入的聊天，不扫描以前的记录。</span><button type="button" disabled={loading || retrying} onClick={() => void refresh()}>{loading ? '读取中…' : '刷新'}</button></div>
     {error && <p className="keyword-error" role="alert">{error}</p>}{notice && <p className="keyword-notice" role="status">{notice}</p>}
-    {!loaded ? !error && <p role="status">正在读取关键词与命中记录…</p> : <KeywordRadarContent groups={groups} hits={hits} status={status} api={api} refreshGroups={refreshGroups} retry={() => void retry()} retrying={retrying} />}
+    {!loaded ? !error && <p role="status">正在读取关键词与命中记录…</p> : <KeywordRadarContent groups={groups} hits={hits} status={status} api={api} refreshGroups={refreshGroups} retry={() => void retry()} retrying={retrying} onRescanComplete={refresh} />}
   </div>
 }

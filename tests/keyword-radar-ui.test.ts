@@ -17,7 +17,7 @@ describe('关键词雷达展示契约', () => {
   it('只有关键词设置和最近命中两区，空状态解释未来匹配边界', () => {
     const html = render()
     expect(html.match(/<section /g)).toHaveLength(2)
-    for (const text of ['关键词设置', '最近命中', '还没有设置关键词', '还没有命中记录', '不扫描以前的聊天记录', '规则修改只影响之后新导入的聊天']) expect(html).toContain(text)
+    for (const text of ['关键词设置', '最近命中', '还没有设置关键词', '还没有命中记录', '不自动扫描以前的聊天记录', '不会自动重新扫描以前的记录']) expect(html).toContain(text)
     expect(html).not.toMatch(/keyword-pending|keyword-failed|热度|趋势图|仪表盘/)
   })
   it('关键词组和词可启停，停用状态、表单标签、归档入口明确，无关键词原地编辑', () => {

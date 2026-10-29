@@ -30,6 +30,11 @@ contextBridge.exposeInMainWorld('privateRadar', {
     openCommitmentCandidateEvidence: (id: string) => ipcRenderer.invoke('commitment-candidates:open-evidence', id)
   } satisfies CommitmentDesktopApi,
   keywordRadar: {
+    historicalRescan: {
+      start: groupId => ipcRenderer.invoke('keyword-radar:rescan-start', groupId),
+      status: groupId => ipcRenderer.invoke('keyword-radar:rescan-status', groupId),
+      cancel: runId => ipcRenderer.invoke('keyword-radar:rescan-cancel', runId)
+    },
     listGroups: () => ipcRenderer.invoke('keyword-radar:groups'),
     createGroup: (name: string) => ipcRenderer.invoke('keyword-radar:create-group', name),
     renameGroup: (id: string, name: string) => ipcRenderer.invoke('keyword-radar:rename-group', id, name),

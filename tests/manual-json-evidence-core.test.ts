@@ -240,7 +240,7 @@ describe('共享手动 JSON 原始证据来源链', () => {
     const hitContext = getKeywordHitContext(f.db, hit.id)
     expect(hitContext.batchItemId).toBe(result.batchItemId)
     expect(hitContext.entries.length).toBeGreaterThan(0)
-    expect(hitContext.entries.every(row => row.batchItemId === result.batchItemId && positions.includes(row.sourcePosition) &&
+    expect(hitContext.entries.every(row => row.batchItemId === result.batchItemId && row.sourcePosition !== null && positions.includes(row.sourcePosition) &&
       row.chatTimestamp === message().timestamp && row.senderName === '隔离发送人')).toBe(true)
     const candidate = listCommitmentCandidates(f.db).find(candidate => candidate.batchItemId === result.batchItemId)!
     const candidateContext = getCommitmentCandidateContext(f.db, candidate.id)

@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { migrateBatchImportSchema } from './batch-import/schema'
+import { ensureHistoricalRescanSchema } from './keyword-radar/historical-rescan-schema'
 
 export function initializeDatabase(db: DatabaseSync): void {
   db.exec('PRAGMA journal_mode = WAL')
@@ -340,6 +341,7 @@ export function initializeDatabase(db: DatabaseSync): void {
   migrateBatchImportSchema(db)
   // 沿用按列检测的增量迁移，不重建消息表或全文索引。
   ensureConversationLabel(db)
+  ensureHistoricalRescanSchema(db)
 }
 
 function migrateImportBatchTimes(db: DatabaseSync): void {

@@ -10,7 +10,7 @@ export async function openKeywordHitEvidence(
   db: DatabaseSync, databasePath: string, hitId: unknown, openPath: (path: string) => Promise<string>
 ): Promise<{ batchItemId: string; opened: true }> {
   const source = getKeywordHitSource(db, hitId)
-  if (!source.evidenceRecorded) throw new KeywordRadarDesktopError('EVIDENCE_UNAVAILABLE')
+  if (!source.evidenceRecorded || !source.batchItemId) throw new KeywordRadarDesktopError('EVIDENCE_UNAVAILABLE')
   return openBatchItemEvidence(db, databasePath, source.batchItemId, openPath)
 }
 

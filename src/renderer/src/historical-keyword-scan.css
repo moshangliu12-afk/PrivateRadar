@@ -1,0 +1,4 @@
+.historical-keyword-scan { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
+.historical-keyword-scan small { display: block; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.historical-keyword-scan p { margin: 8px 0; font-size: 12px; line-height: 1.6; }
+.historical-keyword-scan progress { width: 100%; height: 8px; accent-color: var(--lime-ink); }

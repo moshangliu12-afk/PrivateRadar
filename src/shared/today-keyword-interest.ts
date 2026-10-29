@@ -7,11 +7,13 @@ export interface TodayKeywordInterestMatch {
   term: string
 }
 export interface TodayKeywordInterestItem extends KeywordOccurrenceView {
+  batchItemId: string
+  sourcePosition: number
   chatTimestamp: string
   representativeHitId: string
   matchedTerms: string[]
   matches: TodayKeywordInterestMatch[]
-  source: KeywordHitSource
+  source: KeywordHitSource & { batchItemId: string; ordinal: number; evidenceKind: 'zip' | 'directory' }
 }
 export interface TodayKeywordInterest {
   todayDate: string

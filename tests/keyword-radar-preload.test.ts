@@ -10,7 +10,7 @@ describe('关键词雷达类型化预加载边界', () => {
     await root.getTodayKeywordInterest()
     expect(electron.ipcRenderer.invoke.mock.calls).toEqual([['dashboard:keyword-interest']])
   })
-  it('仅开放 13 个产品动作，原接口保留，不开放路径或 SQL', async () => {
+  it('保留 13 个原动作并增加窄历史扫描接口，不开放路径或 SQL', async () => {
     await import('../src/preload/index')
     const [name, root] = electron.contextBridge.exposeInMainWorld.mock.calls[0] as unknown as [string, Record<string, any>]
     expect(name).toBe('privateRadar')
@@ -23,7 +23,10 @@ describe('关键词雷达类型化预加载边界', () => {
       ['keyword-radar:archive-group', id], ['keyword-radar:add-term', id, '南京'], ['keyword-radar:term-enabled', id, true], ['keyword-radar:hits', 100],
       ['keyword-radar:status'], ['keyword-radar:retry-failed'], ['keyword-radar:context', id], ['keyword-radar:source', id], ['keyword-radar:open-evidence', id]
     ])
-    expect(Object.keys(api)).toHaveLength(13)
+    expect(Object.keys(api)).toHaveLength(14)
+    expect(Object.keys(api.historicalRescan!)).toEqual(['start', 'status', 'cancel'])
+    await api.historicalRescan!.start(id); await api.historicalRescan!.status(id); await api.historicalRescan!.cancel(id)
+    expect(electron.ipcRenderer.invoke.mock.calls.slice(-3)).toEqual([['keyword-radar:rescan-start', id], ['keyword-radar:rescan-status', id], ['keyword-radar:rescan-cancel', id]])
     for (const key of ['executeSql', 'readFile', 'markComplete', 'markFailed', 'replaceSnapshot', 'match']) expect(api).not.toHaveProperty(key)
     for (const key of ['askChat', 'getDashboardSummary', 'getTopicRadarSummary', 'listCollections']) expect(root[key]).toBeTypeOf('function')
   })

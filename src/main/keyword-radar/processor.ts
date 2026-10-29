@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import { parseMatchedTermsSnapshot, parseRulesSnapshot } from './contracts'
 import { matchKeywordSnapshot } from './matcher'
+import { rulesAfterHistoricalRescan } from './historical-rescan'
 import { markKeywordRadarAttemptStarted, markKeywordRadarComplete, markKeywordRadarFailed, parseKeywordRunSourcePositions, type KeywordRadarRun } from './runs'
 
 type FailureCode = 'INVALID_SNAPSHOT' | 'PROCESSING_FAILED' | 'OCCURRENCE_INTEGRITY_FAILED' | 'HIT_CONFLICT'
@@ -63,7 +64,7 @@ function processRun(db: DatabaseSync, batchItemId: string, retry: boolean): Keyw
         code = 'OCCURRENCE_INTEGRITY_FAILED'
         throw new Error(code)
       }
-      for (const match of matchKeywordSnapshot(occurrence.content, rules)) {
+      for (const match of matchKeywordSnapshot(occurrence.content, rulesAfterHistoricalRescan(db, rules, batchItemId, position))) {
         const snapshot = JSON.stringify(match.matched_terms)
         const inserted = insert.run(randomUUID(), match.group_id, batchItemId, position, match.group_name, snapshot, matchedAt)
         if (inserted.changes === 0) {
@@ -73,6 +74,11 @@ function processRun(db: DatabaseSync, batchItemId: string, retry: boolean): Keyw
             JSON.stringify(parseMatchedTermsSnapshot(String(old.matched_terms_snapshot))) !== snapshot) throw new Error(code)
           code = 'PROCESSING_FAILED'
         }
+        // 同一原文后来获得真实来源命中时，退休直接历史命中，保留覆盖标记但不复制两套结果。
+        db.prepare(`UPDATE keyword_rescan_coverage SET matched_terms_snapshot=NULL,matched_at=NULL
+          WHERE group_id=? AND batch_item_id IS NULL AND matched_terms_snapshot IS NOT NULL
+          AND message_id=(SELECT message_id FROM batch_item_message_sources WHERE batch_item_id=? AND source_position=?)`)
+          .run(match.group_id, batchItemId, position)
         hitCount++
       }
     }
