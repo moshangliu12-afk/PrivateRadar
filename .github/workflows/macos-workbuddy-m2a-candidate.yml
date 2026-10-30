@@ -49,7 +49,7 @@ jobs:
       - name: 探测与平台专项测试
         run: |
           mkdir -p release/m2a-diagnostics
-          npm test -- tests/macos-workbuddy-probe.test.ts tests/macos-workbuddy-probe-ui.test.tsx tests/macos-platform-startup.test.ts tests/macos-platform-ui.test.tsx tests/macos-platform-boundaries.test.ts --maxWorkers=2 --testTimeout=30000 --reporter=default --reporter=json --outputFile=release/m2a-diagnostics/targeted.json
+          npm test -- tests/macos-runtime-delivery.test.ts tests/macos-workbuddy-probe.test.ts tests/macos-workbuddy-probe-ui.test.tsx tests/macos-platform-startup.test.ts tests/macos-platform-ui.test.tsx tests/macos-platform-boundaries.test.ts --maxWorkers=2 --testTimeout=30000 --reporter=default --reporter=json --outputFile=release/m2a-diagnostics/targeted.json
       - name: 完整测试
         run: npm test -- --maxWorkers=2 --testTimeout=30000 --reporter=default --reporter=json --outputFile=release/m2a-diagnostics/full.json
       - name: 构建应用及既有构建检查

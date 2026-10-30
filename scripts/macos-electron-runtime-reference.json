@@ -1,0 +1,30 @@
+{
+  "source": "https://github.com/electron/electron/releases/download/v44.10.0/electron-v44.10.0-darwin-arm64.zip",
+  "archive_sha256": "8e9f6041d3aa62229332b033d0390fd213a9b10cd078163f3f5fe988ee91baf7",
+  "npm_integrity": "sha512-ss4pCfrQKV4TWkuVYtWB4HmeysPZgB96cSYNKYZv1UVCRP4vQMGNW5oopFbvx6Bbfce1XtP5pm5RDuKehp0svQ==",
+  "versions": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "electron": "44.10.0",
+    "chrome": "152.0.7977.169",
+    "node": "24.22.1"
+  },
+  "files": {
+    "LICENSE": {
+      "bytes": 1096,
+      "sha256": "5154e165bd6c2cc0cfbcd8916498c7abab0497923bafcd5cb07673fe8480087d"
+    },
+    "LICENSES.chromium.html": {
+      "bytes": 20115518,
+      "sha256": "3375e2a9bd7bc631738fde10be6548a76efe8cf5e4b8826b8140ba8b0c4d6353"
+    },
+    "Electron.app/Contents/Frameworks/Electron Framework.framework/Versions/A/Electron Framework": {
+      "bytes": 203639312,
+      "sha256": "5b269fa6f666ac9815b18f7ce6ae9173644e9a1716ef17e73a8e54bd40920d4b"
+    }
+  },
+  "node_notice_sha256": "1f88fd8abc0fc59a108512b681cc0e95c8200e13491cc9a90c161541a8b73ce2",
+  "official_archive_verified": true,
+  "installed_bytes_match": true,
+  "verified_by": "https://github.com/moshangliu12-afk/PrivateRadar/actions/runs/41041805798"
+}

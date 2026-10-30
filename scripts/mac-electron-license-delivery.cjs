@@ -4,13 +4,14 @@ const { createHash } = require('node:crypto')
 const { constants, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync } = require('node:fs')
 const { dirname, isAbsolute, join, relative, sep } = require('node:path')
 
-// 摘要来自已核验的官方 44.3.0 darwin-arm64 原包，不使用 Windows 材料。
+// 摘要来自独立下载并核验的官方 44.10.0 darwin-arm64 原包，不使用 Windows 材料。
+// 来源记录见 macos-electron-runtime-reference.json；保留所有版本、原字节和架构门禁。
 const expected = Object.freeze({
-  electron: '44.3.0', chrome: '152.0.7977.78', node: '24.20.0',
+  electron: '44.10.0', chrome: '152.0.7977.169', node: '24.22.1',
   electronLicense: '5154e165bd6c2cc0cfbcd8916498c7abab0497923bafcd5cb07673fe8480087d',
-  chromiumNotices: 'a62dabd1c6ef1327365b2a3fdffb806222684a746dcb8f4afd1c1f690eba5535',
+  chromiumNotices: '3375e2a9bd7bc631738fde10be6548a76efe8cf5e4b8826b8140ba8b0c4d6353',
   nodeNotice: '1f88fd8abc0fc59a108512b681cc0e95c8200e13491cc9a90c161541a8b73ce2',
-  framework: '8c8ba438c3b55fab5a1f5d0d43a9d149a504936eccc1cadb17b90b534faff74f'
+  framework: '5b269fa6f666ac9815b18f7ce6ae9173644e9a1716ef17e73a8e54bd40920d4b'
 })
 const filenames = Object.freeze({
   electronLicense: 'Electron-LICENSE.txt', chromiumNotices: 'Electron-LICENSES.chromium.html'
@@ -51,7 +52,7 @@ function ensureMacElectronRuntime(projectRoot) {
     regularFile(installer)
     const checksums = JSON.parse(readFileSync(join(packageRoot, 'checksums.json'), 'utf8'))
     assert.equal(checksums[`electron-v${expected.electron}-darwin-arm64.zip`],
-      '49b91ef265c603c8888500f807484b63816069c30f87ba2b403e7c87f0f45035', '官方 Mac 发行包校验和不匹配')
+      '8e9f6041d3aa62229332b033d0390fd213a9b10cd078163f3f5fe988ee91baf7', '官方 Mac 发行包校验和不匹配')
     // 只传递基本系统变量，固定官方目标；不继承镜像、缓存覆盖、跳过下载、调试或签名变量。
     const env = {}
     for (const name of ['PATH', 'HOME', 'TMPDIR', 'LANG', 'LC_ALL']) {
@@ -84,7 +85,7 @@ function verifyNodeNotice(bytes) {
     if (entity[0] !== '#') return entities[entity.toLowerCase()]
     return String.fromCodePoint(entity[1].toLowerCase() === 'x' ? parseInt(entity.slice(2), 16) : Number(entity.slice(1)))
   })
-  assert.equal(hash(text.replace(/\s+/gu, ' ').trim()), expected.nodeNotice, 'Node 24.20.0 完整通知不匹配')
+  assert.equal(hash(text.replace(/\s+/gu, ' ').trim()), expected.nodeNotice, 'Node 24.22.1 完整通知不匹配')
   return 'YES'
 }
 
