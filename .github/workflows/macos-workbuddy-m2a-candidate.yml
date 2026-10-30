@@ -19,6 +19,9 @@ jobs:
     timeout-minutes: 60
     env:
       TZ: UTC
+      TMPDIR: ${{ runner.temp }}
+      TEMP: ${{ runner.temp }}
+      TMP: ${{ runner.temp }}
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
     steps:
       - name: 检出本次候选源码
@@ -35,6 +38,7 @@ jobs:
       - name: 核对平台、架构与固定基线
         run: |
           node -e "const a=require('node:assert/strict'); a.equal(process.platform,'darwin'); a.equal(process.arch,'arm64'); a.equal(process.version,'v24.14.0'); a.equal(require('./package.json').version,'0.2.0-alpha.26')"
+          node -e "const a=require('node:assert/strict'),f=require('node:fs'),o=require('node:os'); a.equal(f.realpathSync(o.tmpdir()),o.tmpdir(),'测试临时目录必须使用实际路径，不能含系统别名')"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           git merge-base --is-ancestor 655cff57b58306b1158a61b1b61834ea43f73871 HEAD
           test -z "$(git status --short)"
