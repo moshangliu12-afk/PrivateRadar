@@ -7,6 +7,8 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CommitmentCandidateContext, CommitmentCandidateReview, CommitmentCandidateView, CommitmentDesktopApi, CommitmentResult } from '../src/shared/commitment'
+import type { SearchHistoryApi, SearchHistoryResult } from '../src/shared/search-history'
+import { useSearchHistory } from '../src/renderer/src/search-history'
 import { ConfirmedCommitmentCard, ConfirmedCommitmentsContent, ConfirmedCommitmentsPage, selectConfirmedCommitments } from '../src/renderer/src/confirmed-commitments-page'
 import { CommitmentCandidatesContent, CommitmentCandidatesPage } from '../src/renderer/src/commitment-candidates-page'
 import { App } from '../src/renderer/src/App'
@@ -18,8 +20,13 @@ import { reviewFixture, reviewDatabaseFingerprint, saveReviewEvidence } from './
 import { cleanupRadarFixtures, ingestRadarItem } from './keyword-radar-fixture'
 import { commitmentMessages } from './commitment-processing-fixture'
 
-interface HookFrame { slots: unknown[]; cursor: number; effects: Array<() => void | (() => void)> }
+interface EffectSlot { dependencies?: readonly unknown[]; cleanup?: () => void }
+interface HookFrame {
+  slots: unknown[]; cursor: number; effects: Array<() => void>
+  effectSlots: Map<number, EffectSlot>; stateUpdates: number
+}
 const hooks = vi.hoisted(() => ({ active: null as HookFrame | null }))
+const mountedHosts = new Set<() => void>()
 // 沿用既有行为测试方式，仅替换钩子宿主；按钮处理函数和静态渲染使用产品组件。
 vi.mock('react', async importOriginal => {
   const actual = await importOriginal<typeof import('react')>()
@@ -28,7 +35,10 @@ vi.mock('react', async importOriginal => {
       if (!hooks.active) return actual.useState(initial)
       const frame = hooks.active, position = frame.cursor++
       if (!(position in frame.slots)) frame.slots[position] = typeof initial === 'function' ? initial() : initial
-      return [frame.slots[position], (next: unknown) => { frame.slots[position] = typeof next === 'function' ? next(frame.slots[position]) : next }]
+      return [frame.slots[position], (next: unknown) => {
+        frame.stateUpdates++
+        frame.slots[position] = typeof next === 'function' ? next(frame.slots[position]) : next
+      }]
     },
     useRef(initial: unknown) {
       if (!hooks.active) return actual.useRef(initial)
@@ -36,13 +46,27 @@ vi.mock('react', async importOriginal => {
       if (!(position in frame.slots)) frame.slots[position] = { current: initial }
       return frame.slots[position]
     },
-    useEffect(effect: () => void | (() => void), dependencies: unknown[]) {
+    useEffect(effect: () => void | (() => void), dependencies?: readonly unknown[]) {
       if (!hooks.active) return actual.useEffect(effect, dependencies)
-      hooks.active.effects.push(effect)
+      const frame = hooks.active, position = frame.cursor++, previous = frame.effectSlots.get(position)
+      if (previous && dependencies && previous.dependencies?.length === dependencies.length &&
+        dependencies.every((value, at) => Object.is(value, previous.dependencies![at]))) return
+      const current: EffectSlot = { dependencies: dependencies ? [...dependencies] : undefined }
+      frame.effectSlots.set(position, current)
+      frame.effects.push(() => {
+        previous?.cleanup?.()
+        if (previous) previous.cleanup = undefined
+        const cleanup = effect()
+        if (typeof cleanup === 'function') current.cleanup = cleanup
+      })
     }
   }
 })
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); cleanupRadarFixtures() })
+afterEach(() => {
+  for (const unmount of mountedHosts) unmount()
+  hooks.active = null
+  vi.restoreAllMocks(); vi.unstubAllGlobals(); cleanupRadarFixtures()
+})
 const candidate: CommitmentCandidateView = {
   id: '候选乙', status: 'confirmed', reviewedAt: '2035-01-02T01:00:00Z', batchItemId: '附件乙', sourcePosition: 5, messageId: '共享规范消息',
   body: '这个问题我来处理', senderName: '来源乙发言人', chatTimestamp: '2026-10-07T02:20:00Z', timestampSource: 'source_native', conversationName: '乙会话',
@@ -50,6 +74,7 @@ const candidate: CommitmentCandidateView = {
   source: { batchItemId: '附件乙', attachmentName: '乙卡片.zip', ordinal: 1, evidenceKind: 'zip', evidenceStatus: 'available', evidenceRecorded: true }
 }
 const ok = <T>(value: T): CommitmentResult<T> => ({ ok: true, value })
+const historyOk = (value: string[]): SearchHistoryResult<string[]> => ({ ok: true, value })
 function makeApi(): CommitmentDesktopApi {
   return {
     listCommitmentCandidates: vi.fn(async () => ok([candidate])),
@@ -60,10 +85,23 @@ function makeApi(): CommitmentDesktopApi {
   }
 }
 function host() {
-  const frame: HookFrame = { slots: [], cursor: 0, effects: [] }
-  return { frame, render<T>(component: (props: T) => React.JSX.Element, props: T) {
-    frame.cursor = 0; frame.effects = []; hooks.active = frame
-    try { return component(props) } finally { hooks.active = null }
+  const frame: HookFrame = { slots: [], cursor: 0, effects: [], effectSlots: new Map(), stateUpdates: 0 }
+  let unmounted = false
+  const unmount = () => {
+    if (unmounted) return
+    unmounted = true
+    for (const effect of frame.effectSlots.values()) { effect.cleanup?.(); effect.cleanup = undefined }
+    frame.effects = []
+    mountedHosts.delete(unmount)
+  }
+  mountedHosts.add(unmount)
+  return { frame, unmount, render<T, R>(component: (props: T) => R, props: T): R {
+    if (unmounted) throw new Error('不能重新渲染已卸载的测试宿主')
+    frame.cursor = 0; hooks.active = frame
+    let result: R
+    try { result = component(props) } finally { hooks.active = null }
+    for (const effect of frame.effects.splice(0)) effect()
+    return result
   } }
 }
 function elements(node: ReactNode): Array<ReactElement<Record<string, unknown>>> {
@@ -174,7 +212,7 @@ describe('只读按钮与刷新', () => {
   it('首次进入与刷新重新读取，审核修订后消失或出现，不保存审核状态', async () => {
     const api = makeApi(), view = host(), render = () => view.render(ConfirmedCommitmentsPage, { api })
     let tree = render(); expect(html(tree)).toContain('正在读取'); expect(html(tree)).not.toContain('还没有已确认')
-    view.frame.effects[0](); await settle()
+    await settle()
     expect(html(render())).toContain(candidate.body)
     vi.mocked(api.listCommitmentCandidates).mockResolvedValue(ok([{ ...candidate, status: 'ignored' }]))
     button(render(), '刷新').onClick(); await settle()
@@ -188,7 +226,7 @@ describe('只读按钮与刷新', () => {
   })
   it('失败与空结果分开，刷新失败不将旧结果作为当前结果，重新加载可恢复', async () => {
     const api = makeApi(), view = host(), render = () => view.render(ConfirmedCommitmentsPage, { api })
-    render(); view.frame.effects[0](); await settle(); expect(html(render())).toContain(candidate.body)
+    render(); await settle(); expect(html(render())).toContain(candidate.body)
     vi.mocked(api.listCommitmentCandidates).mockRejectedValue(new Error('SQLite C:\\内部路径'))
     button(render(), '刷新').onClick(); await settle()
     const failed = html(render()); expect(failed).toContain('加载失败'); expect(failed).not.toContain('还没有已确认')
@@ -200,13 +238,16 @@ describe('只读按钮与刷新', () => {
   it('接口安全错误不冒充空结果，卸载前未完成的列表不能回填', async () => {
     const api = makeApi(), view = host(), render = () => view.render(ConfirmedCommitmentsPage, { api })
     vi.mocked(api.listCommitmentCandidates).mockResolvedValue({ ok: false, error: { code: 'OPERATION_FAILED', message: '敏感消息' } })
-    render(); view.frame.effects[0](); await settle()
+    render(); await settle()
     expect(html(render())).toContain('加载失败'); expect(html(render())).not.toContain('敏感消息')
     let resolve!: (result: CommitmentResult<CommitmentCandidateView[]>) => void
     vi.mocked(api.listCommitmentCandidates).mockImplementation(() => new Promise(next => { resolve = next }))
-    render(); const cleanup = view.frame.effects[0]()!; cleanup()
-    resolve(ok([candidate])); await settle()
+    button(render(), '刷新').onClick()
     expect(html(render())).not.toContain(candidate.body)
+    view.unmount()
+    const updatesAfterUnmount = view.frame.stateUpdates
+    resolve(ok([candidate])); await settle()
+    expect(view.frame.stateUpdates).toBe(updatesAfterUnmount)
   })
 })
 
@@ -215,7 +256,7 @@ describe('审核分区与真实导航', () => {
     const api = makeApi(), view = host(), pending = { ...candidate, status: 'pending' as const, reviewedAt: null }
     vi.mocked(api.listCommitmentCandidates).mockResolvedValue(ok([pending]))
     const render = () => view.render(CommitmentCandidatesPage, { api })
-    render(); view.frame.effects[0](); await settle()
+    render(); await settle()
     const update = (status: 'confirmed' | 'ignored') => {
       const content = elements(render()).find(element => element.type === CommitmentCandidatesContent)!
       ;(content.props.onReviewed as (review: CommitmentCandidateReview) => void)({ id: candidate.id, status, reviewedAt: candidate.reviewedAt })
@@ -234,13 +275,31 @@ describe('审核分区与真实导航', () => {
   })
   it('应用导航进入独立只读页，标题及说明准确，仍能回到审核页，不新增候选回跳', async () => {
     const api = makeApi()
-    vi.stubGlobal('window', { privateRadar: { commitmentCandidates: api,
-      getDashboardSummary: vi.fn(async () => ({ date: null, items: [], demoMode: false, messageCount: 0, conversationCount: 0, totalMessageCount: 0, candidateCount: 0, finalIntelligenceCount: 0, telemetry: null, mode: 'rule' })),
-      getFirstUseStatus: vi.fn(async () => ({ firstLaunch: false, latestImport: null, dataStatus: { latestMessageDate: null } }))
-    } })
+    const history: SearchHistoryApi = {
+      list: vi.fn(async () => historyOk(['已有搜索词'])),
+      record: vi.fn(async () => historyOk([])),
+      remove: vi.fn(async () => historyOk([])),
+      clear: vi.fn(async () => historyOk([]))
+    }
+    const summary = vi.fn(async () => ({ date: null, items: [], demoMode: false, messageCount: 0, conversationCount: 0, totalMessageCount: 0, candidateCount: 0, finalIntelligenceCount: 0, telemetry: null, mode: 'rule' }))
+    const firstUse = vi.fn(async () => ({ firstLaunch: false, latestImport: null, dataStatus: { latestMessageDate: null } }))
+    let nextTimer = 0
+    const startTimer = vi.fn(() => ++nextTimer), stopTimer = vi.fn<(_timer: number) => void>()
+    vi.stubGlobal('window', { privateRadar: { commitmentCandidates: api, searchHistory: history,
+      getDashboardSummary: summary, getFirstUseStatus: firstUse
+    }, dispatchEvent: vi.fn(), setInterval: startTimer, clearInterval: stopTimer })
     const view = host(), render = () => view.render(App, {})
-    render(); view.frame.effects[0](); await settle()
+    render(); await settle()
+    expect(history.list).toHaveBeenCalledOnce()
+    expect(summary).toHaveBeenCalledOnce(); expect(firstUse).toHaveBeenCalledOnce()
     let tree = render(); button(tree, '承诺表达（已确认）').onClick(); tree = render()
+    const activeTimers = startTimer.mock.results.map(result => result.value)
+    expect(stopTimer.mock.calls.map(call => call[0])).toEqual(activeTimers.slice(0, -1))
+    const timerCount = startTimer.mock.calls.length
+    render(); render()
+    expect(startTimer).toHaveBeenCalledTimes(timerCount)
+    expect(history.list).toHaveBeenCalledOnce()
+    expect(summary).toHaveBeenCalledOnce(); expect(firstUse).toHaveBeenCalledOnce()
     expect(button(tree, '承诺表达（已确认）')['aria-current']).toBe('page')
     expect(elements(tree).some(element => element.type === ConfirmedCommitmentsPage)).toBe(true)
     expect(elements(tree).some(element => element.type === 'h1' && element.props.children === '承诺表达（已确认）')).toBe(true)
@@ -251,6 +310,30 @@ describe('审核分区与真实导航', () => {
     expect(elements(tree).some(element => element.type === CommitmentCandidatesPage)).toBe(true)
     expect(elements(tree).some(element => element.type === ConfirmedCommitmentsPage)).toBe(false)
     expect(api.confirmCommitmentCandidate).not.toHaveBeenCalled(); expect(api.ignoreCommitmentCandidate).not.toHaveBeenCalled()
+    view.unmount(); view.unmount()
+    expect(stopTimer.mock.calls.map(call => call[0])).toEqual(startTimer.mock.results.map(result => result.value))
+  })
+  it('搜索历史依赖变化重新挂载，稳定依赖不重复请求，卸载后晚回包不写状态', async () => {
+    const history = (entries: string[]): SearchHistoryApi => ({
+      list: vi.fn(async () => historyOk(entries)),
+      record: vi.fn(async () => historyOk(entries)),
+      remove: vi.fn(async () => historyOk(entries)),
+      clear: vi.fn(async () => historyOk([]))
+    })
+    const first = history(['旧历史']), second = history(['新历史']), view = host()
+    const render = (api: SearchHistoryApi) => view.render(({ api }) => useSearchHistory(api), { api })
+    render(first); await settle(); expect(render(first).entries).toEqual(['旧历史'])
+    expect(first.list).toHaveBeenCalledOnce()
+    render(second); await settle(); expect(render(second).entries).toEqual(['新历史'])
+    expect(second.list).toHaveBeenCalledOnce()
+    let finish!: (result: SearchHistoryResult<string[]>) => void
+    vi.mocked(second.record).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const pending = render(second).record('卸载前搜索')
+    view.unmount()
+    const updatesAfterUnmount = view.frame.stateUpdates
+    finish({ ok: true, value: ['卸载前搜索', '新历史'] }); await pending; await settle()
+    expect(view.frame.stateUpdates).toBe(updatesAfterUnmount)
+    expect(second.record).toHaveBeenCalledExactlyOnceWith('卸载前搜索')
   })
 })
 
@@ -276,7 +359,7 @@ describe('隔离数据库与当前附件只读回源', () => {
     }
     f.db.exec('PRAGMA query_only=ON')
     const page = host(), render = () => page.render(ConfirmedCommitmentsPage, { api })
-    render(); page.frame.effects[0](); await settle(); expect(html(render())).toContain(current.body)
+    render(); await settle(); expect(html(render())).toContain(current.body)
     button(render(), '刷新').onClick(); await settle(); expect(html(render())).toContain(current.body)
     const card = host(), renderCard = () => card.render(ConfirmedCommitmentCard, { candidate: current, api })
     button(renderCard(), '查看上下文').onClick(); await settle()
@@ -321,7 +404,7 @@ describe('共享真实 JSON 与只读 DB 的承诺 UI', () => {
     }
     f.db.exec('PRAGMA query_only=ON')
     const page = host(), render = () => page.render(ConfirmedCommitmentsPage, { api })
-    render(); page.frame.effects[0](); await settle(); expect(html(render())).toContain(current.body)
+    render(); await settle(); expect(html(render())).toContain(current.body)
     button(render(), '刷新').onClick(); await settle(); expect(html(render())).toContain(current.body)
     const card = host(), renderCard = () => card.render(ConfirmedCommitmentCard, { candidate: current, api })
     button(renderCard(), '查看上下文').onClick(); await settle()

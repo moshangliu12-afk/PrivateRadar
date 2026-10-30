@@ -58,6 +58,9 @@ it('真实生产主进程入口可执行双向来源查询，不注册额外通�
             export const ipcMain = { handle() { globalThis.__communicationCount++; } };
             export const BrowserWindow = class { constructor() { throw new Error('禁止启动窗口'); } };
             export const dialog = {}, Menu = {}, shell = {};
+            // 仅满足生产入口链接；来源查询不得触发剪贴板或 PDF 会话副作用。
+            export const clipboard = { writeText() { throw new Error('禁止访问剪贴板'); } };
+            export const session = { fromPartition() { throw new Error('禁止创建打印会话'); } };
           \` };
         }
       });

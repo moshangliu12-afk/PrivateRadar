@@ -28,13 +28,11 @@ function database(path = ':memory:'): DatabaseSync {
   return db
 }
 
-function tableFingerprints(db: DatabaseSync, names: string[]): Record<string, string> {
+function tableFingerprints(db: DatabaseSync, names: string[], columns: Record<string, string[]>): Record<string, string> {
   return Object.fromEntries(names.map((name) => {
-    const rows = db.prepare(`SELECT * FROM "${name.replaceAll('"', '""')}"`).all().map((row) => {
-      const copy = { ...row }
-      if (name === 'batch_import_sessions') delete copy.collection_id
-      return JSON.stringify(copy, (_key, value) => value instanceof Uint8Array ? Buffer.from(value).toString('hex') : value)
-    }).sort()
+    const projection = columns[name].map(column => `"${column.replaceAll('"', '""')}"`).join(', ')
+    const rows = db.prepare(`SELECT ${projection} FROM "${name.replaceAll('"', '""')}"`).all()
+      .map(row => JSON.stringify(row, (_key, value) => value instanceof Uint8Array ? Buffer.from(value).toString('hex') : value)).sort()
     return [name, createHash('sha256').update(JSON.stringify(rows)).digest('hex')]
   }))
 }
@@ -78,7 +76,11 @@ describe('归集结构版本 5 隔离迁移', () => {
     const evidenceBefore = createHash('sha256').update(readFileSync(evidencePath)).digest('hex')
     const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
       .all().map((row) => String(row.name))
-    const before = tableFingerprints(db, tables)
+    // 固定迁移前已有的全部列，后续合法新增列另行断言，不能改变旧值比较范围。
+    const columns = Object.fromEntries(tables.map(name => [name,
+      db.prepare(`PRAGMA table_info("${name.replaceAll('"', '""')}")`).all().map(column => String(column.name))]))
+    const before = tableFingerprints(db, tables, columns)
+    const conversationIdsBefore = db.prepare('SELECT id FROM conversations ORDER BY id').all()
     const objects = db.prepare("SELECT name, type, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name != 'batch_import_sessions' ORDER BY name").all()
     const sessionsBefore = db.prepare('SELECT * FROM batch_import_sessions ORDER BY id').all()
     const rowidsBefore = db.prepare('SELECT rowid, * FROM messages ORDER BY rowid').all()
@@ -86,7 +88,7 @@ describe('归集结构版本 5 隔离迁移', () => {
 
     migrateBatchImportSchema(db)
     expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 8 })
-    expect(tableFingerprints(db, tables)).toEqual(before)
+    expect(tableFingerprints(db, tables, columns)).toEqual(before)
     expect(db.prepare('SELECT * FROM batch_import_sessions ORDER BY id').all())
       .toEqual(sessionsBefore.map((session) => ({ ...session, collection_id: null })))
     expect(db.prepare('SELECT rowid, * FROM messages ORDER BY rowid').all()).toEqual(rowidsBefore)
@@ -98,7 +100,13 @@ describe('归集结构版本 5 隔离迁移', () => {
     expect(createHash('sha256').update(readFileSync(evidencePath)).digest('hex')).toBe(evidenceBefore)
     initializeDatabase(db)
     initializeDatabase(db)
-    expect(tableFingerprints(db, tables)).toEqual(before)
+    expect(tableFingerprints(db, tables, columns)).toEqual(before)
+    expect(db.prepare('PRAGMA table_info(conversations)').all().find(column => column.name === 'user_conversation_label'))
+      .toMatchObject({ type: 'TEXT', notnull: 0, dflt_value: null })
+    expect(db.prepare('SELECT id, user_conversation_label FROM conversations ORDER BY id').all())
+      .toEqual(conversationIdsBefore.map(row => ({ ...row, user_conversation_label: null })))
+    expect(db.prepare("SELECT rowid FROM messages_fts WHERE messages_fts MATCH 'legacyfts' ORDER BY rowid").all()).toEqual(ftsBefore)
+    expect(createHash('sha256').update(readFileSync(evidencePath)).digest('hex')).toBe(evidenceBefore)
     healthy(db)
   })
 

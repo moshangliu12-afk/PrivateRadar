@@ -80,9 +80,9 @@ describe('结构版本 7 仅建立持久化基础', () => {
     expect(f.db.prepare('PRAGMA integrity_check').get()).toEqual({ integrity_check: 'ok' })
     expect(f.db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
   })
-  it('新库与真实四列旧结构升级后的最终结构一致，重复初始化不漂移，高版本不降级', () => {
+  it('新库与真实四列旧结构完整初始化后的最终结构一致，重复初始化不漂移，高版本不降级', () => {
     const f = legacyFixture(), fresh = radarFixture()
-    migrateBatchImportSchema(f.db)
+    initializeDatabase(f.db)
     expect(schema(f.db)).toEqual(schema(fresh.db))
     const before = schema(f.db), data = fingerprints(f.db)
     initializeDatabase(f.db); initializeDatabase(f.db)
