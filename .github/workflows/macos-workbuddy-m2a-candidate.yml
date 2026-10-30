@@ -19,9 +19,6 @@ jobs:
     timeout-minutes: 60
     env:
       TZ: UTC
-      TMPDIR: ${{ runner.temp }}
-      TEMP: ${{ runner.temp }}
-      TMP: ${{ runner.temp }}
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
     steps:
       - name: 检出本次候选源码
@@ -35,6 +32,9 @@ jobs:
         with:
           node-version: '24.14.0'
           package-manager-cache: false
+      - name: 固定后续步骤使用实际临时目录
+        run: |
+          node -e "const f=require('node:fs'); const p=f.realpathSync(process.env.RUNNER_TEMP); if(/[\r\n]/.test(p)) throw new Error('无效临时路径'); f.appendFileSync(process.env.GITHUB_ENV,['TMPDIR='+p,'TEMP='+p,'TMP='+p].join('\n')+'\n')"
       - name: 核对平台、架构与固定基线
         run: |
           node -e "const a=require('node:assert/strict'); a.equal(process.platform,'darwin'); a.equal(process.arch,'arm64'); a.equal(process.version,'v24.14.0'); a.equal(require('./package.json').version,'0.2.0-alpha.26')"
