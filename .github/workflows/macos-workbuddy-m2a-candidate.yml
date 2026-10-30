@@ -56,6 +56,8 @@ jobs:
         run: npm run build
       - name: 真实 macOS 系统查询冒烟
         run: node scripts/verify-macos-workbuddy-probe.mjs
+      - name: 独立核验当前官方 Mac 运行时与许可材料
+        run: node scripts/macos-workbuddy-m2a-runtime-audit.mjs
       - name: 沿用既有 arm64 未签名打包流程
         run: npm run dist:mac:arm64
       - name: 生成 M2A 构建报告与 SHA256
