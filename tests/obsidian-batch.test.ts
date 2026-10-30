@@ -1,12 +1,23 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, win32 } from 'node:path'
 import { exportObsidianConversations } from '../src/main/export/obsidian-batch'
 import { exportObsidianVault, VAULT_MANIFEST, type VaultManifest } from '../src/main/export/obsidian-export'
 import { sha256 } from '../src/main/export/chat-markdown'
 import { ExportSelectionError } from '../src/main/export/chat-selection'
 import { cleanupExportFixtures, exportFixture, sourceFingerprint } from './markdown-export-fixture'
 import type { ObsidianExportOutcome } from '../src/shared/obsidian-export'
+
+// 本组用注入的单会话 worker 验证编排，不执行文件发布。非 Windows runner
+// 显式提供 Windows 路径词法依赖；真实 Windows 集成仍使用原安全实现。
+vi.mock('../src/main/batch-import/windows-path-lease', async original => {
+  const actual = await original<typeof import('../src/main/batch-import/windows-path-lease')>()
+  return { ...actual, safeAbsolutePath: (value: string) => {
+    if (process.platform === 'win32') return actual.safeAbsolutePath(value)
+    if (!win32.isAbsolute(value) || !/^[A-Za-z]:[\\/]/.test(value) || /[\x00-\x1f]/.test(value) || value.split(/[\\/]/).includes('..')) throw new Error('测试路径必须是安全的 Windows 绝对路径')
+    return win32.resolve(value)
+  } }
+})
 
 afterEach(() => { vi.restoreAllMocks(); cleanupExportFixtures() })
 const range = { type: 'conversation' as const, start_date: null, end_date: null }

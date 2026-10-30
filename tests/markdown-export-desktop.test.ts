@@ -1,10 +1,23 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { isAbsolute, resolve } from 'node:path'
+import { WindowsPathLease } from '../src/main/batch-import/windows-path-lease'
 import { registerMarkdownExportIpc } from '../src/main/export/markdown-export'
 import type { MarkdownExportApi } from '../src/shared/markdown-export'
 import { cleanupExportFixtures, exportFixture, sourceFingerprint } from './markdown-export-fixture'
 
 const electron = vi.hoisted(() => ({ invoke: vi.fn(), exposeInMainWorld: vi.fn() }))
 vi.mock('electron', () => ({ contextBridge: { exposeInMainWorld: electron.exposeInMainWorld }, ipcRenderer: { invoke: electron.invoke } }))
+
+// 通信、取消及只读查询使用真实临时数据库。非 Windows runner 只替换目录
+// 选择的词法依赖，避免在到达通信断言前失败；不模拟任何原生租约或文件发布。
+vi.mock('../src/main/batch-import/windows-path-lease', async original => {
+  const actual = await original<typeof import('../src/main/batch-import/windows-path-lease')>()
+  return { ...actual, safeAbsolutePath: (value: string) => {
+    if (process.platform === 'win32') return actual.safeAbsolutePath(value)
+    if (typeof value !== 'string' || !isAbsolute(value) || /[\x00-\x1f]/.test(value) || value.split(/[\\/]/).includes('..')) throw new Error('测试路径必须位于本机绝对目录')
+    return resolve(value)
+  } }
+})
 afterEach(() => { vi.restoreAllMocks(); cleanupExportFixtures() })
 function setup() {
   const f = exportFixture(); f.add('消息')
@@ -25,6 +38,7 @@ describe('导出桌面通信边界', () => {
     expect(sourceFingerprint(f.db)).toEqual(before)
   })
   it('单任务防重入、取消释放读取事务，输出打开不接受界面提供的任意路径', async () => {
+    const lock = vi.spyOn(WindowsPathLease.prototype, 'lock')
     const f = setup()
     await f.call('choose-directory')
     const first = f.call('start', f.request)
@@ -33,6 +47,7 @@ describe('导出桌面通信边界', () => {
     expect(await first).toMatchObject({ ok: true, value: { status: 'cancelled', directory: null } })
     expect(await f.call('open-output', 'C:\\不应打开')).toMatchObject({ ok: false })
     expect(f.desktop.openDirectory).not.toHaveBeenCalled()
+    expect(lock).not.toHaveBeenCalled()
     f.db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
   })
   it('无效输入或缺失会话返回安全错误，不向界面泄漏数据库路径或 SQL', async () => {
