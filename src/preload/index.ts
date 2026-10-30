@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { MacWorkBuddyProbeApi } from '../shared/macos-workbuddy-probe'
 import type { ConversationLabelApi } from '../shared/conversation-labels'
 import type { MarkdownExportApi } from '../shared/markdown-export'
 import type { SearchHistoryApi } from '../shared/search-history'
@@ -11,6 +12,10 @@ import type { CommitmentDesktopApi } from '../shared/commitment'
 import type { CandidateEvidence, ChatQueryResponse, ConnectorSetupResult, DailyBriefItem, DashboardSummary, FeedbackExportResult, FeedbackState, FirstUseStatus, ImportResult, MessageContext, TopicEvidence, TopicRadarSummary } from '../shared/models'
 
 contextBridge.exposeInMainWorld('privateRadar', {
+  ...(process.platform === 'darwin' ? { macWorkBuddyProbe: {
+    run: () => ipcRenderer.invoke('macos-workbuddy-probe:run'),
+    exportReport: () => ipcRenderer.invoke('macos-workbuddy-probe:export')
+  } satisfies MacWorkBuddyProbeApi } : {}),
   searchHistory: {
     list: () => ipcRenderer.invoke('search-history:list'),
     record: query => ipcRenderer.invoke('search-history:record', query),

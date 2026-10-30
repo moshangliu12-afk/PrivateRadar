@@ -3,6 +3,7 @@ import { ConversationName } from './conversation-labels'
 import { MarkdownExportPanel } from './markdown-export-panel'
 import { AddContextButton, ContextHandoffEntry } from './context-handoff'
 import { RecentSearches, useSearchHistory } from './search-history'
+import { MacWorkBuddyProbePanel } from './macos-workbuddy-probe'
 import type {
   CandidateEvidence,
   ChatQueryResponse,
@@ -711,6 +712,7 @@ export function SettingsPage({ status, importing, onImportFile, onConfigure, onC
       </div>
       {notice && <div role="status" className={`settings-operation-notice ${status.workBuddyConnected ? 'mode-notice' : 'error'}`}>{notice}</div>}
     </section>
+    <MacWorkBuddyProbePanel enabled={status.manualJsonOnly === true} />
     <MarkdownExportPanel />
     <footer className="settings-footer"><span className="settings-footer-mark" aria-hidden="true"><UiIcon name="shield" /></span><span>本地数据 · 由你掌握</span></footer>
   </section>

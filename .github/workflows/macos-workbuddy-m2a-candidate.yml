@@ -1,0 +1,77 @@
+name: macOS WorkBuddy M2A Candidate
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/macos-workbuddy-m2a-probe]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-workbuddy-m2a-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  candidate:
+    if: github.ref == 'refs/heads/feat/macos-workbuddy-m2a-probe'
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      TZ: UTC
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - name: 检出本次候选源码
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # 版本 7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: 设置已验证的 Node 版本
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # 版本 7.1.0
+        with:
+          node-version: '24.14.0'
+          package-manager-cache: false
+      - name: 核对平台、架构与固定基线
+        run: |
+          node -e "const a=require('node:assert/strict'); a.equal(process.platform,'darwin'); a.equal(process.arch,'arm64'); a.equal(process.version,'v24.14.0'); a.equal(require('./package.json').version,'0.2.0-alpha.26')"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git merge-base --is-ancestor 655cff57b58306b1158a61b1b61834ea43f73871 HEAD
+          test -z "$(git status --short)"
+      - name: 按锁文件安装依赖
+        run: npm ci
+      - name: 类型检查
+        run: npm run typecheck
+      - name: 探测与平台专项测试
+        run: |
+          mkdir -p release/m2a-diagnostics
+          npm test -- tests/macos-workbuddy-probe.test.ts tests/macos-workbuddy-probe-ui.test.tsx tests/macos-platform-startup.test.ts tests/macos-platform-ui.test.tsx tests/macos-platform-boundaries.test.ts --maxWorkers=2 --testTimeout=30000 --reporter=default --reporter=json --outputFile=release/m2a-diagnostics/targeted.json
+      - name: 完整测试
+        run: npm test -- --maxWorkers=2 --testTimeout=30000 --reporter=default --reporter=json --outputFile=release/m2a-diagnostics/full.json
+      - name: 构建应用及既有构建检查
+        run: npm run build
+      - name: 真实 macOS 系统查询冒烟
+        run: node scripts/verify-macos-workbuddy-probe.mjs
+      - name: 沿用既有 arm64 未签名打包流程
+        run: npm run dist:mac:arm64
+      - name: 生成 M2A 构建报告与 SHA256
+        run: node scripts/macos-workbuddy-m2a-candidate.mjs
+      - name: 上传朋友验收候选
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # 版本 4.6.2
+        with:
+          name: PrivateRadar-macOS-WorkBuddy-M2A-Probe-Candidate-${{ github.sha }}
+          path: release/m2a-candidate/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+      - name: 保存诊断记录
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # 版本 4.6.2
+        with:
+          name: macos-workbuddy-m2a-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            release/m2a-diagnostics/
+            release/stage3a-arm64/stage3a-package-report.json
+            release/stage3a-arm64/builder.log
+          if-no-files-found: warn
+          retention-days: 14

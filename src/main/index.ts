@@ -6,6 +6,7 @@ import { openDatabase, getDashboardSummary, getTopicRadarSummary, validateDashbo
 import { importChatFile } from './import/importer'
 import { registerConversationLabelIpc } from './conversation-labels'
 import { registerSearchHistoryIpc } from './search-history'
+import { currentProbeContext, registerMacWorkBuddyProbeIpc } from './macos-workbuddy-probe/desktop'
 import { registerMarkdownExportIpc } from './export/markdown-export'
 import { registerContextHandoffIpc } from './export/context-handoff-desktop'
 import { registerObsidianExportIpc } from './export/obsidian-desktop'
@@ -98,6 +99,16 @@ app.whenReady().then(() => {
   const db = openDatabase(databasePath, process.env.PRIVATE_RADAR_SEED_DEMO === 'true')
   registerConversationLabelIpc(ipcMain, db)
   registerSearchHistoryIpc(ipcMain, db)
+  if (process.platform === 'darwin') registerMacWorkBuddyProbeIpc(ipcMain, {
+    context: currentProbeContext(app),
+    chooseReportPath: async () => {
+      const selected = await dialog.showSaveDialog(mainWindow!, {
+        title: '导出检测报告', defaultPath: 'PrivateRadar-macOS-WorkBuddy-Probe-Report.json',
+        filters: [{ name: '检测报告', extensions: ['json'] }]
+      })
+      return selected.canceled ? null : selected.filePath ?? null
+    }
+  })
   const chooseExportDirectory = async (title: string): Promise<string | null> => {
     const chosen = await dialog.showOpenDialog(mainWindow!, { title, properties: ['openDirectory', 'createDirectory'] })
     return chosen.canceled ? null : chosen.filePaths[0] ?? null

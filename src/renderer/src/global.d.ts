@@ -8,6 +8,7 @@ import type { MarkdownExportApi } from '../../shared/markdown-export'
 import type { SearchHistoryApi } from '../../shared/search-history'
 import type { ContextHandoffApi } from '../../shared/context-handoff'
 import type { ObsidianExportApi } from '../../shared/obsidian-export'
+import type { MacWorkBuddyProbeApi } from '../../shared/macos-workbuddy-probe'
 
 declare global {
   interface Window {
@@ -19,6 +20,7 @@ declare global {
       searchHistory: SearchHistoryApi
       contextHandoff: ContextHandoffApi
       obsidianExport: ObsidianExportApi
+      macWorkBuddyProbe?: MacWorkBuddyProbeApi
       getDashboardSummary: (date?: string) => Promise<DashboardSummary>
       refreshDashboard: (date?: string) => Promise<DashboardSummary>
       regenerateDashboard: (date?: string) => Promise<DashboardSummary>
