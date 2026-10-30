@@ -1,10 +1,12 @@
-# PrivateRadar alpha.22 使用指南
+# PrivateRadar alpha.26 使用指南
 
-PrivateRadar 帮你整理主动导入的聊天，并能回到原始消息查看依据。当前版本为 `0.2.0-alpha.22`，[v0.2.0-alpha.22 Pre-release](https://github.com/moshangliu12-afk/PrivateRadar/releases/tag/v0.2.0-alpha.22) 已提供 Windows x64、macOS Apple Silicon arm64 安装资产、FFmpeg 对应源码和 `SHA256SUMS.txt`，统一绑定发行源码提交 `a4d9174c713341243a00799c3432543aaa4e7747`。Windows 安装、启动、重启和普通导入人工验收通过；macOS CI 打包与 DMG 检查通过，没有 alpha.22 实体 Mac 人工验证。历史版本及参考候选结论单独保留，不代替本版验收。
+PrivateRadar 帮你整理主动导入的聊天，并能回到原始消息查看依据。当前版本为 `0.2.0-alpha.26`，[本版 Windows 预发布页](https://github.com/moshangliu12-afk/PrivateRadar/releases/tag/v0.2.0-alpha.26) 提供正式 Windows x64 安装器。alpha.25 → alpha.26 正式覆盖升级已通过真实 Windows 人工验收，未检测到数据库分裂。新增能力见[本版发布说明](docs/releases/v0.2.0-alpha.26.md)。本版没有新的 macOS 安装包；下面的 Mac 章节只记录历史版本范围，不代表 alpha.26 Mac 验收或 macOS WorkBuddy 支持。
 
 ## Windows 安装与初次体验
 
-alpha.22 Windows 安装器为 `PrivateRadar-Setup-0.2.0-alpha.22-x64.exe`，仅 Windows x64，unsigned，非 Microsoft Store 分发。最终 payload 与人工验收版本的 104 个文件逐项一致，安装、启动、重启和普通导入结论已继承。从当前发行页获取并核对 `SHA256SUMS.txt`，再按向导安装。
+alpha.26 Windows 安装器为 `PrivateRadar-Setup-0.2.0-alpha.26-x64.exe`，仅 Windows x64，未签名，非 Microsoft Store 分发。文件大小为 `113660255` 字节，SHA256 为 `3dc908232d105ab9899d17798896b8f47b91f7768c89deb157e7e8d0953b27f4`。从本版发行页获取并核对文件大小和摘要，再按向导安装。
+
+从 alpha.25 升级前，先正常关闭 PrivateRadar、WorkBuddy 和连接器，完整备份并校验原数据目录，包括主数据库、存在的 WAL/SHM、Connector、Evidence、附件及其他文件。确认备份完整且原目录稳定后，在原位置正常覆盖升级。不要先卸载或删除历史数据，不以备份目录作为运行数据库，不改变 WorkBuddy Junction 或数据路径。升级后检查仍使用同一真实数据库，原有聊天、Evidence、自定义名称和关键词数据均存在。
 
 Windows 可能出现 SmartScreen / 未知发布者提示。核验来源和摘要后，如果系统提供“更多信息 → 仍要运行”，可由你选择单次继续；组织策略可能禁止继续。不指导关闭 Defender 或系统级安全功能。
 
@@ -37,7 +39,17 @@ Windows 可能出现 SmartScreen / 未知发布者提示。核验来源和摘要
 
 你不需要找 ZIP、填写路径或 JSON、复制聊天文本、选择证据，或手工调用工具。
 
-## macOS 安装与首次启动
+## alpha.26 的搜索、会话名称与导出
+
+- **会话名称**：点击名称旁的铅笔图标（提示“修改会话名称”）设置自定义名称。“未知会话”同样可编辑；清空后恢复来源名称，无来源名称时仍显示“未知会话”。重导入不会覆盖自定义名称。
+- **最近搜索**：实际提交搜索后，本地保留最近 6 条，重复词置顶；点击即可重新搜索，可以单条删除或清空。重启后仍保留，只保存搜索词，历史功能不新增外部网络请求。
+- **会话选择**：用复选框连续勾选多个会话，无需按 Ctrl。普通文件导出和 Obsidian 归档共用会话选择及日期范围。
+- **普通文件导出**：选择 Markdown、JSON、TXT 或 PDF，并选择普通文件保存位置。PDF 与其他格式共用 Export Core。
+- **Obsidian Vault 归档**：单独选择 Windows 本地 Vault，生成含 YAML Frontmatter 的 Markdown 笔记。Manifest 支持增量导出，未变化内容重复导出不重复生成，用户手动修改过的笔记受到保护。PrivateRadar 保持数据真源，Vault 不反向同步，也不自动复制附件。
+- **整理聊天给 AI 分析**：从聊天消息、Search 结果或 Evidence 选取消息，加入“准备分析的聊天记录”，预览后复制给 AI 或导出 Markdown / JSON。这个入口不自动上传、不调用外部 AI API；应用其他可选远程服务的行为仍以[隐私说明](PRIVACY.md)为准。
+- **关键词规则**：规则卡片显示累计有效“命中”、最近发现、最近扫描时间和状态。点击“扫描历史聊天”可手动重扫；重复扫描不重复计数，修改规则后需要扫描当前规则。统计包含符合当前规则的历史重扫和新导入实时命中。
+
+## 历史 macOS 安装与首次启动
 
 alpha.22 已提供 `PrivateRadar-0.2.0-alpha.22-macOS-arm64.dmg`，仅 Apple Silicon / arm64，不提供 Intel x64。实际为 unsigned、not notarized、无 Developer ID；用户无需 Apple Developer Program。该包已通过 GitHub Actions 构建、架构、许可及 DMG 检查，没有 alpha.22 实体 Mac 人工验证。
 
@@ -57,7 +69,7 @@ xattr -dr com.apple.quarantine "/Applications/PrivateRadar.app"
 
 alpha.22 已完成 CI / 包核验，实体 Mac 人工验证本轮未执行，与上述历史参考候选分开记录。源码开发方式另见 [README](README.md) 和 [贡献指南](CONTRIBUTING.md)。
 
-## macOS 手动 JSON
+## 历史 macOS 手动 JSON
 
 在 Mac 的文件导入入口选择 JSON 文件。该入口仅接受 JSON，不提供 Windows WorkBuddy 配置或正式分享链，也不承诺 CSV / TXT 能力。手动 JSON 会保留原始文件字节与消息快照为本地 Evidence；其来源身份与 WorkBuddy 原始卡片分开，不从文件声明恢复微信卡片来源事实。
 
