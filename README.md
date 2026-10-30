@@ -10,30 +10,17 @@ Windows 正式导入链：**微信 → WorkBuddy → PrivateRadar**；也支持 
 
 alpha.26 已完成真实 Windows 桌面验收及 alpha.25 → alpha.26 正式覆盖升级验收，未检测到数据库分裂。macOS WorkBuddy 尚未支持；历史 macOS arm64 安装包及其验收边界单独保留，不能视为 alpha.26 Mac 发行。
 
-![今日情报与原始依据](./docs/images/readme/privateradar-today.png)
-
-*此图为保留的 alpha.22 虚构数据演示，展示仍有效的今日情报流程；不是 alpha.26 新界面的截图。*
-
 ## alpha.26 新能力
 
-### 归档到 Obsidian 本地 Vault
+以下五张图片均为真实 alpha.26 Windows 界面，仅裁去无关区域，保留原始像素；点击图片可查看 PNG 原图。本机优先（Local First）、证据优先（Evidence First）：检索从本地聊天出发，结果可回到原文核对。
 
-- 在 Windows 选择本地 Vault，将聊天归档为 Markdown 笔记，包含 YAML Frontmatter 和日期组织。
-- Manifest 记录导出状态；未变化内容重复导出不会生成重复文件，支持增量导出。
-- 识别并保护用户手动修改过的笔记，避免静默覆盖。
-- **PrivateRadar 仍为数据真源（Source of Truth）**；Vault 是导出副本，不从 Obsidian 反向同步到原库，也不自动复制附件。
+### 最近 6 条搜索与快捷重搜
 
-### 普通文件导出与 PDF
+- 只记录实际提交过的搜索词，本地最多保留最近 6 条；合理规范空白用于去重，重复搜索移到最前。
+- 点击历史词直接重新搜索，支持单条删除、清空历史和重启后保留。
+- 仅在原数据库的本地设置中保存搜索词，不保存搜索结果、聊天正文或 Evidence；搜索历史不上传外部服务，不新增外部网络请求。实际检索仍沿用原流程。
 
-- Markdown / JSON / TXT / PDF 共用既有 Export Core、日期范围和安全写入机制。
-- PDF 为正式 PDF 文件导出，沿用聊天来源信息和内容选择。
-- “普通文件导出”与“Obsidian Vault 归档”分别显示，两个保存位置独立；Vault 始终生成 Markdown 笔记，不受普通导出格式影响。
-
-### 整理聊天给 AI 分析
-
-- 从聊天消息、Search 结果或 Evidence 选择需要的消息，加入“准备分析的聊天记录”。
-- 预览整理结果、调整所选材料，导出 Markdown / JSON，或“复制给 AI”。
-- 此功能只准备本地材料，**不自动上传、不调用外部 AI API、不自动启动 Agent**。是否把材料交给其他服务，由用户决定；应用其他可选远程服务的边界见[隐私说明](./PRIVACY.md)。
+[![搜索入口、最近搜索与相关聊天证据](./docs/images/readme/alpha26-search-history.png)](./docs/images/readme/alpha26-search-history.png)
 
 ### 会话复选框多选
 
@@ -42,11 +29,32 @@ alpha.26 已完成真实 Windows 桌面验收及 alpha.25 → alpha.26 正式覆
 - 普通导出与 Obsidian 归档共用同一份选择和日期范围。
 - 不设会话选择数量硬上限；超过 50 个仅提示可能耗时更长。导出逐会话执行，仍保留单会话及文件系统安全容量。
 
-### 最近 6 条搜索与快捷重搜
+[![会话复选框多选及已选数量](./docs/images/readme/alpha26-conversation-multiselect.png)](./docs/images/readme/alpha26-conversation-multiselect.png)
 
-- 只记录实际提交过的搜索词，最多保留最近 6 条；合理规范空白用于去重，重复搜索移到最前。
-- 点击历史词直接重新搜索，支持单条删除、清空历史和重启后保留。
-- 仅在原数据库的本地设置中保存搜索词，不保存搜索结果、聊天正文或 Evidence；历史功能不新增外部网络请求。实际检索仍沿用原流程。
+### 普通文件导出与 PDF
+
+- Markdown / JSON / TXT / PDF 共用既有 Export Core、日期范围和安全写入机制。
+- PDF 为正式 PDF 文件导出，沿用聊天来源信息和内容选择。
+- “普通文件导出”与“Obsidian Vault 归档”分别显示，两个保存位置独立；Vault 始终生成 Markdown 笔记，不受普通导出格式影响。
+
+[![普通文件导出格式：Markdown、JSON、TXT、PDF](./docs/images/readme/alpha26-pdf-export.png)](./docs/images/readme/alpha26-pdf-export.png)
+
+### 归档到 Obsidian 本地 Vault
+
+- 在 Windows 选择本地 Vault，将聊天归档为 Markdown 笔记，包含 YAML Frontmatter 和日期组织。
+- Manifest 记录导出状态；未变化内容重复导出不会生成重复文件，支持增量导出。
+- 识别并保护用户手动修改过的笔记，避免静默覆盖。
+- **PrivateRadar 仍为数据真源（Source of Truth）**；Vault 是导出副本，不从 Obsidian 反向同步到原库，也不自动复制附件。
+
+[![普通文件保存位置与独立的 Obsidian Vault 归档区域](./docs/images/readme/alpha26-obsidian-export.png)](./docs/images/readme/alpha26-obsidian-export.png)
+
+### 整理聊天给 AI 分析
+
+- 用户主动从聊天消息、Search 结果或 Evidence 选择需要的消息，在本地加入“准备分析的聊天记录”。
+- 预览整理结果、调整所选材料，导出 Markdown / JSON，或“复制给 AI”。
+- 此功能只准备本地材料，**不自动发送、不自动上传、不调用外部 AI API、不自动启动 Agent**。是否把材料交给其他服务，由用户决定；应用其他可选远程服务的边界见[隐私说明](./PRIVACY.md)。
+
+[![整理聊天给 AI 分析：三条已选消息、移除、清空与整理结果入口](./docs/images/readme/alpha26-ai-handoff.png)](./docs/images/readme/alpha26-ai-handoff.png)
 
 ## 持续保留的核心能力
 
@@ -66,7 +74,14 @@ alpha.26 已完成真实 Windows 桌面验收及 alpha.25 → alpha.26 正式覆
 
 ## 仍有效的流程示例
 
-以下保留图片均来自 alpha.22 的虚构演示数据，只说明未改变的核心流程。旧搜索入口和旧关键词规则卡片图片已从当前展示移除，避免与最近搜索、历史重扫及规则统计的新界面混淆。alpha.26 新界面图片需从正式安装版补拍，见[截图核对与补拍清单](./docs/releases/v0.2.0-alpha.26-screenshots.md)。
+本节保留图片均来自 alpha.22 的虚构演示数据，只说明仍有效的核心流程；不是 alpha.26 新界面截图。旧搜索入口已由上面的真实截图替换，旧关键词规则卡片不再展示，避免其过时的“不扫描历史”提示产生误导。五张新图的来源、裁剪与核对记录见[最终截图清单](./docs/releases/v0.2.0-alpha.26-screenshots.md)。
+
+<details>
+<summary>今日情报与原始依据（alpha.22 演示）</summary>
+
+![今日情报与原始依据历史示例](./docs/images/readme/privateradar-today.png)
+
+</details>
 
 <details>
 <summary>今日关注词与对应原始上下文</summary>

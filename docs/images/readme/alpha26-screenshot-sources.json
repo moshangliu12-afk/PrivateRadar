@@ -1,0 +1,139 @@
+{
+  "version": "0.2.0-alpha.26",
+  "provenance": "用户在当前会话提供的五张真实 alpha.26 Windows 截图；未经应用启动或界面生成。",
+  "processing": "仅整数坐标矩形裁剪，输出 PNG；解码后的 RGBA 像素与原图对应区域逐字节一致。",
+  "coordinateConvention": "左、上包含，右、下不包含；单位为原始像素。",
+  "originalsRetained": "未经改动的原 PNG 另存于本轮本地交付目录，不覆盖历史截图。",
+  "screenshots": [
+    {
+      "file": "alpha26-search-history.png",
+      "description": "搜索入口、实际最近搜索、搜索结果与证据",
+      "sourceFile": "codex-clipboard-187f2ccb-3843-4518-8a45-e47107ec38a8.png",
+      "sourceSize": [
+        2048,
+        1123
+      ],
+      "sourceBytes": 385509,
+      "sourceSha256": "f881dd7866400bc1ea816ac7de6090c1d4d8236e55aedf2f7e455931ef33fe07",
+      "cropBox": [
+        520,
+        45,
+        1780,
+        1025
+      ],
+      "outputSize": [
+        1260,
+        980
+      ],
+      "outputBytes": 219663,
+      "outputSha256": "3462aac12092d8aeab3d88381fd35bba5d7319b8f810c8f56ffce772591b0ae9",
+      "pixelEquality": "PASS",
+      "resized": false,
+      "uiModified": false
+    },
+    {
+      "file": "alpha26-conversation-multiselect.png",
+      "description": "会话复选框、四个已选会话与普通导出开头",
+      "sourceFile": "codex-clipboard-b28eb047-3ed3-476e-8cb2-c2240003378a.png",
+      "sourceSize": [
+        2048,
+        1109
+      ],
+      "sourceBytes": 236948,
+      "sourceSha256": "997a53eb2e8c682ee441b9b383d374d68210ba2ddc41c5b9290afa64b64edc2b",
+      "cropBox": [
+        548,
+        218,
+        1435,
+        677
+      ],
+      "outputSize": [
+        887,
+        459
+      ],
+      "outputBytes": 68923,
+      "outputSha256": "5a7a1272c7631894f7384111296e437462c05fb40c9e941dcde9d787c0768aa0",
+      "pixelEquality": "PASS",
+      "resized": false,
+      "uiModified": false
+    },
+    {
+      "file": "alpha26-ai-handoff.png",
+      "description": "三条已加入消息、移除、清空、预览、复制与导出入口",
+      "sourceFile": "codex-clipboard-fbf9c68f-bf82-46f7-acd9-af24e42b7b31.png",
+      "sourceSize": [
+        2048,
+        741
+      ],
+      "sourceBytes": 389631,
+      "sourceSha256": "00f594ab7c4c455b83a644cd760c5376dc7b27a4ab7e40b4c6f464441a4911ed",
+      "cropBox": [
+        1346,
+        38,
+        2035,
+        590
+      ],
+      "outputSize": [
+        689,
+        552
+      ],
+      "outputBytes": 78368,
+      "outputSha256": "200f4fe637df581cd22dcf8e13a25d2d8b536e8f76a6cebbbc1454ab8ce44d8f",
+      "pixelEquality": "PASS",
+      "resized": false,
+      "uiModified": false
+    },
+    {
+      "file": "alpha26-pdf-export.png",
+      "description": "普通文件导出及 Markdown、JSON、TXT、PDF 格式列表",
+      "sourceFile": "codex-clipboard-1bf21026-9cd1-4189-b03c-a57cf142cb2f.png",
+      "sourceSize": [
+        2048,
+        763
+      ],
+      "sourceBytes": 183701,
+      "sourceSha256": "896f0a82e58bd78071f65d4f7607ad67de4c7eda75ac24c89cb93d01e5a5ab55",
+      "cropBox": [
+        615,
+        208,
+        1395,
+        605
+      ],
+      "outputSize": [
+        780,
+        397
+      ],
+      "outputBytes": 37656,
+      "outputSha256": "927c911ef71dad4e93c3b906414007a9f8fc933aa35847e799cf4a3bff3dbd38",
+      "pixelEquality": "PASS",
+      "resized": false,
+      "uiModified": false
+    },
+    {
+      "file": "alpha26-obsidian-export.png",
+      "description": "普通文件保存位置、区域分隔与 Obsidian Vault 位置及导出入口",
+      "sourceFile": "codex-clipboard-c5b9910a-ed4d-4027-afcb-ccb7c8cf1367.png",
+      "sourceSize": [
+        2048,
+        1158
+      ],
+      "sourceBytes": 281046,
+      "sourceSha256": "89beeea8e5df6213934a989c49bcd84497c0a2e135faa41f651f5720c89cb376",
+      "cropBox": [
+        620,
+        335,
+        1670,
+        1077
+      ],
+      "outputSize": [
+        1050,
+        742
+      ],
+      "outputBytes": 105191,
+      "outputSha256": "9a15602e37ba949f544e4eab70123c066d159a14dc0ddd8100a8d809327dfa39",
+      "pixelEquality": "PASS",
+      "resized": false,
+      "uiModified": false
+    }
+  ]
+}
