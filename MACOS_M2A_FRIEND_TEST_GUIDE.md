@@ -5,7 +5,7 @@
 1. 打开提供给你的 GitHub Actions 构建链接，下载名称为 `PrivateRadar-macOS-WorkBuddy-M2A-Probe-Candidate-<提交号>` 的产物。下载可能需要登录 GitHub；如果无法下载，让发给你链接的人转交原始产物。
 2. 解压下载包，再解压里面的 `.app.zip` 得到 `PrivateRadar.app`；也可打开包内 DMG，把应用拖到你自己的“应用程序”目录。两种方式任选一种即可。
 3. 打开 PrivateRadar。如果系统提示开发者无法验证，可通过系统设置“隐私与安全性”中针对该应用的“仍要打开”按正常流程确认。若没有正常系统界面可用的打开方式，停止，把提示截图发回，并注明 `DISTRIBUTION_BLOCKED_BY_GATEKEEPER`。不要关闭 Gatekeeper，不执行终端绕过命令。
-4. 在 PrivateRadar 左侧进入“设置”，找到 WorkBuddy，点击“检测 macOS WorkBuddy 环境”。首次欢迎页可先进入“体验演示数据”，再进入设置；不用导入个人聊天。
+4. 在 PrivateRadar 左侧进入“设置”，找到 WorkBuddy，点击“检测 macOS WorkBuddy 环境”。首次欢迎页可先点击“体验示例聊天”，再进入设置；不用导入个人聊天。
 5. 检测结束后点击“导出检测报告”，将 JSON 文件存到你方便找到的本地位置，例如“下载”。如果已有同名文件，请换一个新文件名；不要保存到 WorkBuddy 的数据或应用目录。
 6. 把这个 JSON 文件发回。如果未发现 WorkBuddy，也请照常导出报告。若系统拒绝读取某个目录，请直接发回报告和界面提示，不用修改系统权限。
 
